@@ -164,5 +164,8 @@ typedef Buffer String;
 // NOTE: This is just a hack to work around a parsing bug in 4coder
 #define TYPEDEF_FUNC(return_val, name, ...) typedef return_val (*name)(__VA_ARGS__)
 
+#include "mm_memory.h"
 #include "mm_string.h"
 #include "mm_lexer.h"
+#include "mm_ast.h"
+#include "mm_parser.h"

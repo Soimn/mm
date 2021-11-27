@@ -54,7 +54,8 @@ enum TOKEN_KIND
     Token_ArithmeticRightShift,                 // >>>
     Token_RightShift,                           // >>
     Token_LeftShift,                            // <<
-    Token_LastMulLevel = Token_LeftShift,
+    Token_Identifier,                           // a mod b
+    Token_LastMulLevel = Token_Identifier,
     
     Token_FirstAddLevel = 120,
     Token_Plus = Token_FirstAddLevel,           // +
@@ -76,7 +77,7 @@ enum TOKEN_KIND
     
     Token_OrOr = 180,                           // ||
     
-    Token_Identifier,
+    //Token_Identifier,
     Token_String,
     Token_Character,
     Token_Int,
@@ -113,19 +114,9 @@ enum KEYWORD_KIND
     Keyword_Return,
     Keyword_Import,
     Keyword_Foreign,
-    Keyword_Assert,
-    Keyword_Unreachable,
-    Keyword_NotImplemented,
-    Keyword_LastStatementInitiator = Keyword_NotImplemented,
+    Keyword_LastStatementInitiator = Keyword_Foreign,
     
     KEYWORD_COUNT,
-};
-
-enum LEXER_ERROR_CODE
-{
-    LexerError_UnknownToken,
-    LexerError_UnterminatedStringLiteral,
-    LexerError_UnterminatedCharacterLiteral,
 };
 
 typedef struct Token
@@ -147,14 +138,7 @@ typedef struct Token
         };
         
         u64 integer;
-        
-        struct
-        {
-            f32 float32;
-            f64 float64;
-        };
-        
-        u8 error_code;
+        f64 floating;
     };
 } Token;
 
@@ -166,7 +150,7 @@ typedef struct Lexer
     u32 line;
 } Lexer;
 
-Lexer
+internal inline Lexer
 Lexer_Init(u8* file_contents)
 {
     return (Lexer){
@@ -174,7 +158,7 @@ Lexer_Init(u8* file_contents)
     };
 }
 
-Token
+internal Token
 Lexer_Advance(Lexer* lexer)
 {
     Token token = { .kind = Token_Invalid };
@@ -502,9 +486,6 @@ Lexer_Advance(Lexer* lexer)
                         [Keyword_Return]         = STRING("Return"),
                         [Keyword_Import]         = STRING("Import"),
                         [Keyword_Foreign]        = STRING("Foreign"),
-                        [Keyword_Assert]         = STRING("Assert"),
-                        [Keyword_Unreachable]    = STRING("Unreachable"),
-                        [Keyword_NotImplemented] = STRING("NotImplemented"),
                         
                     };
                     
@@ -522,7 +503,160 @@ Lexer_Advance(Lexer* lexer)
             
             else if (c >= '0' && c <= '9')
             {
-                NOT_IMPLEMENTED;
+                bool is_hex    = false;
+                bool is_binary = false;
+                bool is_float  = false;
+                
+                if (c == '0')
+                {
+                    if      (*lexer->cursor == 'x') is_hex = true;
+                    else if (*lexer->cursor == 'h') is_hex = true, is_float = true;
+                    else if (*lexer->cursor == 'b') is_binary = true;
+                    
+                    if (is_hex || is_binary) lexer->cursor += 1;
+                }
+                
+                umm digit_count = !(is_hex || is_binary);
+                umm base = (is_hex ? 16 : (is_binary ? 2 : 10));
+                
+                umm integer           = (c - '0');
+                bool integer_overflow = false;
+                
+                while (true)
+                {
+                    u8 digit = 0;
+                    
+                    if (!is_binary && IsDigit(*lexer->cursor))
+                    {
+                        digit = *lexer->cursor - '0';
+                    }
+                    
+                    else if (is_binary && *lexer->cursor - '0' <= 1)
+                    {
+                        digit = *lexer->cursor - '0';
+                    }
+                    
+                    else if (is_hex && ToUpperCase(*lexer->cursor) >= 'A' && ToUpperCase(*lexer->cursor) <= 'F')
+                    {
+                        digit = (ToUpperCase(*lexer->cursor) - 'A') + 10;
+                    }
+                    
+                    else if (*lexer->cursor == '_')
+                    {
+                        lexer->cursor += 1;
+                        continue;
+                    }
+                    
+                    else if (*lexer->cursor == '.' && !is_float)
+                    {
+                        is_float = true;
+                        lexer->cursor += 1;
+                        break;
+                    }
+                    
+                    else break;
+                    
+                    lexer->cursor += 1;
+                    digit_count    += 1;
+                    
+                    umm new_integer = integer * 10 + digit * base;
+                    
+                    integer_overflow = integer_overflow || (new_integer < integer);
+                    integer          = new_integer;
+                }
+                
+                if (integer_overflow)
+                {
+                    token.kind = Token_Invalid;
+                    //NumericLiteralTooLarge;
+                }
+                
+                else
+                {
+                    if (is_float)
+                    {
+                        if (is_hex)
+                        {
+                            if (digit_count == 8)
+                            {
+                                token.kind = Token_Float;
+                                
+                                f32 f;
+                                Copy(&integer, &f, sizeof(u32));
+                                token.floating = f;
+                            }
+                            
+                            else if (digit_count == 16)
+                            {
+                                token.kind = Token_Float;
+                                
+                                Copy(&integer, &token.floating, sizeof(u32));
+                            }
+                            
+                            else
+                            {
+                                token.kind = Token_Invalid;
+                                //invalid digit count for hex float
+                            }
+                        }
+                        
+                        else
+                        {
+                            f64 fraction            = 0;
+                            umm fraction_adjustment = 1;
+                            
+                            while (IsDigit(*lexer->cursor))
+                            {
+                                fraction            *= 10;
+                                fraction_adjustment *= 10;
+                                fraction += *lexer->cursor - '0';
+                            }
+                            
+                            fraction /= fraction_adjustment;
+                            
+                            f64 adjustment = 1;
+                            if (ToUpperCase(*lexer->cursor) == 'E')
+                            {
+                                lexer->cursor += 1;
+                                
+                                bool is_negative = false;
+                                
+                                if (*lexer->cursor == '+') lexer->cursor += 1;
+                                else if (*lexer->cursor == '-')
+                                {
+                                    lexer->cursor += 1;
+                                    is_negative    = true;
+                                }
+                                
+                                umm exponent = 0;
+                                while (IsDigit(*lexer->cursor))
+                                {
+                                    exponent *= 10;
+                                    exponent += *lexer->cursor - '0';
+                                }
+                                
+                                for (umm i = 0; i < exponent; ++i)
+                                {
+                                    adjustment *= 10;
+                                }
+                                
+                                if (is_negative)
+                                {
+                                    adjustment = 1 / adjustment;
+                                }
+                            }
+                            
+                            token.kind = Token_Float;
+                            token.floating = (integer + fraction) * adjustment;
+                        }
+                    }
+                    
+                    else
+                    {
+                        token.kind = Token_Int;
+                        token.integer = integer;
+                    }
+                }
             }
             
             else if (c == '\'' || c == '"')
@@ -536,7 +670,7 @@ Lexer_Advance(Lexer* lexer)
                 if (*lexer->cursor != c)
                 {
                     token.kind = Token_Invalid;
-                    token.error_code = (c == '"' ? LexerError_UnterminatedStringLiteral : LexerError_UnterminatedCharacterLiteral);
+                    //Unterminated*Literal
                 }
                 
                 else
