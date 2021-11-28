@@ -80,8 +80,7 @@ enum TOKEN_KIND
     //Token_Identifier,
     Token_String,
     Token_Character,
-    Token_Int,
-    Token_Float,
+    Token_Number,
     
     Token_EndOfStream,
 };
@@ -137,9 +136,9 @@ typedef struct Token
             u8 keyword;
         };
         
-        u64 integer;
-        f64 floating;
     };
+    
+    Number number;
 } Token;
 
 typedef struct Lexer

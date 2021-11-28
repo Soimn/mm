@@ -164,6 +164,30 @@ typedef Buffer String;
 // NOTE: This is just a hack to work around a parsing bug in 4coder
 #define TYPEDEF_FUNC(return_val, name, ...) typedef return_val (*name)(__VA_ARGS__)
 
+
+typedef String Identifier;
+typedef String String_Literal;
+
+typedef struct Number
+{
+    union
+    {
+        u64 integer;
+        f32 float32;
+        f64 float64;
+    };
+    
+    bool is_float32;
+    bool is_float64;
+    bool is_negative;
+} Number;
+
+typedef union Character
+{
+    u32 word;
+    u8 bytes[4];
+} Character;
+
 #include "mm_memory.h"
 #include "mm_string.h"
 #include "mm_lexer.h"

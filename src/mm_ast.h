@@ -112,29 +112,6 @@ enum AST_NODE_KIND
     AST_LastStatement = AST_ForeignDecl,
 };
 
-typedef String Identifier;
-typedef String String_Literal;
-
-typedef struct Number
-{
-    union
-    {
-        u64 integer;
-        f32 float32;
-        f64 float64;
-    };
-    
-    bool is_float32;
-    bool is_float64;
-    bool is_negative;
-} Number;
-
-typedef union Character
-{
-    u32 word;
-    u8 bytes[4];
-} Character;
-
 typedef struct AST_Node
 {
     u32 text_offset;
@@ -172,15 +149,15 @@ typedef struct AST_Node
         
         struct
         {
-            Identifier name;
             struct AST_Node* members;
+            bool is_decl;
         } struct_type, union_type;
         
         struct
         {
-            Identifier name;
             struct AST_Node* elem_type;
             struct AST_Node* members;
+            bool is_decl;
         } enum_type;
         
         struct
@@ -189,7 +166,11 @@ typedef struct AST_Node
             struct AST_Node* size;
         } array_type;
         
-        // TODO: AST_Directive
+        struct
+        {
+            Identifier name;
+            struct AST_Node* params;
+        } directive;
         
         struct
         {
@@ -221,8 +202,8 @@ typedef struct AST_Node
         struct
         {
             struct AST_Node* condition;
-            struct AST_Node* true_expr;
-            struct AST_Node* false_expr;
+            struct AST_Node* true_clause;
+            struct AST_Node* false_clause;
         } conditional_expr;
         
         struct
@@ -271,7 +252,7 @@ typedef struct AST_Node
         {
             struct AST_Node* left;
             struct AST_Node* right;
-            u8 kind;
+            u8 kind; // NOTE: AST_Invalid is used to signify regular =
         } assignment_statement;
         
         struct
