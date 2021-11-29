@@ -119,7 +119,7 @@ Arena_PushSize(Memory_Arena* arena, umm size, u8 alignment)
     
     arena->offset += offset + size;
     
-#if IZ_INTERNAL || IZ_DEBUG
+#if MM_DEBUG
     arena->high_water_mark = MAX(arena->high_water_mark, arena->offset);
 #endif
     

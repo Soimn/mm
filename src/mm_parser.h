@@ -2,6 +2,7 @@ typedef struct Parser_State
 {
     Lexer lexer;
     Token current_token;
+    Memory_Arena* arena;
 } Parser_State;
 
 internal inline Token
@@ -52,16 +53,168 @@ EatTokenOfKind(Parser_State* state, u8 kind)
 internal inline AST_Node*
 PushNode(Parser_State* state, u8 kind)
 {
-    AST_Node* result = 0;
-    NOT_IMPLEMENTED;
+    AST_Node* result = Arena_PushSize(state->arena, sizeof(AST_Node), ALIGNOF(AST_Node));
     ZeroStruct(result);
+    
+    result->kind = kind;
+    
     return result;
 }
 
-internal Identifier
-Identifier_FromString(String string)
+// NOTE: cursor is assumed to be in the range [0, string.size), and the string is assumed to not end in a backslash
+internal bool
+ParseCharacter(String string, umm* cursor, Character* character)
 {
+    bool encountered_errors = false;
     
+    ZeroStruct(character);
+    
+    if (string.data[*cursor] == '\\')
+    {
+        *cursor += 1;
+        
+        if (string.data[*cursor] == 'u' || string.data[*cursor] == 'x')
+        {
+            umm req_digit_count = (string.data[*cursor] == 'u' ? 6 : 2);
+            
+            umm codepoint = 0;
+            
+            for (umm digit_count = 0; digit_count < req_digit_count; ++digit_count, ++*cursor)
+            {
+                if (*cursor < string.size && string.data[*cursor] >= '0' && string.data[*cursor] <= '9')
+                {
+                    codepoint *= 16;
+                    codepoint += string.data[*cursor] - '0';
+                }
+                
+                else if (*cursor < string.size && ToUpperCase(string.data[*cursor]) >= 'A' && ToUpperCase(string.data[*cursor]) <= 'F')
+                {
+                    codepoint *= 16;
+                    codepoint += (ToUpperCase(string.data[*cursor]) - 'A') + 10;
+                }
+                
+                else
+                {
+                    //// ERROR: missing digits in codepoint/byte escape sequence
+                    encountered_errors = true;
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                if (codepoint <= 0x7F)
+                {
+                    character->bytes[0] = (u8)codepoint;
+                }
+                
+                else if (codepoint <= 0x7FF)
+                {
+                    character->bytes[0] = 0xC0 | (u8)((codepoint & 0x7C0) >> 6);
+                    character->bytes[1] = 0x80 | (u8)((codepoint & 0x03F) >> 0);
+                }
+                
+                else if (codepoint <= 0xFFFF)
+                {
+                    character->bytes[0] = 0xE0 | (u8)((codepoint & 0xF000) >> 12);
+                    character->bytes[1] = 0x80 | (u8)((codepoint & 0x0FC0) >> 6);
+                    character->bytes[2] = 0x80 | (u8)((codepoint & 0x003F) >> 0);
+                }
+                
+                else if (codepoint <= 0x10FFFF)
+                {
+                    character->bytes[0] = 0xF0 | (u8)((codepoint & 0x1C0000) >> 18);
+                    character->bytes[1] = 0x80 | (u8)((codepoint & 0x03F000) >> 12);
+                    character->bytes[2] = 0x80 | (u8)((codepoint & 0x000FC0) >> 6);
+                    character->bytes[3] = 0x80 | (u8)((codepoint & 0x00003F) >> 0);
+                }
+                
+                else
+                {
+                    //// ERROR: Unicode codepoint out of UTF-8 range
+                    encountered_errors = true;
+                }
+            }
+        }
+        
+        else
+        {
+            ASSERT(*cursor < string.size);
+            
+            switch (string.data[*cursor])
+            {
+                case '\"': character->bytes[0] = '\"'; break;
+                case '\'': character->bytes[0] = '\''; break;
+                case '\\': character->bytes[0] = '\\'; break;
+                
+                case 'a': character->bytes[0] = '\a'; break;
+                case 'b': character->bytes[0] = '\b'; break;
+                case 'f': character->bytes[0] = '\f'; break;
+                case 'n': character->bytes[0] = '\n'; break;
+                case 'r': character->bytes[0] = '\r'; break;
+                case 't': character->bytes[0] = '\t'; break;
+                case 'v': character->bytes[0] = '\v'; break;
+                
+                default:
+                {
+                    //// ERROR: Unknown escape sequence
+                    encountered_errors = true;
+                } break;
+            }
+            
+            if (!encountered_errors) *cursor += 1;
+            
+        }
+    }
+    
+    else
+    {
+        character->bytes[0] = string.data[*cursor];
+        *cursor += 1;
+    }
+    
+    return !encountered_errors;
+}
+
+internal bool
+ParseStringLiteral(Parser_State* state, String raw_string, String_Literal* string)
+{
+    bool encountered_errors = false;
+    
+    *string = (String_Literal){
+        .data = Arena_PushSize(state->arena, raw_string.size, 1),
+        .size = 0
+    };
+    
+    umm cursor = 0;
+    while (!encountered_errors && cursor < raw_string.size)
+    {
+        umm prev_cursor = cursor;
+        
+        Character character;
+        if (!ParseCharacter(raw_string, &cursor, &character)) encountered_errors = true;
+        else
+        {
+            umm advance = cursor - prev_cursor;
+            
+            Copy(character.bytes, string->data, advance);
+            string->size += advance;
+        }
+    }
+    
+    return !encountered_errors;
+}
+
+internal Identifier
+ParseIdentifier(Parser_State* state, String identifier)
+{
+    Identifier result = {
+        .data = Arena_PushSize(state->arena, identifier.size, 1),
+        .size = identifier.size
+    };
+    
+    Copy(identifier.data, result.data, identifier.size);
+    
+    return result;
 }
 
 internal bool ParseExpression(Parser_State* state, AST_Node** expression);
@@ -262,19 +415,23 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     if (token.kind == Token_String)
     {
         *expression = PushNode(state, AST_String);
-        (*expression)->string = token.raw_string;
         
-        SkipTokens(state, 1);
+        if (!ParseStringLiteral(state, token.raw_string, &(*expression)->string)) encountered_errors = true;
+        else
+        {
+            SkipTokens(state, 1);
+        }
     }
     
     else if (token.kind == Token_Character)
     {
         *expression = PushNode(state, AST_Char);
-        //(*expression)->character = token.character;
-        NOT_IMPLEMENTED;
-        // TODO: parse character literal
         
-        SkipTokens(state, 1);
+        umm cursor = 0;
+        if (!ParseCharacter(token.raw_string, &cursor, &(*expression)->character) || token.raw_string.size != cursor) encountered_errors = true;
+        {
+            SkipTokens(state, 1);
+        }
     }
     
     else if (token.kind == Token_Number)
@@ -288,9 +445,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     else if (token.kind == Token_Underscore)
     {
         *expression = PushNode(state, AST_Identifier);
-        //(*expression)->identifier = BLANK_IDENTIFIER;
-        NOT_IMPLEMENTED;
-        // TODO: define BLANK_IDENTIFIER
+        (*expression)->identifier = BLANK_IDENTIFIER;
         
         SkipTokens(state, 1);
     }
@@ -311,7 +466,6 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             
             AST_Node* params        = 0;
             AST_Node* return_values = 0;
-            AST_Node* body          = 0;
             
             if (EatTokenOfKind(state, Token_OpenParen))
             {
@@ -384,21 +538,29 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                     (*expression)->proc_literal.body          = 0;
                 }
                 
-                else if (GetToken(state).kind == Token_OpenBrace)
-                {
-                    NOT_IMPLEMENTED;
-                    
-                    *expression = PushNode(state, AST_Proc);
-                    (*expression)->proc_literal.params        = params;
-                    (*expression)->proc_literal.return_values = return_values;
-                    (*expression)->proc_literal.body          = body;
-                }
-                
                 else
                 {
-                    *expression = PushNode(state, AST_ProcType);
-                    (*expression)->proc_type.params        = params;
-                    (*expression)->proc_type.return_values = return_values;
+                    token = GetToken(state);
+                    if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && token.keyword == Keyword_Do)
+                    {
+                        AST_Node* body = 0;
+                        
+                        if (!ParseScope(state, &body)) encountered_errors = true;
+                        else
+                        {
+                            *expression = PushNode(state, AST_Proc);
+                            (*expression)->proc_literal.params        = params;
+                            (*expression)->proc_literal.return_values = return_values;
+                            (*expression)->proc_literal.body          = body;
+                        }
+                    }
+                    
+                    else
+                    {
+                        *expression = PushNode(state, AST_ProcType);
+                        (*expression)->proc_type.params        = params;
+                        (*expression)->proc_type.return_values = return_values;
+                    }
                 }
             }
         }
@@ -520,9 +682,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         else
         {
             *expression = PushNode(state, AST_Identifier);
-            //(*expression)->identifier = ;
-            NOT_IMPLEMENTED;
-            // TODO: hash identifier strings
+            (*expression)->identifier = ParseIdentifier(state, token.raw_string);
             
             SkipTokens(state, 1);
         }
@@ -630,11 +790,8 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         
         else
         {
-            Identifier name = {0};
+            Identifier name = ParseIdentifier(state, token.raw_string);
             AST_Node* params = 0;
-            
-            NOT_IMPLEMENTED;
-            // TODO: hash identifier
             
             SkipTokens(state, 1);
             
@@ -1139,13 +1296,11 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
         if (token.kind == Token_OpenBrace ||
             token.kind == Token_Identifier && peek.kind == Token_Colon && peek_next.kind == Token_OpenBrace)
         {
-            //Identifier label = BLANK_IDENTIFIER;
+            Identifier label = BLANK_IDENTIFIER;
             
             if (token.kind == Token_Identifier)
             {
-                //label = ;
-                // hash token.identifier
-                NOT_IMPLEMENTED;
+                label = ParseIdentifier(state, token.raw_string);
                 
                 SkipTokens(state, 2);
             }
@@ -1153,7 +1308,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             if (!ParseScope(state, next_statement)) encountered_errors = true;
             else
             {
-                // (*next_statement)->scope_statement.label = label;
+                (*next_statement)->scope_statement.label = label;
             }
         }
         
@@ -1161,7 +1316,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                  token.kind == Token_Identifier && peek.kind == Token_Colon &&
                  peek_next.kind == Token_Identifier && (peek_next.keyword == Keyword_If || peek_next.keyword == Keyword_When || peek_next.keyword == Keyword_While))
         {
-            //Identifier label = BLANK_IDENTIFIER;
+            Identifier label = BLANK_IDENTIFIER;
             AST_Node* first  = 0;
             AST_Node* second = 0;
             AST_Node* third  = 0;
@@ -1169,9 +1324,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             
             if (token.kind == Token_Identifier && !(token.keyword == Keyword_If || token.keyword == Keyword_When || token.kind == Keyword_While))
             {
-                //label = ;
-                // hash token.identifier
-                NOT_IMPLEMENTED;
+                label = ParseIdentifier(state, token.raw_string);
                 
                 SkipTokens(state, 2);
             }
@@ -1273,7 +1426,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             
             SkipTokens(state, 1);
             
-            //Identifier label = BLANK_IDENTIFIER;
+            Identifier label = BLANK_IDENTIFIER;
             
             if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow break; and continue;
             else
@@ -1287,8 +1440,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 
                 else
                 {
-                    // TODO: hash identifier
-                    NOT_IMPLEMENTED;
+                    label = ParseIdentifier(state, token.raw_string);
                     
                     if (!EatTokenOfKind(state, Token_Semicolon))
                     {
@@ -1299,7 +1451,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
             
             *next_statement = PushNode(state, (is_break ? AST_Break : AST_Continue));
-            //(*next_statement)->break_statement.label = label;
+            (*next_statement)->break_statement.label = label;
         }
         
         else if (token.kind == Token_Identifier && token.keyword == Keyword_Defer)

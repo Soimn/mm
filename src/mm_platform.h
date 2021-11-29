@@ -164,6 +164,8 @@ typedef Buffer String;
 typedef String Identifier;
 typedef String String_Literal;
 
+#define BLANK_IDENTIFIER (String){0}
+
 typedef struct Number
 {
     union
