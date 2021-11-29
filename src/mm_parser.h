@@ -58,6 +58,12 @@ PushNode(Parser_State* state, u8 kind)
     return result;
 }
 
+internal Identifier
+Identifier_FromString(String string)
+{
+    
+}
+
 internal bool ParseExpression(Parser_State* state, AST_Node** expression);
 internal bool ParseTypeLevelExpression(Parser_State* state, AST_Node** expression);
 internal bool ParseScope(Parser_State* state, AST_Node** scope);
@@ -1042,7 +1048,7 @@ ParseExpression(Parser_State* state, AST_Node** expression)
                 if (!EatTokenOfKind(state, Token_Colon))
                 {
                     //// ERROR: Missing else clause
-                    NOT_IMPLEMENTED;
+                    encountered_errors = true;
                 }
                 
                 else
@@ -1156,10 +1162,10 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                  peek_next.kind == Token_Identifier && (peek_next.keyword == Keyword_If || peek_next.keyword == Keyword_When || peek_next.keyword == Keyword_While))
         {
             //Identifier label = BLANK_IDENTIFIER;
-            AST_Node* init      = 0;
-            AST_Node* condition = 0;
-            AST_Node* step      = 0;
-            AST_Node* body      = 0;
+            AST_Node* first  = 0;
+            AST_Node* second = 0;
+            AST_Node* third  = 0;
+            AST_Node* body   = 0;
             
             if (token.kind == Token_Identifier && !(token.keyword == Keyword_If || token.keyword == Keyword_When || token.kind == Keyword_While))
             {
@@ -1178,31 +1184,36 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             
             SkipTokens(state, 1);
             
-            NOT_IMPLEMENTED;
-            
-            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &init))
+            if (GetToken(state).kind != Token_Semicolon)
             {
-                encountered_errors = true;
+                if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &first))
+                {
+                    encountered_errors = true;
+                }
             }
             
             if (!encountered_errors)
             {
                 if (EatTokenOfKind(state, Token_Semicolon))
                 {
-                    if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &condition))
+                    if (GetToken(state).kind == Token_Semicolon && is_while && first != 0);
+                    else
                     {
-                        encountered_errors = true;
+                        if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &second))
+                        {
+                            encountered_errors = true;
+                        }
                     }
-                }
-            }
-            
-            if (!encountered_errors && is_while)
-            {
-                if (EatTokenOfKind(state, Token_Semicolon))
-                {
-                    if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &step))
+                    
+                    if (!encountered_errors)
                     {
-                        encountered_errors = true;
+                        if (is_while && EatTokenOfKind(state, Token_Semicolon))
+                        {
+                            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &third))
+                            {
+                                encountered_errors = true;
+                            }
+                        }
                     }
                 }
             }
@@ -1220,12 +1231,38 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 if (is_while)
                 {
                     *next_statement = PushNode(state, AST_While);
-                    NOT_IMPLEMENTED;
+                    
+                    if (first && !second && !third)
+                    {
+                        (*next_statement)->while_statement.init      = 0;
+                        (*next_statement)->while_statement.condition = first;
+                        (*next_statement)->while_statement.step      = 0;
+                    }
+                    
+                    else
+                    {
+                        (*next_statement)->while_statement.init      = first;
+                        (*next_statement)->while_statement.condition = second;
+                        (*next_statement)->while_statement.step      = third;
+                    }
                 }
                 
                 else
                 {
-                    NOT_IMPLEMENTED;
+                    if (is_when) *next_statement = PushNode(state, AST_When);
+                    else         *next_statement = PushNode(state, AST_If);
+                    
+                    if (first && !second)
+                    {
+                        (*next_statement)->if_statement.init      = 0;
+                        (*next_statement)->if_statement.condition = first;
+                    }
+                    
+                    else
+                    {
+                        (*next_statement)->if_statement.init      = first;
+                        (*next_statement)->if_statement.condition = second;
+                    }
                 }
             }
         }
