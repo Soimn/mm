@@ -24,12 +24,6 @@ enum TOKEN_KIND
     
     Token_FirstAssignment,
     Token_Equals = Token_FirstAssignment,       // =
-    Token_OrOrEquals,                           // ||=
-    Token_AndAndEquals,                         // &&=
-    Token_PlusEquals,                           // +=
-    Token_MinusEquals,                          // -=
-    Token_OrEquals,                             // |=
-    Token_HatEquals,                            // ^=
     Token_StarEquals,                           // *=
     Token_SlashEquals,                          // /=
     Token_RemEquals,                            // %=
@@ -38,6 +32,12 @@ enum TOKEN_KIND
     Token_ArithmeticRightShiftEquals,           // >>>=
     Token_RightShiftEquals,                     // >>=
     Token_LeftShiftEquals,                      // <<=
+    Token_PlusEquals,                           // +=
+    Token_MinusEquals,                          // -=
+    Token_OrEquals,                             // |=
+    Token_HatEquals,                            // ^=
+    Token_AndAndEquals,                         // &&=
+    Token_OrOrEquals,                           // ||=
     Token_LastAssignment = Token_LeftShiftEquals,
     
     Token_FirstRangeLevel = 80,
@@ -136,9 +136,9 @@ typedef struct Token
             u8 keyword;
         };
         
+        Number number;
     };
     
-    Number number;
 } Token;
 
 typedef struct Lexer
@@ -162,15 +162,62 @@ Lexer_Advance(Lexer* lexer)
 {
     Token token = { .kind = Token_Invalid };
     
-    while (*lexer->cursor != 0 && IsWhitespace(*lexer->cursor))
+    while (*lexer->cursor != 0)
     {
-        if (*lexer->cursor == '\n')
+        if (IsWhitespace(*lexer->cursor))
         {
-            lexer->line += 1;
-            lexer->start_of_line = lexer->cursor + 1;
+            if (*lexer->cursor == '\n')
+            {
+                lexer->line += 1;
+                lexer->start_of_line = lexer->cursor + 1;
+            }
+            
+            lexer->cursor += 1;
         }
         
-        lexer->cursor += 1;
+        else if (lexer->cursor[0] == '/' && lexer->cursor[1] == '/')
+        {
+            while (*lexer->cursor != 0 && *lexer->cursor != '\n')
+            {
+                lexer->cursor += 1;
+            }
+            
+            if (*lexer->cursor != 0)
+            {
+                lexer->line += 1;
+                lexer->start_of_line = lexer->cursor + 1;
+                lexer->cursor += 1;
+            }
+        }
+        
+        else if (lexer->cursor[0] == '/' && lexer->cursor[1] == '*')
+        {
+            lexer->cursor += 2;
+            
+            umm nesting_level = 0;
+            while (*lexer->cursor != 0)
+            {
+                if (lexer->cursor[0] == '/' && lexer->cursor[1] == '*')
+                {
+                    lexer->cursor += 2;
+                    nesting_level += 1;
+                }
+                
+                else if (lexer->cursor[0] == '*' && lexer->cursor[1] == '/')
+                {
+                    lexer->cursor += 2;
+                    
+                    if (nesting_level == 0) break;
+                    else
+                    {
+                        nesting_level -= 1;
+                        continue;
+                    }
+                }
+                
+                else lexer->cursor += 1;
+            }
+        }
     }
     
     u8* start_of_token = lexer->cursor;
@@ -578,18 +625,22 @@ Lexer_Advance(Lexer* lexer)
                         {
                             if (digit_count == 8)
                             {
-                                token.kind = Token_Float;
-                                
                                 f32 f;
                                 Copy(&integer, &f, sizeof(u32));
-                                token.floating = f;
+                                
+                                token.kind = Token_Number;
+                                token.number.is_float    = true;
+                                token.number.is_negative = false;
+                                token.number.floating    = f;
                             }
                             
                             else if (digit_count == 16)
                             {
-                                token.kind = Token_Float;
+                                Copy(&integer, &token.number.floating, sizeof(u32));
                                 
-                                Copy(&integer, &token.floating, sizeof(u32));
+                                token.kind = Token_Number;
+                                token.number.is_float    = true;
+                                token.number.is_negative = false;
                             }
                             
                             else
@@ -645,15 +696,19 @@ Lexer_Advance(Lexer* lexer)
                                 }
                             }
                             
-                            token.kind = Token_Float;
-                            token.floating = (integer + fraction) * adjustment;
+                            token.kind = Token_Number;
+                            token.number.is_float    = true;
+                            token.number.is_negative = false;
+                            token.number.floating    = (integer + fraction) * adjustment;
                         }
                     }
                     
                     else
                     {
-                        token.kind = Token_Int;
-                        token.integer = integer;
+                        token.kind = Token_Number;
+                        token.number.is_float    = false;
+                        token.number.is_negative = false;
+                        token.number.integer     = integer;
                     }
                 }
             }

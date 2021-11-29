@@ -33,7 +33,8 @@ enum AST_NODE_KIND
     AST_Slice,
     AST_Call,
     AST_ElementOf,
-    AST_LastPostfixLevel = AST_ElementOf,
+    AST_UfcsOf,
+    AST_LastPostfixLevel = AST_UfcsOf,
     
     // precedence 3: 60 - 79
     AST_FirstPrefixLevel = 60,
@@ -93,7 +94,7 @@ enum AST_NODE_KIND
     AST_LastExpression = AST_Conditional,
     
     AST_FirstStatement,
-    AST_Block = AST_FirstStatement,
+    AST_Scope = AST_FirstStatement,
     
     AST_If,
     AST_When,
@@ -101,8 +102,8 @@ enum AST_NODE_KIND
     AST_Break,
     AST_Continue,
     AST_Defer,
-    AST_Using,
     AST_Return,
+    AST_Using,
     AST_Assignment,
     
     AST_VariableDecl,
@@ -145,7 +146,13 @@ typedef struct AST_Node
             struct AST_Node* params;
             struct AST_Node* return_values;
             struct AST_Node* body;
-        } proc_literal, proc_type;
+        } proc_literal;
+        
+        struct
+        {
+            struct AST_Node* params;
+            struct AST_Node* return_values;
+        } proc_type;
         
         struct
         {
@@ -208,9 +215,9 @@ typedef struct AST_Node
         
         struct
         {
-            struct AST_Node* label;
+            Identifier label;
             struct AST_Node* body;
-        } block_statement;
+        } scope_statement;
         
         struct
         {
@@ -230,22 +237,16 @@ typedef struct AST_Node
         
         struct
         {
-            struct AST_Node* label;
+            Identifier label;
         } break_statement, continue_statement;
         
-        struct
-        {
-            struct AST_Node* statement;
-        } defer_statement;
+        struct AST_Node* defer_statement;
+        
+        struct AST_Node* using_statement;
         
         struct
         {
-            struct AST_Node* statement;
-        } using_statement;
-        
-        struct
-        {
-            struct AST_Node* return_values;
+            struct AST_Node* values;
         } return_statement;
         
         struct

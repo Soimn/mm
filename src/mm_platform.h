@@ -1,11 +1,7 @@
 #include <stdarg.h>
 
-#ifndef IZ_DEBUG
-#define IZ_DEBUG 0
-#endif
-
-#ifndef IZ_INTERNAL
-#define IZ_INTERNAL IZ_DEBUG
+#ifndef MM_DEBUG
+#define MM_DEBUG 0
 #endif
 
 #ifdef _WIN32
@@ -130,7 +126,7 @@ typedef Buffer String;
 #define _STRINGIFY(a) #a
 #define STRINGIFY(a) _STRINGIFY(a)
 
-#if IZ_INTERNAL || IZ_DEBUG
+#if MM_DEBUG
 #define ASSERT(EX) ((EX) ? 1 : *(volatile int*)0)
 #else
 #define ASSERT(EX)
@@ -173,12 +169,10 @@ typedef struct Number
     union
     {
         u64 integer;
-        f32 float32;
-        f64 float64;
+        f64 floating;
     };
     
-    bool is_float32;
-    bool is_float64;
+    bool is_float;
     bool is_negative;
 } Number;
 

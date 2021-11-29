@@ -13,7 +13,7 @@ set "fast_fp= /fp:fast /fp:except-"
 IF NOT EXIST .\build mkdir build
 pushd .\build
 
-IF "%2"=="debug" (
+IF "%1"=="debug" (
 set "compile_options= /DMM_DEBUG %nocrt_options% %diag_options% /Od /Zo /Zf /Z7"
 ) ELSE (
 set "compile_options= %nocrt_options% %diag_options% /O2 /Zo /Zf /Z7"

@@ -59,6 +59,9 @@ PushNode(Parser_State* state, u8 kind)
 }
 
 internal bool ParseExpression(Parser_State* state, AST_Node** expression);
+internal bool ParseTypeLevelExpression(Parser_State* state, AST_Node** expression);
+internal bool ParseScope(Parser_State* state, AST_Node** scope);
+internal bool ParseStatement(Parser_State* state, AST_Node** next_statement);
 
 internal bool
 ParseNamedValueList(Parser_State* state, AST_Node** first_pointer)
@@ -107,19 +110,12 @@ ParseNamedValueList(Parser_State* state, AST_Node** first_pointer)
 }
 
 internal bool
-ParseVarOrConstDeclaration(Parser_State* state, bool eat_multiple_values, AST_Node** decl)
+ParseUsingExpressionAssignmentVarOrConstDecl(Parser_State* state, bool eat_multiple_values, AST_Node** node)
 {
-    ASSERT(terminator == Token_Comma || terminator == Token_Semicolon);
-    
     bool encountered_errors = false;
     
-    bool is_const = false;
-    
-    AST_Node* names       = 0;
-    AST_Node* type        = 0;
-    AST_Node* values      = 0;
-    bool is_using         = false;
-    bool is_uninitialized = false;
+    bool is_using   = false;
+    AST_Node* expressions = 0;
     
     Token token = GetToken(state);
     if (token.kind == Token_Identifier && token.keyword == Keyword_Using)
@@ -128,69 +124,123 @@ ParseVarOrConstDeclaration(Parser_State* state, bool eat_multiple_values, AST_No
         SkipTokens(state, 1);
     }
     
-    AST_Node** next_name = &names;
+    AST_Node** next_expression = &expressions;
     
     while (!encountered_errors)
     {
-        if (!ParseExpression(state, next_name)) encountered_errors = true;
+        if (!ParseExpression(state, next_expression)) encountered_errors = true;
         else
         {
-            next_name = &(*next_name)->next;
+            next_expression = &(*next_expression)->next;
             
             if (EatTokenOfKind(state, Token_Comma)) continue;
             else                                    break;
         }
     }
     
-    if (!EatTokenOfKind(state, Token_Colon))
-    {
-        //// ERROR: Missing type of variable or constant
-        encountered_errors = true;
-    }
-    
-    else
+    if (!encountered_errors)
     {
         token = GetToken(state);
         
-        if (token.kind != Token_Colon && token.kind != Token_Equals)
+        if (token.kind >= Token_FirstAssignment && token.kind <= Token_LastAssignment)
         {
-            if (!ParseExpression(state, &type))
-            {
-                encountered_errors = true;
-            }
-        }
-        
-        token = GetToken(state);
-        if (token.kind == Token_Colon || token.kind == Token_Equals)
-        {
-            is_const = (token.kind == Token_Colon);
+            AST_Node* left  = expressions;
+            AST_Node* right = 0;
+            u8 kind         = AST_Invalid;
             
-            SkipTokens(state, 1);
+            if      (token.kind == Token_AndAndEquals) kind = AST_And;
+            else if (token.kind == Token_OrOrEquals)   kind = AST_Or;
+            else if (token.kind >= Token_StarEquals && token.kind <= Token_LeftShiftEquals) kind = AST_FirstMulLevel + (token.kind - Token_StarEquals);
+            else if (token.kind >= Token_PlusEquals && token.kind <= Token_HatEquals)       kind = AST_FirstAddLevel + (token.kind - Token_PlusEquals);
             
-            AST_Node** next_value = &values;
+            next_expression = &right;
             
             while (!encountered_errors)
             {
-                if (!ParseExpression(state, next_value)) encountered_errors = true;
+                if (!ParseExpression(state, next_expression)) encountered_errors = true;
                 else
                 {
-                    next_value = &(*next_value)->next;
+                    next_expression = &(*next_expression)->next;
                     
-                    if (EatTokenOfKind(state, Token_Comma) && eat_multiple_values) continue;
-                    else                                                           break;
+                    if (EatTokenOfKind(state, Token_Comma)) continue;
+                    else                                    break;
                 }
             }
+            
+            if (!encountered_errors)
+            {
+                *node = PushNode(state, AST_Assignment);
+                (*node)->assignment_statement.left  = left;
+                (*node)->assignment_statement.right = right;
+                (*node)->assignment_statement.kind  = kind;
+            }
         }
-    }
-    
-    if (!encountered_errors)
-    {
-        *decl = PushNode(state, (is_const ? AST_ConstantDecl : AST_VariableDecl));
-        (*decl)->var_decl.names            = names;
-        (*decl)->var_decl.type             = type;
-        (*decl)->var_decl.values           = values;
-        (*decl)->var_decl.is_using         = is_using;
-        (*decl)->var_decl.is_uninitialized = is_uninitialized;
+        
+        else if (token.kind == Token_Colon)
+        {
+            bool is_const = false;
+            
+            AST_Node* names       = expressions;
+            AST_Node* type        = 0;
+            AST_Node* values      = 0;
+            bool is_uninitialized = false;
+            
+            token = GetToken(state);
+            
+            if (token.kind != Token_Colon && token.kind != Token_Equals)
+            {
+                if (!ParseExpression(state, &type))
+                {
+                    encountered_errors = true;
+                }
+            }
+            
+            token = GetToken(state);
+            if (token.kind == Token_Colon || token.kind == Token_Equals)
+            {
+                is_const = (token.kind == Token_Colon);
+                
+                SkipTokens(state, 1);
+                
+                AST_Node** next_value = &values;
+                
+                while (!encountered_errors)
+                {
+                    if (!ParseExpression(state, next_value)) encountered_errors = true;
+                    else
+                    {
+                        next_value = &(*next_value)->next;
+                        
+                        if (EatTokenOfKind(state, Token_Comma) && eat_multiple_values) continue;
+                        else                                                           break;
+                    }
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                *node = PushNode(state, (is_const ? AST_ConstantDecl : AST_VariableDecl));
+                (*node)->var_decl.names            = names;
+                (*node)->var_decl.type             = type;
+                (*node)->var_decl.values           = values;
+                (*node)->var_decl.is_using         = is_using;
+                (*node)->var_decl.is_uninitialized = is_uninitialized;
+            }
+        }
+        
+        else
+        {
+            if (is_using)
+            {
+                *node = PushNode(state, AST_Using);
+                (*node)->using_statement = expressions;
+            }
+            
+            else
+            {
+                *node = expressions;
+            }
+        }
     }
     
     return !encountered_errors;
@@ -214,7 +264,9 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     else if (token.kind == Token_Character)
     {
         *expression = PushNode(state, AST_Char);
-        (*expression)->character = token.character;
+        //(*expression)->character = token.character;
+        NOT_IMPLEMENTED;
+        // TODO: parse character literal
         
         SkipTokens(state, 1);
     }
@@ -230,7 +282,9 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     else if (token.kind == Token_Underscore)
     {
         *expression = PushNode(state, AST_Identifier);
-        (*expression)->identifier = BLANK_IDENTIFIER;
+        //(*expression)->identifier = BLANK_IDENTIFIER;
+        NOT_IMPLEMENTED;
+        // TODO: define BLANK_IDENTIFIER
         
         SkipTokens(state, 1);
     }
@@ -249,7 +303,98 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         {
             SkipTokens(state, 1);
             
-            NOT_IMPLEMENTED;
+            AST_Node* params        = 0;
+            AST_Node* return_values = 0;
+            AST_Node* body          = 0;
+            
+            if (EatTokenOfKind(state, Token_OpenParen))
+            {
+                if (EatTokenOfKind(state, Token_CloseParen)); // NOTE: allow proc()
+                else
+                {
+                    AST_Node** next_param = &params;
+                    
+                    while (!encountered_errors)
+                    {
+                        if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, false, next_param)) encountered_errors = true;
+                        else
+                        {
+                            next_param = &(*next_param)->next;
+                            
+                            if (EatTokenOfKind(state, Token_Comma)) continue;
+                            else                                    break;
+                        }
+                    }
+                    
+                    if (!encountered_errors)
+                    {
+                        if (!EatTokenOfKind(state, Token_CloseParen))
+                        {
+                            //// ERROR: Missing closing paren after proc params
+                            encountered_errors = true;
+                        }
+                    }
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                if (EatTokenOfKind(state, Token_Arrow))
+                {
+                    if (EatTokenOfKind(state, Token_OpenParen))
+                    {
+                        if (EatTokenOfKind(state, Token_CloseParen)); // NOTE: allow -> ()
+                        else
+                        {
+                            if (!ParseNamedValueList(state, &return_values)) encountered_errors = true;
+                            else
+                            {
+                                if (!EatTokenOfKind(state, Token_CloseParen))
+                                {
+                                    //// ERROR: Missing matching closing paren after return values
+                                    encountered_errors = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    else
+                    {
+                        if (!ParseExpression(state, &return_values))
+                        {
+                            encountered_errors = true;
+                        }
+                    }
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                if (EatTokenOfKind(state, Token_TripleMinus))
+                {
+                    *expression = PushNode(state, AST_Proc);
+                    (*expression)->proc_literal.params        = params;
+                    (*expression)->proc_literal.return_values = return_values;
+                    (*expression)->proc_literal.body          = 0;
+                }
+                
+                else if (GetToken(state).kind == Token_OpenBrace)
+                {
+                    NOT_IMPLEMENTED;
+                    
+                    *expression = PushNode(state, AST_Proc);
+                    (*expression)->proc_literal.params        = params;
+                    (*expression)->proc_literal.return_values = return_values;
+                    (*expression)->proc_literal.body          = body;
+                }
+                
+                else
+                {
+                    *expression = PushNode(state, AST_ProcType);
+                    (*expression)->proc_type.params        = params;
+                    (*expression)->proc_type.return_values = return_values;
+                }
+            }
         }
         
         else if (token.keyword == Keyword_Struct || token.keyword == Keyword_Union)
@@ -279,7 +424,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                     
                     while (!encountered_errors)
                     {
-                        if (!ParseVarOrConstDeclaration(state, next_member)) encountered_errors = true;
+                        if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, false, next_member)) encountered_errors = true;
                         else
                         {
                             next_member = &(*next_member)->next;
@@ -342,12 +487,17 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             
             else
             {
-                if (EatTokenOfKind(state, Token_CloseBrace));
+                if (EatTokenOfKind(state, Token_CloseBrace)); // NOTE: allow enum type {}
                 else
                 {
-                    if (!ParseNamedValueList(state, &members))
+                    if (!ParseNamedValueList(state, &members)) encountered_errors = true;
+                    else
                     {
-                        encountered_errors = true;
+                        if (!EatTokenOfKind(state, Token_CloseBrace))
+                        {
+                            //// ERROR: Missing closing brace after enum members
+                            encountered_errors = true;
+                        }
                     }
                 }
             }
@@ -355,16 +505,18 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             if (!encountered_errors)
             {
                 *expression = PushNode(state, AST_Enum);
-                (*expression)->struct_type.elem_type = elem_type;
-                (*expression)->struct_type.members   = members;
-                (*expression)->struct_type.is_decl   = is_decl;
+                (*expression)->enum_type.elem_type = elem_type;
+                (*expression)->enum_type.members   = members;
+                (*expression)->enum_type.is_decl   = is_decl;
             }
         }
         
         else
         {
             *expression = PushNode(state, AST_Identifier);
-            (*expression)->identifier = ;
+            //(*expression)->identifier = ;
+            NOT_IMPLEMENTED;
+            // TODO: hash identifier strings
             
             SkipTokens(state, 1);
         }
@@ -410,7 +562,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 if (!ParseNamedValueList(state, &params)) encountered_errors = true;
                 else
                 {
-                    Token token = GetToken(state);
+                    token = GetToken(state);
                     
                     if (!EatTokenOfKind(state, Token_CloseBracket))
                     {
@@ -432,7 +584,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         {
             AST_Node* right = 0;
             
-            if (!ParsePrefixExpression(state, &right)) encountered_errors = true;
+            if (!ParseTypeLevelExpression(state, &right)) encountered_errors = true;
             else
             {
                 *expression = PushNode(state, AST_ElementOf);
@@ -472,6 +624,12 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         
         else
         {
+            Identifier name = {0};
+            AST_Node* params = 0;
+            
+            NOT_IMPLEMENTED;
+            // TODO: hash identifier
+            
             SkipTokens(state, 1);
             
             if (EatTokenOfKind(state, Token_OpenParen))
@@ -494,7 +652,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             if (!encountered_errors)
             {
                 *expression = PushNode(state, AST_Directive);
-                (*expression)->directive.name   = token.identifier;
+                (*expression)->directive.name   = name;
                 (*expression)->directive.params = params;
             }
         }
@@ -502,8 +660,15 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     
     else
     {
-        //// ERROR: Missing primary expression
-        encountered_errors = true;
+        // NOTE: invalid tokens will force the parser to end up here
+        //       if the token is valid we are missing an expression
+        //       if the token is invalid a lexer error has happened somewhere
+        //       Token_EndOfStream will also end up here if not caught by the main loop
+        if (token.kind != Token_Invalid)
+        {
+            //// ERROR: Missing primary expression
+            encountered_errors = true;
+        }
     }
     
     return !encountered_errors;
@@ -659,6 +824,20 @@ ParsePostfixExpression(Parser_State* state, AST_Node** expression)
                     *expression = PushNode(state, AST_Call);
                     (*expression)->call_expr.func   = func;
                     (*expression)->call_expr.params = params;
+                }
+            }
+            
+            else if (EatTokenOfKind(state, Token_Arrow))
+            {
+                AST_Node* left  = *expression;
+                AST_Node* right = 0;
+                
+                if (!ParseTypeLevelExpression(state, &right)) encountered_errors = true;
+                else
+                {
+                    *expression = PushNode(state, AST_UfcsOf);
+                    (*expression)->binary_expr.left  = left;
+                    (*expression)->binary_expr.right = right;
                 }
             }
             
@@ -885,11 +1064,310 @@ ParseExpression(Parser_State* state, AST_Node** expression)
 }
 
 internal bool
+ParseScope(Parser_State* state, AST_Node** scope)
+{
+    bool encountered_errors = false;
+    
+    Token token = GetToken(state);
+    
+    bool is_do_block = false;
+    
+    if (token.kind == Token_Identifier && token.keyword == Keyword_Do)
+    {
+        SkipTokens(state, 1);
+        is_do_block = true;
+    }
+    
+    else if (!EatTokenOfKind(state, Token_OpenBrace))
+    {
+        INVALID_CODE_PATH;
+    }
+    
+    AST_Node* body            = 0;
+    AST_Node** next_statement = &body;
+    while (!encountered_errors)
+    {
+        if (EatTokenOfKind(state, Token_CloseBrace))
+        {
+            if (is_do_block)
+            {
+                //// ERROR: Missing statement
+                encountered_errors = true;
+            }
+            
+            else break;
+        }
+        
+        else
+        {
+            if (!ParseStatement(state, next_statement)) encountered_errors = true;
+            else
+            {
+                next_statement = &(*next_statement)->next;
+            }
+        }
+        
+        if (is_do_block) break;
+        else             continue;
+    }
+    
+    *scope = PushNode(state, AST_Scope);
+    //(*scope)->scope_statement.label = BLANK_IDENTIFIER;
+    (*scope)->scope_statement.body  = body;
+    
+    return !encountered_errors;
+}
+
+internal bool
+ParseStatement(Parser_State* state, AST_Node** next_statement)
+{
+    bool encountered_errors = false;
+    
+    if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow loose ;
+    else
+    {
+        Token token      = GetToken(state);
+        Token peek       = PeekToken(state, 1);
+        Token peek_next  = PeekToken(state, 2);
+        
+        if (token.kind == Token_OpenBrace ||
+            token.kind == Token_Identifier && peek.kind == Token_Colon && peek_next.kind == Token_OpenBrace)
+        {
+            //Identifier label = BLANK_IDENTIFIER;
+            
+            if (token.kind == Token_Identifier)
+            {
+                //label = ;
+                // hash token.identifier
+                NOT_IMPLEMENTED;
+                
+                SkipTokens(state, 2);
+            }
+            
+            if (!ParseScope(state, next_statement)) encountered_errors = true;
+            else
+            {
+                // (*next_statement)->scope_statement.label = label;
+            }
+        }
+        
+        else if (token.kind == Token_Identifier && (token.keyword == Keyword_If || token.keyword == Keyword_When || token.keyword == Keyword_While) ||
+                 token.kind == Token_Identifier && peek.kind == Token_Colon &&
+                 peek_next.kind == Token_Identifier && (peek_next.keyword == Keyword_If || peek_next.keyword == Keyword_When || peek_next.keyword == Keyword_While))
+        {
+            //Identifier label = BLANK_IDENTIFIER;
+            AST_Node* init      = 0;
+            AST_Node* condition = 0;
+            AST_Node* step      = 0;
+            AST_Node* body      = 0;
+            
+            if (token.kind == Token_Identifier && !(token.keyword == Keyword_If || token.keyword == Keyword_When || token.kind == Keyword_While))
+            {
+                //label = ;
+                // hash token.identifier
+                NOT_IMPLEMENTED;
+                
+                SkipTokens(state, 2);
+            }
+            
+            token = GetToken(state);
+            ASSERT(token.kind == Token_Identifier);
+            
+            bool is_when  = (token.keyword == Keyword_When);
+            bool is_while = (token.keyword == Keyword_While);
+            
+            SkipTokens(state, 1);
+            
+            NOT_IMPLEMENTED;
+            
+            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &init))
+            {
+                encountered_errors = true;
+            }
+            
+            if (!encountered_errors)
+            {
+                if (EatTokenOfKind(state, Token_Semicolon))
+                {
+                    if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &condition))
+                    {
+                        encountered_errors = true;
+                    }
+                }
+            }
+            
+            if (!encountered_errors && is_while)
+            {
+                if (EatTokenOfKind(state, Token_Semicolon))
+                {
+                    if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &step))
+                    {
+                        encountered_errors = true;
+                    }
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                if (!ParseScope(state, &body))
+                {
+                    encountered_errors = true;
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                if (is_while)
+                {
+                    *next_statement = PushNode(state, AST_While);
+                    NOT_IMPLEMENTED;
+                }
+                
+                else
+                {
+                    NOT_IMPLEMENTED;
+                }
+            }
+        }
+        
+        else if (token.kind == Token_Identifier && (token.keyword == Keyword_Break || token.keyword == Keyword_Continue))
+        {
+            bool is_break = (token.keyword == Keyword_Break);
+            
+            SkipTokens(state, 1);
+            
+            //Identifier label = BLANK_IDENTIFIER;
+            
+            if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow break; and continue;
+            else
+            {
+                token = GetToken(state);
+                if (token.kind != Token_Identifier)
+                {
+                    //// ERROR: Missing label after break/continue
+                    encountered_errors = true;
+                }
+                
+                else
+                {
+                    // TODO: hash identifier
+                    NOT_IMPLEMENTED;
+                    
+                    if (!EatTokenOfKind(state, Token_Semicolon))
+                    {
+                        //// ERROR: Missing semicolon after break/continue statement
+                        encountered_errors = true;
+                    }
+                }
+            }
+            
+            *next_statement = PushNode(state, (is_break ? AST_Break : AST_Continue));
+            //(*next_statement)->break_statement.label = label;
+        }
+        
+        else if (token.kind == Token_Identifier && token.keyword == Keyword_Defer)
+        {
+            SkipTokens(state, 1);
+            
+            AST_Node* statement = 0;
+            
+            if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow defer;
+            else
+            {
+                if (!ParseScope(state, &statement))
+                {
+                    encountered_errors = true;
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                *next_statement = PushNode(state, AST_Defer);
+                (*next_statement)->defer_statement = statement;
+            }
+        }
+        
+        else if (token.kind == Token_Identifier && token.keyword == Keyword_Return)
+        {
+            SkipTokens(state, 1);
+            
+            AST_Node* values = 0;
+            
+            if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow return;
+            else
+            {
+                if (!ParseNamedValueList(state, &values)) encountered_errors = true;
+                else
+                {
+                    if (!EatTokenOfKind(state, Token_Semicolon))
+                    {
+                        //// ERROR: Missing terminating semicolon after return statement
+                        encountered_errors = true;
+                    }
+                }
+            }
+            
+            if (!encountered_errors)
+            {
+                *next_statement = PushNode(state, AST_Return);
+                (*next_statement)->return_statement.values = values;
+            }
+        }
+        
+        else
+        {
+            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, next_statement))encountered_errors = true;
+            else
+            {
+                if (!EatTokenOfKind(state, Token_Semicolon))
+                {
+                    if ((*next_statement)->kind == AST_Proc   ||
+                        (*next_statement)->kind == AST_Struct ||
+                        (*next_statement)->kind == AST_Enum   ||
+                        (((*next_statement)->kind == AST_VariableDecl || (*next_statement)->kind == AST_ConstantDecl) &&
+                         (*next_statement)->var_decl.values != 0 && (*next_statement)->var_decl.values->next == 0 &&
+                         ((*next_statement)->var_decl.values->kind == AST_Proc   ||
+                          (*next_statement)->var_decl.values->kind == AST_Struct ||
+                          (*next_statement)->var_decl.values->kind == AST_Enum)))
+                    {
+                        // NOTE: Ignore missing semicolon
+                    }
+                    
+                    else
+                    {
+                        //// ERROR: Missing terminating semicolon after statement
+                        encountered_errors = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    return !encountered_errors;
+}
+
+internal bool
 ParseFile(u8* file_contents)
 {
+    bool encountered_errors = false;
+    
     Parser_State state = {
         .lexer = Lexer_Init(file_contents),
     };
     
+    AST_Node** next_statement;
     
+    while (!encountered_errors)
+    {
+        if (GetToken(&state).kind == Token_EndOfStream) break;
+        else
+        {
+            if (!ParseStatement(&state, next_statement))
+            {
+                encountered_errors = true;
+            }
+        }
+    }
+    
+    return !encountered_errors;
 }
