@@ -4,8 +4,6 @@
 #define MM_DEBUG 0
 #endif
 
-#ifdef _WIN32
-
 #ifndef _WIN64
 #error 32 bit mode is not supported yet
 #endif
@@ -25,8 +23,10 @@ typedef i64 imm;
 
 // NOTE: required to remove CRT
 void* memset(void* ptr, int value, umm size);
+void* memcpy(void* rdst, const void* rsrc, u64 count);
 
 #pragma function(memset)
+#pragma function(memcpy)
 
 void*
 memset(void* ptr, int value, umm size)
@@ -42,6 +42,18 @@ memset(void* ptr, int value, umm size)
     return ptr;
 }
 
+void*
+memcpy(void* rdst, const void* rsrc, u64 count)
+{
+    u8* dst = (u8*)rdst;
+    const u8* src = (const u8*)rsrc;
+    while (count--)
+    {
+        *dst++ = *src++;
+    }
+    return dst;
+}
+
 
 int _fltused;
 
@@ -51,27 +63,8 @@ _DllMainCRTStartup(void* instance, u32 reason, void* reserved)
     return 1;
 }
 
-#elif __linux__
-
-typedef __INT8_TYPE__  i8;
-typedef __INT16_TYPE__ i16;
-typedef __INT32_TYPE__ i32;
-typedef __INT64_TYPE__ i64;
-
-typedef __UINT8_TYPE__  u8;
-typedef __UINT16_TYPE__ u16;
-typedef __UINT32_TYPE__ u32;
-typedef __UINT64_TYPE__ u64;
-
-#ifdef _LP64
 typedef u64 umm;
 typedef i64 imm;
-#else
-typedef u32 umm;
-typedef i32 imm;
-#endif
-
-#endif
 
 typedef float  f32;
 typedef double f64;
@@ -189,3 +182,4 @@ typedef union Character
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
+#include "mm_code_gen.h"

@@ -20,7 +20,7 @@ enum AST_NODE_KIND
     
     // precedence 1: 20 - 39
     AST_FirstTypeLevel = 20,
-    AST_PointerType,
+    AST_PointerType = AST_FirstTypeLevel,
     AST_SliceType,
     AST_ArrayType,
     AST_DynamicArrayType,

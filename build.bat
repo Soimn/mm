@@ -19,9 +19,9 @@ set "compile_options= /DMM_DEBUG %nocrt_options% %diag_options% /Od /Zo /Zf /Z7"
 set "compile_options= %nocrt_options% %diag_options% /O2 /Zo /Zf /Z7"
 )
 
-set "link_options= /INCREMENTAL:NO /opt:ref /STACK:0x100000,0x100000 /NODEFAULTLIB /SUBSYSTEM:windows"
+set "link_options= /INCREMENTAL:NO /opt:ref /STACK:0x100000,0x100000 /NODEFAULTLIB /SUBSYSTEM:console"
 
-cl %compile_options% ..\src\mm_win32.c /link %link_options% /PDB:mm.pdb /ENTRY:WinMainCRTStartup Kernel32.lib Winmm.lib User32.lib /out:mm.exe
+cl %compile_options% ..\src\mm_win32.c /link %link_options% /PDB:mm.pdb /ENTRY:WinMainCRTStartup Kernel32.lib Winmm.lib User32.lib Shell32.lib /out:mm.exe
 
 del mm_win32.obj
 

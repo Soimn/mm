@@ -154,6 +154,9 @@ Lexer_Init(u8* file_contents)
 {
     return (Lexer){
         .file_contents = file_contents,
+        .cursor        = file_contents,
+        .start_of_line = file_contents,
+        .line          = 1,
     };
 }
 
@@ -218,6 +221,8 @@ Lexer_Advance(Lexer* lexer)
                 else lexer->cursor += 1;
             }
         }
+        
+        else break;
     }
     
     u8* start_of_token = lexer->cursor;
@@ -510,32 +515,33 @@ Lexer_Advance(Lexer* lexer)
                     
                     String KeywordStrings[KEYWORD_COUNT] = {
                         [Keyword_Invalid]        = STRING(""),
-                        [Keyword_Do]             = STRING("Do"),
-                        [Keyword_In]             = STRING("In"),
-                        [Keyword_Where]          = STRING("Where"),
-                        [Keyword_Proc]           = STRING("Proc"),
-                        [Keyword_Struct]         = STRING("Struct"),
-                        [Keyword_Union]          = STRING("Union"),
-                        [Keyword_Enum]           = STRING("Enum"),
-                        [Keyword_True]           = STRING("True"),
-                        [Keyword_False]          = STRING("False"),
-                        [Keyword_As]             = STRING("As"),
-                        [Keyword_If]             = STRING("If"),
-                        [Keyword_Else]           = STRING("Else"),
-                        [Keyword_When]           = STRING("When"),
-                        [Keyword_While]          = STRING("While"),
-                        [Keyword_For]            = STRING("For"),
-                        [Keyword_Break]          = STRING("Break"),
-                        [Keyword_Continue]       = STRING("Continue"),
-                        [Keyword_Using]          = STRING("Using"),
-                        [Keyword_Defer]          = STRING("Defer"),
-                        [Keyword_Return]         = STRING("Return"),
-                        [Keyword_Import]         = STRING("Import"),
-                        [Keyword_Foreign]        = STRING("Foreign"),
+                        [Keyword_Do]             = STRING("do"),
+                        [Keyword_In]             = STRING("in"),
+                        [Keyword_Where]          = STRING("where"),
+                        [Keyword_Proc]           = STRING("proc"),
+                        [Keyword_Struct]         = STRING("struct"),
+                        [Keyword_Union]          = STRING("union"),
+                        [Keyword_Enum]           = STRING("enum"),
+                        [Keyword_True]           = STRING("true"),
+                        [Keyword_False]          = STRING("false"),
+                        [Keyword_As]             = STRING("as"),
+                        [Keyword_If]             = STRING("if"),
+                        [Keyword_Else]           = STRING("else"),
+                        [Keyword_When]           = STRING("when"),
+                        [Keyword_While]          = STRING("while"),
+                        [Keyword_For]            = STRING("for"),
+                        [Keyword_Break]          = STRING("break"),
+                        [Keyword_Continue]       = STRING("continue"),
+                        [Keyword_Using]          = STRING("using"),
+                        [Keyword_Defer]          = STRING("defer"),
+                        [Keyword_Return]         = STRING("return"),
+                        [Keyword_Import]         = STRING("import"),
+                        [Keyword_Foreign]        = STRING("foreign"),
                         
                     };
                     
-                    token.keyword = Keyword_Invalid;
+                    token.identifier = ident;
+                    token.keyword    = Keyword_Invalid;
                     for (umm i = 1; i < KEYWORD_COUNT; ++i)
                     {
                         if (String_Compare(ident, KeywordStrings[i]))

@@ -335,7 +335,7 @@ ParseUsingExpressionAssignmentVarOrConstDecl(Parser_State* state, bool eat_multi
             }
         }
         
-        else if (token.kind == Token_Colon)
+        else if (EatTokenOfKind(state, Token_Colon))
         {
             bool is_const = false;
             
@@ -1128,8 +1128,6 @@ ParsePrefixExpression(Parser_State* state, AST_Node** expression)
     }
     
     return !encountered_errors;
-    
-    return !encountered_errors;
 }
 
 internal bool
@@ -1150,7 +1148,7 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
             u8 op = token.kind;
             umm precedence = op / 20;
             
-            if (precedence < 4 || precedence > 9) break;
+            if (precedence <= 3 || precedence >= 10 || token.kind == Token_Identifier && token.keyword != Keyword_Invalid) break;
             else
             {
                 SkipTokens(state, 1);
@@ -1169,6 +1167,7 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                             *expression = PushNode(state, op);
                             (*expression)->binary_expr.left  = *left;
                             (*expression)->binary_expr.right = right;
+                            break;
                         }
                         
                         else
@@ -1312,6 +1311,12 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
+        else if (token.kind == Token_Identifier && token.keyword == Keyword_Else)
+        {
+            //// ERROR: Encountered else without matching if
+            encountered_errors = true;
+        }
+        
         else if (token.kind == Token_Identifier && (token.keyword == Keyword_If || token.keyword == Keyword_When || token.keyword == Keyword_While) ||
                  token.kind == Token_Identifier && peek.kind == Token_Colon &&
                  peek_next.kind == Token_Identifier && (peek_next.keyword == Keyword_If || peek_next.keyword == Keyword_When || peek_next.keyword == Keyword_While))
@@ -1402,19 +1407,56 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 
                 else
                 {
-                    if (is_when) *next_statement = PushNode(state, AST_When);
-                    else         *next_statement = PushNode(state, AST_If);
+                    AST_Node* false_body = 0;
                     
-                    if (first && !second)
+                    token = GetToken(state);
+                    if (token.kind == Token_Identifier && token.keyword == Keyword_Else)
                     {
-                        (*next_statement)->if_statement.init      = 0;
-                        (*next_statement)->if_statement.condition = first;
+                        SkipTokens(state, 1);
+                        token = GetToken(state);
+                        
+                        if (token.kind == Token_Identifier && token.keyword == Keyword_If)
+                        {
+                            if (!ParseStatement(state, &false_body))
+                            {
+                                encountered_errors = true;
+                            }
+                        }
+                        
+                        else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && token.keyword == Keyword_Do)
+                        {
+                            if (!ParseScope(state, &false_body))
+                            {
+                                encountered_errors = true;
+                            }
+                        }
+                        
+                        else
+                        {
+                            //// ERROR: Missing body of else statement
+                            encountered_errors = true;
+                        }
                     }
                     
-                    else
+                    if (!encountered_errors)
                     {
-                        (*next_statement)->if_statement.init      = first;
-                        (*next_statement)->if_statement.condition = second;
+                        if (is_when) *next_statement = PushNode(state, AST_When);
+                        else         *next_statement = PushNode(state, AST_If);
+                        
+                        if (first && !second)
+                        {
+                            (*next_statement)->if_statement.init      = 0;
+                            (*next_statement)->if_statement.condition = first;
+                        }
+                        
+                        else
+                        {
+                            (*next_statement)->if_statement.init      = first;
+                            (*next_statement)->if_statement.condition = second;
+                        }
+                        
+                        (*next_statement)->if_statement.true_body  = body;
+                        (*next_statement)->if_statement.false_body = false_body;
                     }
                 }
             }
@@ -1536,15 +1578,19 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
 }
 
 internal bool
-ParseFile(u8* file_contents)
+ParseFile(u8* file_contents, Memory_Arena* arena, AST_Node** statements)
 {
     bool encountered_errors = false;
     
     Parser_State state = {
         .lexer = Lexer_Init(file_contents),
+        .arena = arena
     };
     
-    AST_Node** next_statement;
+    // NOTE: initialize state.current_token
+    SkipTokens(&state, 1);
+    
+    AST_Node** next_statement = statements;
     
     while (!encountered_errors)
     {
