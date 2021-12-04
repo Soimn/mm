@@ -104,6 +104,21 @@ typedef Buffer String;
 
 #define STRING(str) (String){ .data = (u8*)(str), .size = sizeof(str) - 1 }
 
+typedef struct Dynamic_Buffer
+{
+    union
+    {
+        Buffer buffer;
+        
+        struct
+        {
+            u8* data;
+            u64 capacity;
+            u64 size;
+        };
+    }
+} Dynamic_Buffer;
+
 #define Enum8(name)  u8
 #define Enum16(name) u16
 #define Enum32(name) u32
@@ -177,9 +192,13 @@ typedef union Character
     u8 bytes[4];
 } Character;
 
+typedef u64 Package_ID;
+
 #include "mm_memory.h"
 #include "mm_string.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
+#include "mm_symbols.h"
+#include "mm_checker.h"
 #include "mm_code_gen.h"

@@ -24,8 +24,7 @@ enum AST_NODE_KIND
     AST_SliceType,
     AST_ArrayType,
     AST_DynamicArrayType,
-    AST_PolymorphicType,
-    AST_LastTypeLevel = AST_PolymorphicType,
+    AST_LastTypeLevel = AST_DynamicArrayType,
     
     // precedence 2: 40 - 59
     AST_FirstPostfixLevel = 40,
@@ -57,7 +56,6 @@ enum AST_NODE_KIND
     AST_Mul = AST_FirstMulLevel,
     AST_Div,
     AST_Rem,
-    AST_Mod,
     AST_BitwiseAnd,
     AST_ArithmeticRightShift,
     AST_RightShift,
@@ -93,7 +91,7 @@ enum AST_NODE_KIND
     AST_Conditional,
     AST_LastExpression = AST_Conditional,
     
-    AST_FirstStatement,
+    AST_FirstStatement = 220,
     AST_Scope = AST_FirstStatement,
     
     AST_If,
@@ -115,9 +113,7 @@ enum AST_NODE_KIND
 
 typedef struct AST_Node
 {
-    u32 text_offset;
-    u32 text_size;
-    u8 kind;
+    Enum8(AST_NODE_KIND) kind;
     
     struct AST_Node* next;
     
@@ -217,6 +213,7 @@ typedef struct AST_Node
         {
             Identifier label;
             struct AST_Node* body;
+            bool is_do;
         } scope_statement;
         
         struct
@@ -267,7 +264,7 @@ typedef struct AST_Node
         
         struct
         {
-            // TODO:
+            String_Literal import_path;
             Identifier alias;
         } import_decl;
         

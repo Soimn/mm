@@ -1,3 +1,5 @@
+internal
+
 internal inline u8
 ToLowerCase(u8 c)
 {
@@ -203,6 +205,17 @@ String_FormatArgList(Buffer out, const char* format, va_list args)
                         if (required_bytes < out.size) out.data[required_bytes] = *str;
                         required_bytes += 1;
                     }
+                } break;
+                
+                case 'c':
+                {
+                    ++scan;
+                    
+                    char c = va_arg(args, char);
+                    
+                    if (required_bytes < out.size) out.data[required_bytes] = c;
+                    required_bytes += 1;
+                    
                 } break;
                 
                 case 's':

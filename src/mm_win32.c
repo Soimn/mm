@@ -60,16 +60,18 @@ WinMainCRTStartup()
         
         else
         {
+            umm arena_size = GB(3);
+            
             DWORD garbage;
-            u8* base = VirtualAlloc((void*)0, GB(1) + KB(4), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            if (!base || !VirtualProtect(base + GB(1), KB(4), PAGE_NOACCESS, &garbage))
+            u8* base = VirtualAlloc((void*)0, arena_size + KB(4), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            if (!base || !VirtualProtect(base + arena_size, KB(4), PAGE_NOACCESS, &garbage))
             {
                 WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), "Failed to allocate memory", sizeof("Failed to allocate memory") - 1, 0, 0);
             }
             
             Memory_Arena arena = {
                 .base_address = (u64)base,
-                .size         = GB(1)
+                .size         = arena_size
             };
             
             AST_Node* statements;
@@ -80,7 +82,14 @@ WinMainCRTStartup()
             
             else
             {
-                WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), "YEY", sizeof("YEY") - 1, 0, 0);
+                Buffer out = {
+                    .data = Arena_PushSize(&arena, GB(1), 1),
+                    .size = GB(1)
+                };
+                
+                u32 size = (u32)CG_GenCCodeDirectly(statements, out);
+                
+                WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), out.data, size, 0, 0);
             }
         }
     }

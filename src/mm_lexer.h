@@ -27,7 +27,6 @@ enum TOKEN_KIND
     Token_StarEquals,                           // *=
     Token_SlashEquals,                          // /=
     Token_RemEquals,                            // %=
-    Token_ModEquals,                            // %%=
     Token_AndEquals,                            // &=
     Token_ArithmeticRightShiftEquals,           // >>>=
     Token_RightShiftEquals,                     // >>=
@@ -49,7 +48,6 @@ enum TOKEN_KIND
     Token_Star = Token_FirstMulLevel,           // *
     Token_Slash,                                // /
     Token_Rem,                                  // %
-    Token_Mod,                                  // %%
     Token_And,                                  // &
     Token_ArithmeticRightShift,                 // >>>
     Token_RightShift,                           // >>
@@ -187,9 +185,9 @@ Lexer_Advance(Lexer* lexer)
             
             if (*lexer->cursor != 0)
             {
-                lexer->line += 1;
-                lexer->start_of_line = lexer->cursor + 1;
                 lexer->cursor += 1;
+                lexer->line   += 1;
+                lexer->start_of_line = lexer->cursor;
             }
         }
         
@@ -247,7 +245,6 @@ Lexer_Advance(Lexer* lexer)
         case '$': token.kind = Token_Cash;         break;
         case '@': token.kind = Token_At;           break;
         case '?': token.kind = Token_QuestionMark; break;
-        case '#': token.kind = Token_Pound;        break;
         
         case '+':
         {
@@ -342,20 +339,7 @@ Lexer_Advance(Lexer* lexer)
         {
             token.kind = Token_Rem;
             
-            if (*lexer->cursor == '%')
-            {
-                lexer->cursor += 1;
-                
-                token.kind = Token_Mod;
-                
-                if (*lexer->cursor == '=')
-                {
-                    lexer->cursor += 1;
-                    token.kind = Token_ModEquals;
-                }
-            }
-            
-            else if (*lexer->cursor == '=')
+            if (*lexer->cursor == '=')
             {
                 lexer->cursor += 1;
                 token.kind = Token_RemEquals;
@@ -490,7 +474,80 @@ Lexer_Advance(Lexer* lexer)
         
         default:
         {
-            if (c == '_' || IsAlpha(c))
+            if (c == '#')
+            {
+                u8* lookahead = lexer->cursor;
+                
+                String ident = {
+                    .data = lookahead - 1,
+                    .size = 1
+                };
+                
+                while (*lookahead == '_' || IsAlpha(*lookahead) || IsDigit(*lookahead))
+                {
+                    lookahead += 1;
+                }
+                
+                ident.size = lookahead - start_of_token;
+                
+                if (!String_Compare(ident, STRING("here_string")))
+                {
+                    token.kind = Token_Pound;
+                }
+                
+                else
+                {
+                    lexer->cursor = lookahead;
+                    
+                    if (*lexer->cursor == '\n' || lexer->cursor[0] == '\r' && lexer->cursor[1] == '\n')
+                    {
+                        lexer->cursor += 1 + (*lexer->cursor == '\n');
+                        lexer->line   += 1;
+                        lexer->start_of_line = lexer->cursor;
+                    }
+                    
+                    token.kind = Token_String;
+                    token.raw_string.data = lexer->cursor;
+                    token.raw_string.size = 0;
+                    
+                    while (true)
+                    {
+                        if (*lexer->cursor == 0)
+                        {
+                            //// ERROR: unterminated here string
+                            token.kind = Token_Invalid;
+                        }
+                        
+                        else if (*lexer->cursor != '\n') lexer->cursor += 1;
+                        else
+                        {
+                            lexer->cursor += 1;
+                            lexer->line   += 1;
+                            lexer->start_of_line = lexer->cursor;
+                            
+                            ident = (String){
+                                .data = lexer->cursor - 1,
+                                .size = 1
+                            };
+                            
+                            while (*lexer->cursor == '_' || IsAlpha(*lexer->cursor) || IsDigit(*lexer->cursor))
+                            {
+                                lexer->cursor += 1;
+                            }
+                            
+                            ident.size = lexer->cursor - start_of_token;
+                            
+                            if (String_Compare(ident, STRING("HERE_STRING_END")))
+                            {
+                                token.raw_string.size = (ident.data - 1) - token.raw_string.data;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            else if (c == '_' || IsAlpha(c))
             {
                 if (!(c == '_' || IsAlpha(c)))
                 {
@@ -620,7 +677,7 @@ Lexer_Advance(Lexer* lexer)
                 if (integer_overflow)
                 {
                     token.kind = Token_Invalid;
-                    //NumericLiteralTooLarge;
+                    //// ERROR: NumericLiteralTooLarge;
                 }
                 
                 else
@@ -652,7 +709,7 @@ Lexer_Advance(Lexer* lexer)
                             else
                             {
                                 token.kind = Token_Invalid;
-                                //invalid digit count for hex float
+                                //// ERROR: invalid digit count for hex float
                             }
                         }
                         
@@ -730,7 +787,7 @@ Lexer_Advance(Lexer* lexer)
                 if (*lexer->cursor != c)
                 {
                     token.kind = Token_Invalid;
-                    //Unterminated*Literal
+                    //// ERROR: Unterminated * literal
                 }
                 
                 else
@@ -739,7 +796,7 @@ Lexer_Advance(Lexer* lexer)
                     
                     token.raw_string = (String){
                         .data = start_of_token + 1,
-                        .size = lexer->cursor - start_of_token
+                        .size = lexer->cursor - (start_of_token + 1)
                     };
                     
                     lexer->cursor += 1;

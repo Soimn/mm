@@ -162,7 +162,6 @@ ParseCharacter(String string, umm* cursor, Character* character)
             }
             
             if (!encountered_errors) *cursor += 1;
-            
         }
     }
     
@@ -188,15 +187,18 @@ ParseStringLiteral(Parser_State* state, String raw_string, String_Literal* strin
     umm cursor = 0;
     while (!encountered_errors && cursor < raw_string.size)
     {
-        umm prev_cursor = cursor;
-        
         Character character;
         if (!ParseCharacter(raw_string, &cursor, &character)) encountered_errors = true;
         else
         {
-            umm advance = cursor - prev_cursor;
+            umm advance = 4;
             
-            Copy(character.bytes, string->data, advance);
+            for (; advance > 1; --advance)
+            {
+                if (character.bytes[advance - 1] != 0) break;
+            }
+            
+            Copy(character.bytes, string->data + string->size, advance);
             string->size += advance;
         }
     }
@@ -1148,7 +1150,8 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
             u8 op = token.kind;
             umm precedence = op / 20;
             
-            if (precedence <= 3 || precedence >= 10 || token.kind == Token_Identifier && token.keyword != Keyword_Invalid) break;
+            // TODO: find out how to deal with infix calls
+            if (precedence <= 3 || precedence >= 10 || token.kind == Token_Identifier) break; // && token.keyword != Keyword_Invalid) break;
             else
             {
                 SkipTokens(state, 1);
@@ -1158,14 +1161,16 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                 if (!ParsePrefixExpression(state, &right)) encountered_errors = true;
                 else
                 {
-                    AST_Node** left = expression;
+                    AST_Node** slot = expression;
                     
                     for (;;)
                     {
-                        if ((*left)->kind / 20 <= precedence)
+                        if ((*slot)->kind / 20 <= precedence)
                         {
+                            AST_Node* left = *slot;
+                            
                             *expression = PushNode(state, op);
-                            (*expression)->binary_expr.left  = *left;
+                            (*expression)->binary_expr.left  = left;
                             (*expression)->binary_expr.right = right;
                             break;
                         }
@@ -1173,7 +1178,7 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                         else
                         {
                             // NOTE: this assumes there are no statements in the current tree
-                            left = &(*left)->binary_expr.right;
+                            slot = &(*slot)->binary_expr.right;
                         }
                     }
                 }
@@ -1274,8 +1279,9 @@ ParseScope(Parser_State* state, AST_Node** scope)
     }
     
     *scope = PushNode(state, AST_Scope);
-    //(*scope)->scope_statement.label = BLANK_IDENTIFIER;
+    (*scope)->scope_statement.label = BLANK_IDENTIFIER;
     (*scope)->scope_statement.body  = body;
+    (*scope)->scope_statement.is_do = is_do_block;
     
     return !encountered_errors;
 }
@@ -1311,6 +1317,16 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
+        else if (token.kind == Token_Identifier && token.keyword == Keyword_Import)
+        {
+            NOT_IMPLEMENTED;
+        }
+        
+        else if (token.kind == Token_Identifier && token.keyword == Keyword_Foreign)
+        {
+            NOT_IMPLEMENTED;
+        }
+        
         else if (token.kind == Token_Identifier && token.keyword == Keyword_Else)
         {
             //// ERROR: Encountered else without matching if
@@ -1327,7 +1343,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             AST_Node* third  = 0;
             AST_Node* body   = 0;
             
-            if (token.kind == Token_Identifier && !(token.keyword == Keyword_If || token.keyword == Keyword_When || token.kind == Keyword_While))
+            if (token.kind == Token_Identifier && !(token.keyword == Keyword_If || token.keyword == Keyword_When || token.keyword == Keyword_While))
             {
                 label = ParseIdentifier(state, token.raw_string);
                 
@@ -1597,9 +1613,10 @@ ParseFile(u8* file_contents, Memory_Arena* arena, AST_Node** statements)
         if (GetToken(&state).kind == Token_EndOfStream) break;
         else
         {
-            if (!ParseStatement(&state, next_statement))
+            if (!ParseStatement(&state, next_statement)) encountered_errors = true;
+            else
             {
-                encountered_errors = true;
+                next_statement = &(*next_statement)->next;
             }
         }
     }
