@@ -1144,14 +1144,11 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
         {
             Token token = GetToken(state);
             
-            // IMPORTANT NOTE: EXPRESSION_KIND is organized in blocks of values, each 20 in size
-            //                 the blocks from 4 to 9 contain binary expressions
-            
             u8 op = token.kind;
-            umm precedence = op / 20;
+            umm precedence = PRECEDENCE_FROM_KIND(op);
             
             // TODO: find out how to deal with infix calls
-            if (precedence <= 3 || precedence >= 10 || token.kind == Token_Identifier) break; // && token.keyword != Keyword_Invalid) break;
+            if (precedence <= 3 || precedence >= 10 || token.kind == Token_Identifier) break;
             else
             {
                 SkipTokens(state, 1);
@@ -1165,7 +1162,7 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                     
                     for (;;)
                     {
-                        if ((*slot)->kind / 20 <= precedence)
+                        if (PRECEDENCE_FROM_KIND((*slot)->kind) <= precedence)
                         {
                             AST_Node* left = *slot;
                             
@@ -1175,11 +1172,7 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                             break;
                         }
                         
-                        else
-                        {
-                            // NOTE: this assumes there are no statements in the current tree
-                            slot = &(*slot)->binary_expr.right;
-                        }
+                        else slot = &(*slot)->binary_expr.right;
                     }
                 }
             }

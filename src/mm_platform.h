@@ -104,20 +104,12 @@ typedef Buffer String;
 
 #define STRING(str) (String){ .data = (u8*)(str), .size = sizeof(str) - 1 }
 
-typedef struct Dynamic_Buffer
+typedef struct Cap_Buffer
 {
-    union
-    {
-        Buffer buffer;
-        
-        struct
-        {
-            u8* data;
-            u64 capacity;
-            u64 size;
-        };
-    }
-} Dynamic_Buffer;
+    u8* data;
+    u64 size;
+    u64 capacity;
+} Cap_Buffer;
 
 #define Enum8(name)  u8
 #define Enum16(name) u16
@@ -184,6 +176,7 @@ typedef struct Number
     
     bool is_float;
     bool is_negative;
+    u8 width;
 } Number;
 
 typedef union Character

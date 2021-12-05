@@ -111,6 +111,8 @@ enum AST_NODE_KIND
     AST_LastStatement = AST_ForeignDecl,
 };
 
+#define PRECEDENCE_FROM_KIND(kind) (kind / 20)
+
 typedef struct AST_Node
 {
     Enum8(AST_NODE_KIND) kind;
