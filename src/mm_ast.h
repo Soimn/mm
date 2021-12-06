@@ -109,6 +109,8 @@ enum AST_NODE_KIND
     AST_ImportDecl,
     AST_ForeignDecl,
     AST_LastStatement = AST_ForeignDecl,
+    
+    AST_NODE_KIND_END
 };
 
 #define PRECEDENCE_FROM_KIND(kind) (kind / 20)
@@ -216,6 +218,7 @@ typedef struct AST_Node
             Identifier label;
             struct AST_Node* body;
             bool is_do;
+            Symbol_Table symbol_table;
         } scope_statement;
         
         struct

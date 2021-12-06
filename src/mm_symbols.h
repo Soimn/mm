@@ -1,5 +1,25 @@
-typedef u64 Type_ID;
-typedef u64 Symbol_Table;
+enum SYMBOL_KIND
+{
+    Symbol_Var,
+    Symbol_Const,
+    Symbol_Package,
+    Symbol_Parameter,
+    Symbol_ReturnValue,
+};
+
+typedef struct Symbol
+{
+    struct Symbol* next;
+    
+    Enum8(SYMBOL_KIND) kind;
+    Identifier name;
+    
+    Type_ID type;
+    Package_ID package;
+    u64 constant_value;
+} Symbol;
+
+typedef Symbol* Symbol_Table;
 
 enum TYPE_KIND
 {
@@ -7,17 +27,14 @@ enum TYPE_KIND
     Type_Incomplete,
     //Type_Completing,
     
-    Type_Array,
-    Type_DynamicArray,
-    Type_Slice,
-    Type_Pointer,
-    Type_Range,
-    
-    Type_Struct,
-    Type_Union,
-    Type_Enum,
-    
-    Type_Proc,
+    Type_FirstUntyped,
+    Type_UntypedString = Type_FirstUntyped,
+    Type_UntypedChar,
+    Type_UntypedBool,
+    Type_UntypedInt,
+    Type_UntypedUint,
+    Type_UntypedFloat,
+    Type_LastUntyped = Type_UntypedFloat,
     
     Type_String,
     Type_Char,
@@ -35,36 +52,94 @@ enum TYPE_KIND
     Type_Float,
     Type_F32,
     Type_F64,
+    
+    Type_Array,
+    Type_DynamicArray,
+    Type_Slice,
+    Type_Pointer,
+    Type_Range,
+    
+    Type_Struct,
+    Type_Union,
+    Type_Enum,
+    
+    Type_Proc,
 };
 
 typedef struct Type_Info
 {
-    Identifier name;
     u32 size;
     u8 alignment;
+    u8 kind;
     
+    Identifier name;
     Type_ID sub_type;
+    Symbol_Table symbol_stable;
     u32 array_size;
-    Symbol_Table symbol_table;
 } Type_Info;
 
-enum SYMBOL_KIND
+typedef struct File
 {
-    Symbol_Var,
-    Symbol_Const,
-    Symbol_Package,
-    Symbol_Parameter,
-    Symbol_ReturnValue,
+    struct File* next;
+    struct AST_Node* ast;
+    String path;
+    File_ID id;
+} File;
+
+typedef struct Package
+{
+    File* files;
+    Symbol_Table symbol_table;
+    Package_ID id;
+} Package;
+
+#if 0
+/*
+Package
+- Struct
+| - Sub_Struct
+| | - d: float
+| | - e: float
+| | - f: float
+| - N: untyped int
+| - GetN: proc -> int
+| - a: int
+| - b: float
+| - c: uint
+| - s: [N]Sub_Struct
+   - main
+ | - n: int
+ | - _: int
+ | - a: int
+   | | b: int
+| | s: Struct
+
+*/
+Struct :: struct
+{
+    Sub_Struct :: struct
+    {
+        d, e, f: float
+    },
+    
+    N :: 5,
+    
+    GetN :: proc -> int do return N,
+    
+    a: int,
+    b: float,
+    c: uint,
+    s: [N]Sub_Struct
 };
 
-typedef struct Symbol
+main :: proc(n: int) -> int
 {
-    Symbol* next;
+    a := 0;
     
-    Enum8(SYMBOL_KIND) kind;
-    Identifier name;
+    b := a + 1;
     
-    Type_ID type;
-    Package_ID package;
-    // Value
-} Symbol;
+    s := Struct.{};
+    
+    n := s.GetN();
+};
+#endif

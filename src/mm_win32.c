@@ -79,18 +79,6 @@ WinMainCRTStartup()
             {
                 WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), "Failed to parse file", sizeof("Failed to parse file") - 1, 0, 0);
             }
-            
-            else
-            {
-                Buffer out = {
-                    .data = Arena_PushSize(&arena, GB(1), 1),
-                    .size = GB(1)
-                };
-                
-                u32 size = (u32)CG_GenCCodeDirectly(statements, out);
-                
-                WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), out.data, size, 0, 0);
-            }
         }
     }
     

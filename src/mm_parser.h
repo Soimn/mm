@@ -206,19 +206,6 @@ ParseStringLiteral(Parser_State* state, String raw_string, String_Literal* strin
     return !encountered_errors;
 }
 
-internal Identifier
-ParseIdentifier(Parser_State* state, String identifier)
-{
-    Identifier result = {
-        .data = Arena_PushSize(state->arena, identifier.size, 1),
-        .size = identifier.size
-    };
-    
-    Copy(identifier.data, result.data, identifier.size);
-    
-    return result;
-}
-
 internal bool ParseExpression(Parser_State* state, AST_Node** expression);
 internal bool ParseTypeLevelExpression(Parser_State* state, AST_Node** expression);
 internal bool ParseScope(Parser_State* state, AST_Node** scope);
@@ -279,7 +266,7 @@ ParseUsingExpressionAssignmentVarOrConstDecl(Parser_State* state, bool eat_multi
     AST_Node* expressions = 0;
     
     Token token = GetToken(state);
-    if (token.kind == Token_Identifier && token.keyword == Keyword_Using)
+    if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Using))
     {
         is_using = true;
         SkipTokens(state, 1);
@@ -444,25 +431,17 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         SkipTokens(state, 1);
     }
     
-    else if (token.kind == Token_Underscore)
-    {
-        *expression = PushNode(state, AST_Identifier);
-        (*expression)->identifier = BLANK_IDENTIFIER;
-        
-        SkipTokens(state, 1);
-    }
-    
     else if (token.kind == Token_Identifier)
     {
-        if (token.keyword == Keyword_True || token.keyword == Keyword_False)
+        if (Identifier_IsKeyword(token.identifier, Keyword_True) || Identifier_IsKeyword(token.identifier, Keyword_False))
         {
             *expression = PushNode(state, AST_Boolean);
-            (*expression)->boolean = (token.keyword == Keyword_True);
+            (*expression)->boolean = Identifier_IsKeyword(token.identifier, Keyword_True);
             
             SkipTokens(state, 1);
         }
         
-        else if (token.keyword == Keyword_Proc)
+        else if (Identifier_IsKeyword(token.identifier, Keyword_Proc))
         {
             SkipTokens(state, 1);
             
@@ -543,7 +522,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 else
                 {
                     token = GetToken(state);
-                    if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && token.keyword == Keyword_Do)
+                    if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Do))
                     {
                         AST_Node* body = 0;
                         
@@ -567,7 +546,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             }
         }
         
-        else if (token.keyword == Keyword_Struct || token.keyword == Keyword_Union)
+        else if (Identifier_IsKeyword(token.identifier, Keyword_Struct) || Identifier_IsKeyword(token.identifier, Keyword_Union))
         {
             SkipTokens(state, 1);
             
@@ -627,7 +606,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             }
         }
         
-        else if (token.keyword == Keyword_Enum)
+        else if (Identifier_IsKeyword(token.identifier, Keyword_Enum))
         {
             SkipTokens(state, 1);
             
@@ -684,7 +663,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         else
         {
             *expression = PushNode(state, AST_Identifier);
-            (*expression)->identifier = ParseIdentifier(state, token.raw_string);
+            (*expression)->identifier = token.identifier;
             
             SkipTokens(state, 1);
         }
@@ -792,7 +771,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         
         else
         {
-            Identifier name = ParseIdentifier(state, token.raw_string);
+            Identifier name = token.identifier;
             AST_Node* params = 0;
             
             SkipTokens(state, 1);
@@ -1232,7 +1211,7 @@ ParseScope(Parser_State* state, AST_Node** scope)
     
     bool is_do_block = false;
     
-    if (token.kind == Token_Identifier && token.keyword == Keyword_Do)
+    if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Do))
     {
         SkipTokens(state, 1);
         is_do_block = true;
@@ -1280,6 +1259,28 @@ ParseScope(Parser_State* state, AST_Node** scope)
 }
 
 internal bool
+IsIfWhenOrWhile(Token token, Token peek, Token peek_next)
+{
+    bool result = false;
+    
+    if (token.kind == Token_Identifier)
+    {
+        Identifier check_ident = token.identifier;
+        
+        if (Identifier_IsKeyword(token.identifier, Keyword_Invalid) && peek.kind == Token_Colon)
+        {
+            check_ident = peek_next.identifier;
+        }
+        
+        result = (result && (Identifier_IsKeyword(check_ident, Keyword_If) ||
+                             Identifier_IsKeyword(check_ident, Keyword_When) ||
+                             Identifier_IsKeyword(check_ident, Keyword_While)));
+    }
+    
+    return result;
+}
+
+internal bool
 ParseStatement(Parser_State* state, AST_Node** next_statement)
 {
     bool encountered_errors = false;
@@ -1292,13 +1293,16 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
         Token peek_next  = PeekToken(state, 2);
         
         if (token.kind == Token_OpenBrace ||
-            token.kind == Token_Identifier && peek.kind == Token_Colon && peek_next.kind == Token_OpenBrace)
+            (token.kind == Token_Identifier                          &&
+             Identifier_IsKeyword(token.identifier, Keyword_Invalid) &&
+             peek.kind == Token_Colon                                &&
+             peek_next.kind == Token_OpenBrace))
         {
             Identifier label = BLANK_IDENTIFIER;
             
             if (token.kind == Token_Identifier)
             {
-                label = ParseIdentifier(state, token.raw_string);
+                label = token.identifier;
                 
                 SkipTokens(state, 2);
             }
@@ -1310,25 +1314,23 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
-        else if (token.kind == Token_Identifier && token.keyword == Keyword_Import)
+        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Import))
         {
             NOT_IMPLEMENTED;
         }
         
-        else if (token.kind == Token_Identifier && token.keyword == Keyword_Foreign)
+        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Foreign))
         {
             NOT_IMPLEMENTED;
         }
         
-        else if (token.kind == Token_Identifier && token.keyword == Keyword_Else)
+        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Else))
         {
             //// ERROR: Encountered else without matching if
             encountered_errors = true;
         }
         
-        else if (token.kind == Token_Identifier && (token.keyword == Keyword_If || token.keyword == Keyword_When || token.keyword == Keyword_While) ||
-                 token.kind == Token_Identifier && peek.kind == Token_Colon &&
-                 peek_next.kind == Token_Identifier && (peek_next.keyword == Keyword_If || peek_next.keyword == Keyword_When || peek_next.keyword == Keyword_While))
+        else if (IsIfWhenOrWhile(token, peek, peek_next))
         {
             Identifier label = BLANK_IDENTIFIER;
             AST_Node* first  = 0;
@@ -1336,9 +1338,9 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             AST_Node* third  = 0;
             AST_Node* body   = 0;
             
-            if (token.kind == Token_Identifier && !(token.keyword == Keyword_If || token.keyword == Keyword_When || token.keyword == Keyword_While))
+            if (Identifier_IsKeyword(token.kind == Token_Identifier, Keyword_Invalid))
             {
-                label = ParseIdentifier(state, token.raw_string);
+                label = token.identifier;
                 
                 SkipTokens(state, 2);
             }
@@ -1346,8 +1348,8 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             token = GetToken(state);
             ASSERT(token.kind == Token_Identifier);
             
-            bool is_when  = (token.keyword == Keyword_When);
-            bool is_while = (token.keyword == Keyword_While);
+            bool is_when  = Identifier_IsKeyword(token.identifier, Keyword_When);
+            bool is_while = Identifier_IsKeyword(token.identifier, Keyword_While);
             
             SkipTokens(state, 1);
             
@@ -1419,12 +1421,12 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                     AST_Node* false_body = 0;
                     
                     token = GetToken(state);
-                    if (token.kind == Token_Identifier && token.keyword == Keyword_Else)
+                    if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Else))
                     {
                         SkipTokens(state, 1);
                         token = GetToken(state);
                         
-                        if (token.kind == Token_Identifier && token.keyword == Keyword_If)
+                        if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_If))
                         {
                             if (!ParseStatement(state, &false_body))
                             {
@@ -1432,7 +1434,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                             }
                         }
                         
-                        else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && token.keyword == Keyword_Do)
+                        else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Do))
                         {
                             if (!ParseScope(state, &false_body))
                             {
@@ -1471,9 +1473,10 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
-        else if (token.kind == Token_Identifier && (token.keyword == Keyword_Break || token.keyword == Keyword_Continue))
+        else if (token.kind == Token_Identifier && (Identifier_IsKeyword(token.identifier, Keyword_Break) ||
+                                                    Identifier_IsKeyword(token.identifier, Keyword_Continue)))
         {
-            bool is_break = (token.keyword == Keyword_Break);
+            bool is_break = Identifier_IsKeyword(token.identifier, Keyword_Break);
             
             SkipTokens(state, 1);
             
@@ -1491,7 +1494,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 
                 else
                 {
-                    label = ParseIdentifier(state, token.raw_string);
+                    label = token.identifier;
                     
                     if (!EatTokenOfKind(state, Token_Semicolon))
                     {
@@ -1505,7 +1508,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             (*next_statement)->break_statement.label = label;
         }
         
-        else if (token.kind == Token_Identifier && token.keyword == Keyword_Defer)
+        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Defer))
         {
             SkipTokens(state, 1);
             
@@ -1527,7 +1530,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
-        else if (token.kind == Token_Identifier && token.keyword == Keyword_Return)
+        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Return))
         {
             SkipTokens(state, 1);
             

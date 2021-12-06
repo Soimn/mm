@@ -83,39 +83,6 @@ enum TOKEN_KIND
     Token_EndOfStream,
 };
 
-enum KEYWORD_KIND
-{
-    Keyword_Invalid = 0,
-    
-    Keyword_Do,
-    Keyword_In,
-    Keyword_Where,
-    Keyword_Proc,
-    Keyword_Struct,
-    Keyword_Union,
-    Keyword_Enum,
-    Keyword_True,
-    Keyword_False,
-    Keyword_As,
-    
-    Keyword_FirstStatementInitiator,
-    Keyword_If = Keyword_FirstStatementInitiator,
-    Keyword_Else,
-    Keyword_When,
-    Keyword_While,
-    Keyword_For,
-    Keyword_Break,
-    Keyword_Continue,
-    Keyword_Using,
-    Keyword_Defer,
-    Keyword_Return,
-    Keyword_Import,
-    Keyword_Foreign,
-    Keyword_LastStatementInitiator = Keyword_Foreign,
-    
-    KEYWORD_COUNT,
-};
-
 typedef struct Token
 {
     u8 kind;
@@ -127,13 +94,7 @@ typedef struct Token
     union
     {
         String raw_string;
-        
-        struct
-        {
-            String identifier;
-            u8 keyword;
-        };
-        
+        Identifier identifier;
         Number number;
     };
     
@@ -549,65 +510,21 @@ Lexer_Advance(Lexer* lexer)
             
             else if (c == '_' || IsAlpha(c))
             {
-                if (!(c == '_' || IsAlpha(c)))
+                token.kind = Token_Identifier;
+                
+                String ident = {
+                    .data = lexer->cursor - 1,
+                    .size = 1
+                };
+                
+                while (*lexer->cursor == '_' || IsAlpha(*lexer->cursor) || IsDigit(*lexer->cursor))
                 {
-                    token.kind = Token_Underscore;
+                    lexer->cursor += 1;
                 }
                 
-                else
-                {
-                    token.kind = Token_Identifier;
-                    
-                    String ident = {
-                        .data = lexer->cursor - 1,
-                        .size = 1
-                    };
-                    
-                    while (*lexer->cursor == '_' || IsAlpha(*lexer->cursor) || IsDigit(*lexer->cursor))
-                    {
-                        lexer->cursor += 1;
-                    }
-                    
-                    ident.size = lexer->cursor - start_of_token;
-                    
-                    String KeywordStrings[KEYWORD_COUNT] = {
-                        [Keyword_Invalid]        = STRING(""),
-                        [Keyword_Do]             = STRING("do"),
-                        [Keyword_In]             = STRING("in"),
-                        [Keyword_Where]          = STRING("where"),
-                        [Keyword_Proc]           = STRING("proc"),
-                        [Keyword_Struct]         = STRING("struct"),
-                        [Keyword_Union]          = STRING("union"),
-                        [Keyword_Enum]           = STRING("enum"),
-                        [Keyword_True]           = STRING("true"),
-                        [Keyword_False]          = STRING("false"),
-                        [Keyword_As]             = STRING("as"),
-                        [Keyword_If]             = STRING("if"),
-                        [Keyword_Else]           = STRING("else"),
-                        [Keyword_When]           = STRING("when"),
-                        [Keyword_While]          = STRING("while"),
-                        [Keyword_For]            = STRING("for"),
-                        [Keyword_Break]          = STRING("break"),
-                        [Keyword_Continue]       = STRING("continue"),
-                        [Keyword_Using]          = STRING("using"),
-                        [Keyword_Defer]          = STRING("defer"),
-                        [Keyword_Return]         = STRING("return"),
-                        [Keyword_Import]         = STRING("import"),
-                        [Keyword_Foreign]        = STRING("foreign"),
-                        
-                    };
-                    
-                    token.identifier = ident;
-                    token.keyword    = Keyword_Invalid;
-                    for (umm i = 1; i < KEYWORD_COUNT; ++i)
-                    {
-                        if (String_Compare(ident, KeywordStrings[i]))
-                        {
-                            token.keyword = (u8)i;
-                            break;
-                        }
-                    }
-                }
+                ident.size = lexer->cursor - start_of_token;
+                
+                token.identifier = Identifier_Add(ident);
             }
             
             else if (c >= '0' && c <= '9')

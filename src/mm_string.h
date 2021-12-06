@@ -2,8 +2,8 @@ internal Buffer
 CapBuffer_FreeSpace(Cap_Buffer buffer)
 {
     return (Buffer){
-        .data = buffer->data + buffer->size,
-        .size = buffer->capacity - buffer->size
+        .data = buffer.data + buffer.size,
+        .size = buffer.capacity - buffer.size
     };
 }
 
@@ -11,8 +11,8 @@ internal Buffer
 CapBuffer_UsedSpace(Cap_Buffer buffer)
 {
     return (Buffer){
-        .data = buffer->data,
-        .size = buffer->size
+        .data = buffer.data,
+        .size = buffer.size
     };
 }
 
