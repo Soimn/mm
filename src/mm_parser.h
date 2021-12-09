@@ -2,7 +2,8 @@ typedef struct Parser_State
 {
     Lexer lexer;
     Token current_token;
-    Memory_Arena* arena;
+    Memory_Arena* ast_arena;
+    Memory_Arena* string_arena;
 } Parser_State;
 
 internal inline Token
@@ -53,7 +54,7 @@ EatTokenOfKind(Parser_State* state, u8 kind)
 internal inline AST_Node*
 PushNode(Parser_State* state, u8 kind)
 {
-    AST_Node* result = Arena_PushSize(state->arena, sizeof(AST_Node), ALIGNOF(AST_Node));
+    AST_Node* result = Arena_PushSize(state->ast_arena, sizeof(AST_Node), ALIGNOF(AST_Node));
     ZeroStruct(result);
     
     result->kind = kind;
@@ -180,7 +181,7 @@ ParseStringLiteral(Parser_State* state, String raw_string, String_Literal* strin
     bool encountered_errors = false;
     
     *string = (String_Literal){
-        .data = Arena_PushSize(state->arena, raw_string.size, 1),
+        .data = Arena_PushSize(state->string_arena, raw_string.size, 1),
         .size = 0
     };
     
@@ -1126,8 +1127,7 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
             u8 op = token.kind;
             umm precedence = PRECEDENCE_FROM_KIND(op);
             
-            // TODO: find out how to deal with infix calls
-            if (precedence <= 3 || precedence >= 10 || token.kind == Token_Identifier) break;
+            if (precedence <= 3 || precedence >= 10) break;
             else
             {
                 SkipTokens(state, 1);
@@ -1590,29 +1590,77 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
 }
 
 internal bool
-ParseFile(u8* file_contents, Memory_Arena* arena, AST_Node** statements)
+ParsePackage(Package_ID package_id, Memory_Arena* ast_arena, Memory_Arena* string_arena)
 {
     bool encountered_errors = false;
     
-    Parser_State state = {
-        .lexer = Lexer_Init(file_contents),
-        .arena = arena
-    };
+    Package* package = Package_FromID(package_id);
     
-    // NOTE: initialize state.current_token
-    SkipTokens(&state, 1);
-    
-    AST_Node** next_statement = statements;
-    
-    while (!encountered_errors)
+    for (umm i = 0; i < package->file_count && !encountered_errors; ++i)
     {
-        if (GetToken(&state).kind == Token_EndOfStream) break;
+        File* file = &package->files[i];
+        
+        // TODO: load file
+        u8* file_contents = 0;
+        NOT_IMPLEMENTED;
+        
+        Parser_State state = {
+            .lexer        = Lexer_Init(file_contents),
+            .ast_arena    = ast_arena,
+            .string_arena = string_arena
+        };
+        
+        // NOTE: initialize state.current_token
+        SkipTokens(&state, 1);
+        
+        Token token = GetToken(&state);
+        if (token.kind != Token_Identifier || !Identifier_IsKeyword(token.identifier, Keyword_Package))
+        {
+            //// ERROR: Missing package declaration
+            encountered_errors = true;
+        }
+        
         else
         {
-            if (!ParseStatement(&state, next_statement)) encountered_errors = true;
+            SkipTokens(&state, 1);
+            token = GetToken(&state);
+            
+            if (token.kind != Token_Identifier)
+            {
+                //// ERROR: Missing package name
+                encountered_errors = true;
+            }
+            
+            else if (token.identifier != package->name)
+            {
+                //// ERROR: Package name mismatch
+                encountered_errors = true;
+            }
+            
             else
             {
-                next_statement = &(*next_statement)->next;
+                SkipTokens(&state, 1);
+                
+                if (!EatTokenOfKind(&state, Token_Semicolon))
+                {
+                    //// ERROR: Missing semicolon after package declaration
+                    encountered_errors = true;
+                }
+            }
+        }
+        
+        AST_Node** next_statement = &file->ast;
+        
+        while (!encountered_errors)
+        {
+            if (GetToken(&state).kind == Token_EndOfStream) break;
+            else
+            {
+                if (!ParseStatement(&state, next_statement)) encountered_errors = true;
+                else
+                {
+                    next_statement = &(*next_statement)->next;
+                }
             }
         }
     }

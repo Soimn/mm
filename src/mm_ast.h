@@ -60,8 +60,7 @@ enum AST_NODE_KIND
     AST_ArithmeticRightShift,
     AST_RightShift,
     AST_LeftShift,
-    AST_InfixCall,
-    AST_LastMulLevel = AST_InfixCall,
+    AST_LastMulLevel = AST_LeftShift,
     
     // precedence 6: 120 - 139
     AST_FirstAddLevel = 120,
@@ -114,6 +113,7 @@ enum AST_NODE_KIND
 };
 
 #define PRECEDENCE_FROM_KIND(kind) (kind / 20)
+#define IS_EXPRESSION(kind) (kind >= AST_FirstExpression && kind <= AST_LastExpression)
 
 typedef struct AST_Node
 {

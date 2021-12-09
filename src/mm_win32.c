@@ -14,6 +14,10 @@
 
 #include "mm_platform.h"
 
+// extract package name from path
+// find source files
+// load source files
+
 void __stdcall
 WinMainCRTStartup()
 {
@@ -74,11 +78,7 @@ WinMainCRTStartup()
                 .size         = arena_size
             };
             
-            AST_Node* statements;
-            if (!ParseFile(raw_file, &arena, &statements))
-            {
-                WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), "Failed to parse file", sizeof("Failed to parse file") - 1, 0, 0);
-            }
+            NOT_IMPLEMENTED;
         }
     }
     

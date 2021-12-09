@@ -52,8 +52,7 @@ enum TOKEN_KIND
     Token_ArithmeticRightShift,                 // >>>
     Token_RightShift,                           // >>
     Token_LeftShift,                            // <<
-    Token_Identifier,                           // a mod b
-    Token_LastMulLevel = Token_Identifier,
+    Token_LastMulLevel = Token_LeftShift,
     
     Token_FirstAddLevel = 120,
     Token_Plus = Token_FirstAddLevel,           // +
@@ -75,7 +74,7 @@ enum TOKEN_KIND
     
     Token_OrOr = 180,                           // ||
     
-    //Token_Identifier,
+    Token_Identifier,
     Token_String,
     Token_Character,
     Token_Number,

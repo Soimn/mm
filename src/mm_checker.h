@@ -11,12 +11,33 @@ typedef struct Checker_State
     Scope_Chain* scope_chain;
 } Checker_State;
 
+typedef struct Check_Result
+{
+    Type_ID type;
+    bool encountered_errors;
+} Check_Result;
+
+internal inline bool
+Type_IsResolved(Type_ID type)
+{
+    return (type >= Type_ResolvedThreshold);
+}
+
+internal inline bool
+Type_IsImplicitlyCovertibleToBool(Type_ID type)
+{
+    return (type >= Type_FirstBaseType && type <= Type_LastBaseType);
+}
+
 internal bool CheckScope(Checker_State* state, AST_Node* scope);
 
-internal bool
+internal Check_Result
 CheckExpression(Checker_State* state, AST_Node* expression)
 {
-    bool encountered_errors = false;
+    Check_Result result = {
+        .type               = Type_Unresolved,
+        .encountered_errors = false,
+    };
     
     umm precedence = PRECEDENCE_FROM_KIND(expression->kind);
     
@@ -159,12 +180,16 @@ CheckExpression(Checker_State* state, AST_Node* expression)
     
     else if (expression->kind == AST_Conditional)
     {
-        
+        NOT_IMPLEMENTED;
     }
     
-    else INVALID_CODE_PATH;
+    else
+    {
+        //// ERROR: Invalid expression kind
+        result.encountered_errors = true;
+    }
     
-    return !encountered_errors;
+    return result;
 }
 
 internal bool
@@ -174,7 +199,35 @@ CheckStatement(Checker_State* state, AST_Node* statement)
     
     if (statement->kind == AST_When)
     {
-        NOT_IMPLEMENTED;
+        AST_Node* init      = statement->when_statement.init;
+        AST_Node* condition = statement->when_statement.condition;
+        
+        if (init != 0)
+        {
+            // TODO:
+            //// ERROR: When init statements are not yet supported
+            encountered_errors = true;
+        }
+        
+        if (!encountered_errors)
+        {
+            if (condition == 0)
+            {
+                //// ERROR: Missing when statement condition
+                encountered_errors = true;
+            }
+            
+            else if (!IS_EXPRESSION(condition->kind))
+            {
+                //// ERROR: When statement condition is not an expression
+                encountered_errors = true;
+            }
+            
+            else
+            {
+                NOT_IMPLEMENTED;
+            }
+        }
     }
     
     else if (statement->kind == AST_VariableDecl)
@@ -193,6 +246,7 @@ CheckStatement(Checker_State* state, AST_Node* statement)
         {
             if (statement->kind == AST_ImportDecl)
             {
+                // TODO: Validate path
                 NOT_IMPLEMENTED;
             }
             
@@ -232,7 +286,52 @@ CheckStatement(Checker_State* state, AST_Node* statement)
             
             else if (statement->kind == AST_If)
             {
-                NOT_IMPLEMENTED;
+                AST_Node* init      = statement->if_statement.init;
+                AST_Node* condition = statement->if_statement.condition;
+                
+                if (init == 0 || init->kind == AST_Call || init->kind == AST_VariableDecl || init->kind == AST_ConstantDecl || init->kind == AST_Assignment)
+                {
+                    if (init != 0)
+                    {
+                        NOT_IMPLEMENTED;
+                    }
+                }
+                
+                else
+                {
+                    //// ERROR: Invalid init statement
+                    encountered_errors = true;
+                }
+                
+                if (!encountered_errors)
+                {
+                    if (condition == 0)
+                    {
+                        //// ERROR: Missing if statement condition
+                        encountered_errors = true;
+                    }
+                    
+                    else if (!IS_EXPRESSION(condition->kind))
+                    {
+                        //// ERROR: If statement condition is not an expression
+                        encountered_errors = true;
+                    }
+                    
+                    else
+                    {
+                        Check_Result result = CheckExpression(state, condition);
+                        
+                        if (result.encountered_errors) encountered_errors = true;
+                        else
+                        {
+                            if (Type_IsResolved(result.type) && Type_IsImplicitlyCovertibleToBool(result.type))
+                            {
+                                //// ERROR: If statement condition cannot be implicitly convertible to bool
+                                encountered_errors = true;
+                            }
+                        }
+                    }
+                }
             }
             
             else if (statement->kind == AST_While)
@@ -279,7 +378,9 @@ CheckStatement(Checker_State* state, AST_Node* statement)
             
             else
             {
-                if (!CheckExpression(state, statement))
+                Check_Result result = CheckExpression(state, statement);
+                
+                if (result.encountered_errors)
                 {
                     encountered_errors = true;
                 }
@@ -319,11 +420,13 @@ CheckScope(Checker_State* state, AST_Node* scope)
 }
 
 internal bool
-CheckPackage(Package* package)
+CheckPackage(Package_ID package_id)
 {
     bool encountered_errors = false;
     
-    Checker_State state = { .package = package->id };
+    Package* package = Package_FromID(package_id);
+    
+    Checker_State state = { .package = package_id };
     
     Scope_Chain link = {
         .next         = 0,
@@ -332,10 +435,10 @@ CheckPackage(Package* package)
     
     state.scope_chain = &link;
     
-    for (File* file = package->files;
-         file != 0 && !encountered_errors;
-         file = file->next)
+    for (umm i = 0; i < package->file_count; ++i)
     {
+        File* file = &package->files[i];
+        
         for (AST_Node* statement = file->ast;
              statement != 0;
              statement = statement->next)

@@ -163,7 +163,7 @@ typedef struct Cap_Buffer
 typedef u32 Identifier;
 typedef String String_Literal;
 
-#define BLANK_IDENTIFIER (Identifier){0}
+#define BLANK_IDENTIFIER 0
 
 typedef struct Number
 {
@@ -184,9 +184,12 @@ typedef union Character
     u8 bytes[4];
 } Character;
 
-typedef u64 Package_ID;
-typedef u64 File_ID;
+typedef i32 Package_ID;
+typedef i32 File_ID;
 typedef u32 Type_ID;
+
+#define INVALID_PACKAGE_ID -1
+#define INVALID_FILE_ID -1
 
 enum KEYWORD_KIND
 {
@@ -214,25 +217,37 @@ enum KEYWORD_KIND
     Keyword_Return,
     Keyword_Import,
     Keyword_Foreign,
+    Keyword_Package,
     
     KEYWORD_COUNT,
 };
 
-internal Identifier Identifier_Add(String string);
-internal String Identifier_ToString(Identifier identifier);
-internal inline bool Identifier_IsKeyword(Identifier identifier, Enum8(KEYWORD_KIND) keyword);
+// NOTE: This is just a hack to work around a parsing bug in 4coder
+struct Symbol;
+typedef struct Symbol* Symbol_Table_;
+typedef Symbol_Table_ Symbol_Table;
+
+typedef struct File
+{
+    struct AST_Node* ast;
+    String file_name;
+} File;
+
+typedef struct Package
+{
+    String path;
+    File* files;
+    u32 file_count;
+    Identifier name;
+    Symbol_Table symbol_table;
+} Package;
 
 #include "mm_memory.h"
 #include "mm_string.h"
-#include "mm_lexer.h"
-#include "mm_symbols.h"
-#include "mm_ast.h"
-#include "mm_parser.h"
-#include "mm_checker.h"
-#include "mm_code_gen.h"
 
 typedef struct MM_State
 {
+    Memory_Arena temp_arena;
     Memory_Arena string_arena;
     
     Package* packages;
@@ -244,7 +259,7 @@ typedef struct MM_State
     String* identifier_table;
     u32 identifier_table_size;
     
-    Type_Info* type_table;
+    struct Type_Info* type_table;
     u32 type_table_size;
     
     Identifier keyword_identifiers[KEYWORD_COUNT];
@@ -252,151 +267,15 @@ typedef struct MM_State
 
 global MM_State MM;
 
-internal Identifier
-Identifier_Add(String string)
-{
-    ASSERT(string.data != 0 && string.size != 0);
-    
-    // HACK
-    // TODO: Implement a hash table with stable pointers
-    
-    Identifier result = BLANK_IDENTIFIER;
-    
-    imm free = -1;
-    umm i    = 0;
-    for (; i < MM.identifier_table_size; ++i)
-    {
-        if (String_Compare(string, MM.identifier_table[i]))
-        {
-            result = (Identifier)i;
-            break;
-        }
-        
-        else if (MM.identifier_table[i].data == 0) free = (imm)i;
-    }
-    
-    // NOTE: no existing entry was found, add a new entry
-    if (i == MM.identifier_table_size)
-    {
-        // TODO: grow table
-        ASSERT(free != -1);
-        
-        void* memory = Arena_PushSize(&MM.string_arena, string.size, 1);
-        Copy(string.data, memory, string.size);
-        
-        MM.identifier_table[free] = (String){
-            .data = memory,
-            .size = string.size
-        };
-        
-        result = (Identifier)free;
-    }
-    
-    return result;
-}
+internal Identifier Identifier_Add(String string);
+internal String Identifier_ToString(Identifier identifier);
+internal inline bool Identifier_IsKeyword(Identifier identifier, Enum8(KEYWORD_KIND) keyword);
+internal inline Package* Package_FromID(Package_ID id);
 
-internal String
-Identifier_ToString(Identifier identifier)
-{
-    return MM.identifier_table[identifier];
-}
-
-internal inline bool
-Identifier_IsKeyword(Identifier identifier, Enum8(KEYWORD_KIND) keyword)
-{
-    return (MM.keyword_identifiers[keyword] == identifier);
-}
-
-internal inline Type_Info*
-TypeInfo_FromTypeID(Type_ID id)
-{
-    return &MM.type_table[id];
-}
-
-internal Type_ID
-TypeInfo_Add(Type_Info info)
-{
-    Type_ID id = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return id;
-}
-
-
-internal void
-MM_Init()
-{
-    ZeroStruct(&MM);
-    
-    /// Init memory
-    NOT_IMPLEMENTED;
-    
-    /// Init keyword lookup table
-    String KeywordStrings[KEYWORD_COUNT] = {
-        [Keyword_Do]             = STRING("do"),
-        [Keyword_In]             = STRING("in"),
-        [Keyword_Where]          = STRING("where"),
-        [Keyword_Proc]           = STRING("proc"),
-        [Keyword_Struct]         = STRING("struct"),
-        [Keyword_Union]          = STRING("union"),
-        [Keyword_Enum]           = STRING("enum"),
-        [Keyword_True]           = STRING("true"),
-        [Keyword_False]          = STRING("false"),
-        [Keyword_As]             = STRING("as"),
-        [Keyword_If]             = STRING("if"),
-        [Keyword_Else]           = STRING("else"),
-        [Keyword_When]           = STRING("when"),
-        [Keyword_While]          = STRING("while"),
-        [Keyword_For]            = STRING("for"),
-        [Keyword_Break]          = STRING("break"),
-        [Keyword_Continue]       = STRING("continue"),
-        [Keyword_Using]          = STRING("using"),
-        [Keyword_Defer]          = STRING("defer"),
-        [Keyword_Return]         = STRING("return"),
-        [Keyword_Import]         = STRING("import"),
-        [Keyword_Foreign]        = STRING("foreign"),
-    };
-    
-    for (umm i = Keyword_Invalid + 1; i < KEYWORD_COUNT; ++i)
-    {
-        MM.keyword_identifiers[i] = Identifier_Add(KeywordStrings[i]);
-    }
-    
-    /// Init type table
-    
-    // allocate type table
-    NOT_IMPLEMENTED;
-    
-    for (Type_ID i = Type_FirstUntyped;
-         i <= Type_LastUntyped;
-         ++i)
-    {
-        MM.type_table[i] = (Type_Info){ .kind = (u8)i };
-    }
-    
-#define TYPED_BASE_TYPE(id, type, ident)            \
-MM.type_table[id] = (Type_Info){                \
-.kind      = id,                            \
-.size      = sizeof(type),                  \
-.alignment = ALIGNOF(type),                 \
-.name      = Identifier_Add(STRING(ident)), \
-}
-    
-    TYPED_BASE_TYPE(Type_String, String, "string");
-    TYPED_BASE_TYPE(Type_Char,   u32,    "char");
-    TYPED_BASE_TYPE(Type_Bool,   u8,     "bool");
-    TYPED_BASE_TYPE(Type_Int,    i64,    "int");
-    TYPED_BASE_TYPE(Type_I8,     i8,     "i8");
-    TYPED_BASE_TYPE(Type_I16,    i16,    "i16");
-    TYPED_BASE_TYPE(Type_I32,    i32,    "i32");
-    TYPED_BASE_TYPE(Type_I64,    i64,    "i64");
-    TYPED_BASE_TYPE(Type_Uint,   u64,    "uint");
-    TYPED_BASE_TYPE(Type_U8,     u8,     "u8");
-    TYPED_BASE_TYPE(Type_U16,    u16,    "u16");
-    TYPED_BASE_TYPE(Type_U32,    u32,    "u32");
-    TYPED_BASE_TYPE(Type_U64,    u64,    "u64");
-    TYPED_BASE_TYPE(Type_Float,  f64,    "f64");
-    TYPED_BASE_TYPE(Type_F32,    f32,    "f32");
-    TYPED_BASE_TYPE(Type_F64,    f64,    "f64");
-}
+#include "mm_lexer.h"
+#include "mm_symbols.h"
+#include "mm_ast.h"
+#include "mm_parser.h"
+#include "mm_checker.h"
+#include "mm_code_gen.h"
+#include "mm.h"

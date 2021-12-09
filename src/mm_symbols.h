@@ -19,15 +19,15 @@ typedef struct Symbol
     u64 constant_value;
 } Symbol;
 
-typedef Symbol* Symbol_Table;
-
 enum TYPE_KIND
 {
     Type_Unresolved = 0,
     Type_Incomplete,
     //Type_Completing,
+    Type_ResolvedThreshold,
     
-    Type_FirstUntyped,
+    Type_FirstBaseType = Type_ResolvedThreshold,
+    Type_FirstUntyped  = Type_FirstBaseType,
     Type_UntypedString = Type_FirstUntyped,
     Type_UntypedChar,
     Type_UntypedBool,
@@ -52,6 +52,7 @@ enum TYPE_KIND
     Type_Float,
     Type_F32,
     Type_F64,
+    Type_LastBaseType = Type_F64,
     
     Type_Array,
     Type_DynamicArray,
@@ -77,69 +78,3 @@ typedef struct Type_Info
     Symbol_Table symbol_stable;
     u32 array_size;
 } Type_Info;
-
-typedef struct File
-{
-    struct File* next;
-    struct AST_Node* ast;
-    String path;
-    File_ID id;
-} File;
-
-typedef struct Package
-{
-    File* files;
-    Symbol_Table symbol_table;
-    Package_ID id;
-} Package;
-
-#if 0
-/*
-Package
-- Struct
-| - Sub_Struct
-| | - d: float
-| | - e: float
-| | - f: float
-| - N: untyped int
-| - GetN: proc -> int
-| - a: int
-| - b: float
-| - c: uint
-| - s: [N]Sub_Struct
-   - main
- | - n: int
- | - _: int
- | - a: int
-   | | b: int
-| | s: Struct
-
-*/
-Struct :: struct
-{
-    Sub_Struct :: struct
-    {
-        d, e, f: float
-    },
-    
-    N :: 5,
-    
-    GetN :: proc -> int do return N,
-    
-    a: int,
-    b: float,
-    c: uint,
-    s: [N]Sub_Struct
-};
-
-main :: proc(n: int) -> int
-{
-    a := 0;
-    
-    b := a + 1;
-    
-    s := Struct.{};
-    
-    n := s.GetN();
-};
-#endif
