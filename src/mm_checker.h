@@ -289,18 +289,34 @@ CheckStatement(Checker_State* state, AST_Node* statement)
                 AST_Node* init      = statement->if_statement.init;
                 AST_Node* condition = statement->if_statement.condition;
                 
-                if (init == 0 || init->kind == AST_Call || init->kind == AST_VariableDecl || init->kind == AST_ConstantDecl || init->kind == AST_Assignment)
+                if (init != 0)
                 {
-                    if (init != 0)
+                    if (init->kind == AST_Call)
                     {
-                        NOT_IMPLEMENTED;
+                        Check_Result result = CheckExpression(state, init);
+                        
+                        if (result.encountered_errors) encountered_errors = true;
+                        else
+                        {
+                            NOT_IMPLEMENTED;
+                            if (has_return_values)
+                            {
+                                //// ERROR: Return values
+                                encountered_errors = true;
+                            }
+                        }
                     }
-                }
-                
-                else
-                {
-                    //// ERROR: Invalid init statement
-                    encountered_errors = true;
+                    
+                    else if (init->kind == AST_VariableDecl || init->kind == AST_ConstantDecl || init->kind == AST_Assignment)
+                    {
+                        
+                    }
+                    
+                    else
+                    {
+                        //// ERROR: Invalid init statement
+                        encountered_errors = true;
+                    }
                 }
                 
                 if (!encountered_errors)
@@ -324,12 +340,27 @@ CheckStatement(Checker_State* state, AST_Node* statement)
                         if (result.encountered_errors) encountered_errors = true;
                         else
                         {
-                            if (Type_IsResolved(result.type) && Type_IsImplicitlyCovertibleToBool(result.type))
+                            if (Type_IsResolved(result.type) && !Type_IsImplicitlyCovertibleToBool(result.type))
                             {
                                 //// ERROR: If statement condition cannot be implicitly convertible to bool
                                 encountered_errors = true;
                             }
                         }
+                    }
+                }
+                
+                if (!encountered_errors)
+                {
+                    if (statement->if_statement.true_body == 0)
+                    {
+                        //// ERROR: Missing body of if statement
+                        encountered_errors = true;
+                    }
+                    
+                    else
+                    {
+                        CheckScope(statement->if_statement.true_body);
+                        if (statement->if_statement.false_body != 0) CheckStatement(statement->if_statement.false_body);
                     }
                 }
             }
