@@ -608,9 +608,8 @@ Lexer_Advance(Lexer* lexer)
                                 Copy(&integer, &f, sizeof(u32));
                                 
                                 token.kind = Token_Number;
-                                token.number.is_float    = true;
-                                token.number.is_negative = false;
-                                token.number.floating    = f;
+                                token.number.is_float = true;
+                                token.number.floating = f;
                             }
                             
                             else if (digit_count == 16)
@@ -619,7 +618,6 @@ Lexer_Advance(Lexer* lexer)
                                 
                                 token.kind = Token_Number;
                                 token.number.is_float    = true;
-                                token.number.is_negative = false;
                             }
                             
                             else
@@ -676,18 +674,16 @@ Lexer_Advance(Lexer* lexer)
                             }
                             
                             token.kind = Token_Number;
-                            token.number.is_float    = true;
-                            token.number.is_negative = false;
-                            token.number.floating    = (integer + fraction) * adjustment;
+                            token.number.is_float = true;
+                            token.number.floating = (integer + fraction) * adjustment;
                         }
                     }
                     
                     else
                     {
                         token.kind = Token_Number;
-                        token.number.is_float    = false;
-                        token.number.is_negative = false;
-                        token.number.integer     = integer;
+                        token.number.is_float = false;
+                        token.number.integer  = integer;
                     }
                 }
             }

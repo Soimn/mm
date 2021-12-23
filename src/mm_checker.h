@@ -14,19 +14,42 @@ typedef struct Checker_State
 typedef struct Check_Result
 {
     Type_ID type;
-    bool encountered_errors;
 } Check_Result;
 
+#define UNRESOLVED_CHECK_RESULT (Check_Result){ .type = Type_Unresolved }
+
 internal inline bool
-Type_IsResolved(Type_ID type)
+Type_IsIntegral(Type_ID type)
 {
-    return (type >= Type_ResolvedThreshold);
+    return (type >= Type_Int && type <= Type_U64);
 }
 
 internal inline bool
-Type_IsImplicitlyCovertibleToBool(Type_ID type)
+Type_IsSigned(Type_ID type)
 {
-    return (type >= Type_FirstBaseType && type <= Type_LastBaseType);
+    return (type >= Type_Int && type <= Type_I64);
+}
+
+internal inline bool
+Type_IsFloating(Type_ID type)
+{
+    return (type >= Type_Float && type <= Type_F64);
+}
+
+internal inline bool
+Type_IsNumeric(Type_ID type)
+{
+    return (type >= Type_Int && type <= Type_F64);
+}
+
+internal inline Type_Info*
+TypeInfo_FromID(Type_ID type)
+{
+    Type_Info* info = 0;
+    
+    NOT_IMPLEMENTED;
+    
+    return info;
 }
 
 internal bool CheckScope(Checker_State* state, AST_Node* scope);
@@ -34,46 +57,62 @@ internal bool CheckScope(Checker_State* state, AST_Node* scope);
 internal Check_Result
 CheckExpression(Checker_State* state, AST_Node* expression)
 {
-    Check_Result result = {
-        .type               = Type_Unresolved,
-        .encountered_errors = false,
-    };
+    Check_Result result = { .type = Type_Erroneous };
     
     umm precedence = PRECEDENCE_FROM_KIND(expression->kind);
     
     if (expression->kind == AST_Identifier)
     {
+        Symbol* symbol = 0;
         NOT_IMPLEMENTED;
+        
+        if (symbol == 0) result = UNRESOLVED_CHECK_RESULT;
+        else
+        {
+            result = (Check_Result){
+                .type = symbol->type,
+            };
+        }
     }
     
     else if (expression->kind == AST_String)
     {
-        NOT_IMPLEMENTED;
+        result = (Check_Result){
+            .type = Type_String,
+        };
     }
     
     else if (expression->kind == AST_Char)
     {
-        NOT_IMPLEMENTED;
+        result = (Check_Result){
+            .type = Type_Char,
+        };
     }
     
     else if (expression->kind == AST_Number)
     {
-        NOT_IMPLEMENTED;
+        result = (Check_Result){
+            .type = (expression->number.is_float ? Type_Float : Type_Int),
+        };
     }
     
     else if (expression->kind == AST_Boolean)
     {
-        NOT_IMPLEMENTED;
+        result = (Check_Result){
+            .type = Type_Bool,
+        };
     }
     
     else if (expression->kind == AST_StructLiteral)
     {
-        NOT_IMPLEMENTED;
+        // TODO:
+        //// ERROR: struct literals are not yet implemented
     }
     
     else if (expression->kind == AST_ArrayLiteral)
     {
-        NOT_IMPLEMENTED;
+        // TODO:
+        //// ERROR: array literals are not yet implemented
     }
     
     else if (expression->kind == AST_Proc)
@@ -86,24 +125,21 @@ CheckExpression(Checker_State* state, AST_Node* expression)
         NOT_IMPLEMENTED;
     }
     
-    else if (expression->kind == AST_Struct)
-    {
-        NOT_IMPLEMENTED;
-    }
-    
-    else if (expression->kind == AST_Union)
+    else if (expression->kind == AST_Struct || expression->kind == AST_Union)
     {
         NOT_IMPLEMENTED;
     }
     
     else if (expression->kind == AST_Enum)
     {
-        NOT_IMPLEMENTED;
+        // TODO:
+        //// ERROR: enums are not yet implemented
     }
     
     else if (expression->kind == AST_Directive)
     {
-        NOT_IMPLEMENTED;
+        // TODO:
+        //// ERROR: directives are not yet implemented
     }
     
     else if (precedence == 1 || precedence == 3)
@@ -126,12 +162,123 @@ CheckExpression(Checker_State* state, AST_Node* expression)
     
     else if (expression->kind == AST_Subscript)
     {
-        NOT_IMPLEMENTED;
+        if (expression->subscript_expr.array == 0)
+        {
+            //// ERROR: Missing array node in subscript expression
+        }
+        
+        else if (expression->subscript_expr.index == 0)
+        {
+            //// ERROR: Missing index node in subscript expression
+        }
+        
+        else
+        {
+            Check_Result array = CheckExpression(state, expression->subscript_expr.array);
+            Check_Result index = CheckExpression(state, expression->subscript_expr.index);
+            
+            if (array.type != Type_Erroneous && index.type != Type_Erroneous)
+            {
+                if (array.type == Type_Unresolved || index.type == Type_Unresolved) result = UNRESOLVED_CHECK_RESULT;
+                else
+                {
+                    if (!Type_IsIntegral(index.type))
+                    {
+                        //// ERROR: array indices must be of integral type
+                    }
+                    
+                    else if (Type_IsSigned(index.type))
+                    {
+                        //// ERROR: array indices must be unsigned
+                    }
+                    
+                    else
+                    {
+                        Type_Info* info = TypeInfo_FromID(array.type);
+                        
+                        // TODO: bounds checking on constant arrays
+                        //if (index < 0 || index >= info->array_size)
+                        
+                        if (info->kind != Type_Array && info->kind != Type_DynamicArray &&
+                            info->kind != Type_Slice)
+                        {
+                            //// ERROR: only arrays, dynamic arrays and slices can be taken the subscript of
+                        }
+                        
+                        else
+                        {
+                            result = (Check_Result){
+                                .type = info->sub_type,
+                            };
+                        }
+                    }
+                }
+            }
+        }
     }
     
     else if (expression->kind == AST_Slice)
     {
-        NOT_IMPLEMENTED;
+        if (expression->slice_expr.array)
+        {
+            //// ERROR: Missing array node in slice expression
+        }
+        
+        else
+        {
+            Check_Result array = CheckExpression(state, expression->slice_expr.array);
+            
+            if (array.type != Type_Erroneous)
+            {
+                if (array.type == Type_Unresolved) result = UNRESOLVED_CHECK_RESULT;
+                else
+                {
+                    Type_Info* info = TypeInfo_FromID(array.type);
+                    
+                    if (info->kind != Type_Array && info->kind != Type_DynamicArray &&
+                        info->kind != Type_Slice)
+                    {
+                        //// ERROR: only arrays, dynamic arrays and slices can be taken the slice of
+                    }
+                    
+                    else
+                    {
+                        // TODO: bounds checking
+                        AST_Node* nodes[] = {
+                            expression->slice_expr.start,
+                            expression->slice_expr.one_after_end,
+                        };
+                        
+                        for (umm i = 0; i < ARRAY_SIZE(nodes); ++i)
+                        {
+                            AST_Node* node = nodes[i];
+                            
+                            if (node != 0)
+                            {
+                                Check_Result node_result = CheckExpression(state, node);
+                                
+                                if      (node_result.type == Type_Erroneous) break;
+                                else if (node_result.type == Type_Unresolved)
+                                {
+                                    result = UNRESOLVED_CHECK_RESULT;
+                                    break;
+                                }
+                                
+                                else if (!Type_IsIntegral(node_result.type))
+                                {
+                                    //// ERROR: slice indices must be intral
+                                }
+                                
+                                else if (Type_IsSigned(node_result.type))
+                                {
+                                    //// ERROR: slice indices must be unsigned
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     
     else if (expression->kind == AST_Call)
@@ -139,48 +286,204 @@ CheckExpression(Checker_State* state, AST_Node* expression)
         NOT_IMPLEMENTED;
     }
     
-    else if (expression->kind == AST_ElementOf)
+    else if (precedence >= 4 && precedence <= 9 ||
+             expression->kind == AST_ElementOf  ||
+             expression->kind == AST_UfcsOf)
     {
-        NOT_IMPLEMENTED;
-    }
-    
-    else if (expression->kind == AST_UfcsOf)
-    {
-        NOT_IMPLEMENTED;
-    }
-    
-    else if (precedence >= 4 && precedence <= 9)
-    {
-        /*
-        AST_ClosedRange,
-        AST_HalfOpenRange,
-        AST_Mul,
-        AST_Div,
-        AST_Rem,
-        AST_BitwiseAnd,
-        AST_ArithmeticRightShift,
-        AST_RightShift,
-        AST_LeftShift,
-        AST_InfixCall,
-        AST_Add,
-        AST_Sub,
-        AST_BitwiseOr,
-        AST_BitwiseXor,
-        AST_IsEqual,
-        AST_IsNotEqual,
-        AST_IsStrictlyLess,
-        AST_IsStrictlyGreater,
-        AST_IsLess,
-        AST_IsGreater,
-        AST_And,
-        AST_Or,
-        */
-        NOT_IMPLEMENTED;
+        if (expression->binary_expr.left == 0)
+        {
+            //// ERROR: Missing left side of binary expression
+        }
+        
+        else if (expression->binary_expr.right == 0)
+        {
+            //// ERROR: Missing right side of binary expression
+        }
+        
+        else
+        {
+            Type_ID left  = CheckExpression(state, expression->binary_expr.left);
+            Type_ID right = CheckExpression(state, expression->binary_expr.right);
+            
+            if (left.type != Type_Erroneous && right.type != Type_Erroneous)
+            {
+                if (expression->kind == AST_ElementOf)
+                {
+                    if (left.type == Type_Unresolved)
+                    {
+                        NOT_IMPLEMENTED;
+                    }
+                    
+                    else
+                    {
+                        Type_Info* info = TypeInfo_FromID(left.type);
+                        
+                        NOT_IMPLEMENTED;
+                    }
+                }
+                
+                else if (left.type == Type_Unresolved || right.type = Type_Unresolved)
+                {
+                    result = UNRESOLVED_CHECK_RESULT;
+                }
+                
+                else
+                {
+                    if (expression->kind == AST_UfcsOf)
+                    {
+                        // TODO:
+                        //// ERROR: ufcs is not yet implemented
+                    }
+                    
+                    else if (expression->kind == AST_ClosedRange || expression->kind == AST_HalfOpenRange)
+                    {
+                        // TODO:
+                        //// ERROR: ranges are not yet implemented
+                    }
+                    
+                    else if (expression->kind >= AST_BitwiseAnd && expression->kind <= AST_LeftShift ||
+                             expression->kind >= AST_BitwiseOr  && expression->kind <= AST_BitwiseXor)
+                    {
+                        if (!Type_IsIntegral(left.type) || !Type_IsIntegral(right.type))
+                        {
+                            //// ERROR: operands to bitwise operators must be integral
+                        }
+                        
+                        // TODO: breaks on type alias
+                        else if (left.type != right.type)
+                        {
+                            //// ERROR: Both sides of bitwise operator must be of the same type
+                        }
+                        
+                        else
+                        {
+                            result = (Check_Result){
+                                .type = left.type
+                            };
+                        }
+                    }
+                    
+                    else if (expression->kind >= AST_Mul && expression->kind <= AST_Rem ||
+                             expression->kind >= AST_Add && expression->kind <= AST_Sub)
+                    {
+                        if (!Type_IsNumeric(left.type) || !Type_IsNumeric(right.type))
+                        {
+                            //// ERROR: operands must be of a numeric type
+                        }
+                        
+                        // TODO: breaks on type alias
+                        else if (left.type != right.type)
+                        {
+                            //// ERROR: both operands must be of the same type
+                        }
+                        
+                        else
+                        {
+                            result = (Check_Result){
+                                .type = left.type
+                            };
+                        }
+                    }
+                    
+                    else if (expression->kind >= AST_FirstComparative && expression->kind <= AST_LastComparative)
+                    {
+                        // TODO: pointers and procs
+                        if (left.type > Type_LastBaseType || right.type > Type_LastBaseType)
+                        {
+                            //// ERROR: only base types can be compared
+                        }
+                        
+                        // TODO: breaks on type alias
+                        else if (left.type != right.type)
+                        {
+                            //// ERROR: both operands must be of the same type
+                        }
+                        
+                        else
+                        {
+                            result = (Check_Result){
+                                .type = Type_Bool
+                            };
+                        }
+                    }
+                    
+                    else
+                    {
+                        ASSERT(expression->kind == AST_And || expression->kind == AST_Or);
+                        
+                        // TODO: implicit conversion
+                        // TODO: breaks on type alias
+                        if (left.type != Type_Bool || right.type != Type_Bool)
+                        {
+                            //// ERROR: non boolean types used as operands for logical opeerator
+                        }
+                        
+                        else
+                        {
+                            result = (Check_Result){
+                                .type = Type_Bool
+                            };
+                        }
+                    }
+                }
+            }
+        }
     }
     
     else if (expression->kind == AST_Conditional)
     {
-        NOT_IMPLEMENTED;
+        if (expression->conditional_expr.condition == 0)
+        {
+            //// ERROR: Missing condition
+        }
+        
+        else if (expression->conditional_expr.true_clause == 0)
+        {
+            //// ERROR: Missing true clause
+        }
+        
+        else if (expression->conditional_expr.false_clause == 0)
+        {
+            //// ERROR: Missing false clause
+        }
+        
+        else
+        {
+            Check_Result condition    = CheckExpression(expression->conditional_expr.condition);
+            Check_Result true_clause  = CheckExpression(expression->conditional_expr.true_clause);
+            Check_Result false_clause = CheckExpression(expression->conditional_expr.false_clause);
+            
+            if (condition.type    != Type_Erroneous && true_clause.type != Type_Erroneous &&
+                false_clause.type != Type_Erroneous)
+            {
+                if (condition.type    == Type_Unresolved || true_clause.type == Type_Unresolved ||
+                    false_clause.type == Type_Unresolved)
+                {
+                    result = UNRESOLVED_CHECK_RESULT;
+                }
+                
+                // TODO: implicit conversion
+                // TODO: breaks on type alias
+                else if (condition.type != Type_Bool)
+                {
+                    //// ERROR: condition must be of boolean type
+                }
+                
+                // TODO: implicit conversion
+                // TODO: breaks on type alias
+                else if (true_clause.type != false_clause.type)
+                {
+                    //// ERROR: both branches must be of the same type
+                }
+                
+                else
+                {
+                    result = (Check_Result){
+                        .type = true_clause.type,
+                    };
+                }
+            }
+        }
     }
     
     else
@@ -199,45 +502,53 @@ CheckStatement(Checker_State* state, AST_Node* statement)
     
     if (statement->kind == AST_When)
     {
-        AST_Node* init      = statement->when_statement.init;
-        AST_Node* condition = statement->when_statement.condition;
-        
-        if (init != 0)
+        //// ERROR: when statements are not yet supported
+        encountered_errors = true;
+    }
+    
+    else if (statement->kind == AST_VariableDecl)
+    {
+        if (statement->var_decl.names == 0)
         {
-            // TODO:
-            //// ERROR: When init statements are not yet supported
+            //// ERROR: missing name of variable in variable declaration
             encountered_errors = true;
         }
         
-        if (!encountered_errors)
+        else if (statement->var_decl.type == 0)
         {
-            if (condition == 0)
+            if (statement->var_decl.values == 0 || statement->var_decl.is_uninitialized)
             {
-                //// ERROR: Missing when statement condition
-                encountered_errors = true;
-            }
-            
-            else if (!IS_EXPRESSION(condition->kind))
-            {
-                //// ERROR: When statement condition is not an expression
+                //// ERROR: cannot infer type without a value
                 encountered_errors = true;
             }
             
             else
             {
-                NOT_IMPLEMENTED;
+                // TODO:
+                //// ERROR: type inference is not yet supported
+                encountered_errors = true;
             }
         }
-    }
-    
-    else if (statement->kind == AST_VariableDecl)
-    {
-        NOT_IMPLEMENTED;
+        
+        else
+        {
+            NOT_IMPLEMENTED;
+        }
     }
     
     else if (statement->kind == AST_ConstantDecl)
     {
-        NOT_IMPLEMENTED;
+        if (statement->const_decl.type == 0)
+        {
+            // TODO:
+            //// ERROR: type inference is not yet supported
+            encountered_errors = true;
+        }
+        
+        else
+        {
+            NOT_IMPLEMENTED;
+        }
     }
     
     else
@@ -286,48 +597,20 @@ CheckStatement(Checker_State* state, AST_Node* statement)
             
             else if (statement->kind == AST_If)
             {
-                AST_Node* init      = statement->if_statement.init;
-                AST_Node* condition = statement->if_statement.condition;
-                
-                if (init != 0)
+                if (statement->if_statement.init != 0)
                 {
-                    if (init->kind == AST_Call)
-                    {
-                        Check_Result result = CheckExpression(state, init);
-                        
-                        if (result.encountered_errors) encountered_errors = true;
-                        else
-                        {
-                            NOT_IMPLEMENTED;
-                            if (has_return_values)
-                            {
-                                //// ERROR: Return values
-                                encountered_errors = true;
-                            }
-                        }
-                    }
-                    
-                    else if (init->kind == AST_VariableDecl || init->kind == AST_ConstantDecl || init->kind == AST_Assignment)
-                    {
-                        
-                    }
-                    
-                    else
-                    {
-                        //// ERROR: Invalid init statement
-                        encountered_errors = true;
-                    }
+                    //// ERROR: if init statements are not yet supported
                 }
                 
                 if (!encountered_errors)
                 {
-                    if (condition == 0)
+                    if (statement->if_statement.condition == 0)
                     {
                         //// ERROR: Missing if statement condition
                         encountered_errors = true;
                     }
                     
-                    else if (!IS_EXPRESSION(condition->kind))
+                    else if (!IS_EXPRESSION(statement->if_statement.condition->kind))
                     {
                         //// ERROR: If statement condition is not an expression
                         encountered_errors = true;
@@ -335,12 +618,13 @@ CheckStatement(Checker_State* state, AST_Node* statement)
                     
                     else
                     {
-                        Check_Result result = CheckExpression(state, condition);
+                        Check_Result condition = CheckExpression(state, statement->if_statement.condition);
                         
-                        if (result.encountered_errors) encountered_errors = true;
-                        else
+                        if (condition.type == Type_Erroneous) encountered_errors = true;
+                        else if (condition.type != Type_Unresolved)
                         {
-                            if (Type_IsResolved(result.type) && !Type_IsImplicitlyCovertibleToBool(result.type))
+                            // TODO: implicit conversions
+                            if (condition.type != Type_Bool)
                             {
                                 //// ERROR: If statement condition cannot be implicitly convertible to bool
                                 encountered_errors = true;
@@ -359,8 +643,12 @@ CheckStatement(Checker_State* state, AST_Node* statement)
                     
                     else
                     {
-                        CheckScope(statement->if_statement.true_body);
-                        if (statement->if_statement.false_body != 0) CheckStatement(statement->if_statement.false_body);
+                        encountered_errors = CheckScope(state, statement->if_statement.true_body);
+                        
+                        if (!encountered_errors && statement->if_statement.false_body != 0)
+                        {
+                            encountered_errors = CheckStatement(state, statement->if_statement.false_body);
+                        }
                     }
                 }
             }
@@ -370,26 +658,24 @@ CheckStatement(Checker_State* state, AST_Node* statement)
                 NOT_IMPLEMENTED;
             }
             
-            else if (statement->kind == AST_Break)
+            else if (statement->kind == AST_Break || statement->kind == AST_Continue)
             {
                 NOT_IMPLEMENTED;
                 // check if in loop
-                // verify label
-            }
-            
-            else if (statement->kind == AST_Continue)
-            {
-                NOT_IMPLEMENTED;
-                // check if in loop
-                // verify label
+                
+                if (statement->break_statement.label != BLANK_IDENTIFIER)
+                {
+                    // TODO:
+                    //// ERROR: labels are not yet supported
+                    encountered_errors = true;
+                }
             }
             
             else if (statement->kind == AST_Defer)
             {
-                if (!CheckStatement(state, statement->defer_statement))
-                {
-                    encountered_errors = true;
-                }
+                // TODO:
+                //// ERROR: defer statements are not yet supported
+                encountered_errors = true;
             }
             
             else if (statement->kind == AST_Return)
@@ -399,7 +685,9 @@ CheckStatement(Checker_State* state, AST_Node* statement)
             
             else if (statement->kind == AST_Using)
             {
-                NOT_IMPLEMENTED;
+                // TODO:
+                //// ERROR: defer statements are not yet supported
+                encountered_errors = true;
             }
             
             else if (statement->kind == AST_Assignment)
@@ -410,11 +698,7 @@ CheckStatement(Checker_State* state, AST_Node* statement)
             else
             {
                 Check_Result result = CheckExpression(state, statement);
-                
-                if (result.encountered_errors)
-                {
-                    encountered_errors = true;
-                }
+                NOT_IMPLEMENTED;
             }
         }
     }

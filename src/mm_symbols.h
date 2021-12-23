@@ -1,3 +1,13 @@
+typedef union Constant_Value
+{
+    u64 uint64;
+    f64 float64;
+    f32 float32;
+    bool boolean;
+    Character character;
+    String string;
+} Constant_Value;
+
 enum SYMBOL_KIND
 {
     Symbol_Var,
@@ -5,38 +15,29 @@ enum SYMBOL_KIND
     Symbol_Package,
     Symbol_Parameter,
     Symbol_ReturnValue,
+    //Symbol_UsingRef,
 };
 
 typedef struct Symbol
 {
     struct Symbol* next;
+    AST_Node* ast;
     
     Enum8(SYMBOL_KIND) kind;
     Identifier name;
     
     Type_ID type;
     Package_ID package;
-    u64 constant_value;
+    Constant_Value const_val;
 } Symbol;
 
 enum TYPE_KIND
 {
     Type_Unresolved = 0,
-    Type_Incomplete,
-    //Type_Completing,
-    Type_ResolvedThreshold,
+    Type_Erroneous,
     
-    Type_FirstBaseType = Type_ResolvedThreshold,
-    Type_FirstUntyped  = Type_FirstBaseType,
-    Type_UntypedString = Type_FirstUntyped,
-    Type_UntypedChar,
-    Type_UntypedBool,
-    Type_UntypedInt,
-    Type_UntypedUint,
-    Type_UntypedFloat,
-    Type_LastUntyped = Type_UntypedFloat,
-    
-    Type_String,
+    Type_FirstBaseType,
+    Type_String        = Type_FirstBaseType,
     Type_Char,
     Type_Bool,
     Type_Int,

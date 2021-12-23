@@ -17,6 +17,7 @@ enum AST_NODE_KIND
     AST_Union,
     AST_Enum,
     AST_Directive,
+    AST_Compound,
     
     // precedence 1: 20 - 39
     AST_FirstTypeLevel = 20,
@@ -179,6 +180,8 @@ typedef struct AST_Node
             struct AST_Node* params;
         } directive;
         
+        struct AST_Node* compound_expr;
+        
         struct
         {
             struct AST_Node* left;
@@ -215,10 +218,10 @@ typedef struct AST_Node
         
         struct
         {
-            Identifier label;
-            struct AST_Node* body;
-            bool is_do;
             Symbol_Table symbol_table;
+            struct AST_Node* body;
+            Identifier label;
+            bool is_do;
         } scope_statement;
         
         struct

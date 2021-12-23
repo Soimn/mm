@@ -747,9 +747,14 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     {
         SkipTokens(state, 1);
         
-        if (!ParseExpression(state, expression)) encountered_errors = true;
+        AST_Node* compound = 0;
+        
+        if (!ParseExpression(state, &compound)) encountered_errors = true;
         else
         {
+            *expression = PushNode(state, AST_Compound);
+            (*expression)->compound_expr = compound;
+            
             if (!EatTokenOfKind(state, Token_CloseParen))
             {
                 //// ERROR: Missing matching closing parenthesis
@@ -1332,7 +1337,6 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
         
         else if (IsIfWhenOrWhile(token, peek, peek_next))
         {
-            Identifier label = BLANK_IDENTIFIER;
             AST_Node* first  = 0;
             AST_Node* second = 0;
             AST_Node* third  = 0;
@@ -1340,7 +1344,11 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             
             if (Identifier_IsKeyword(token.kind == Token_Identifier, Keyword_Invalid))
             {
-                label = token.identifier;
+                *next_statement = PushNode(state, AST_Scope);
+                (*next_statement)->scope_statement.label = token.identifier;
+                (*next_statement)->scope_statement.is_do = false;
+                
+                next_statement = &(*next_statement)->scope_statement.body;
                 
                 SkipTokens(state, 2);
             }

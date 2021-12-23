@@ -174,8 +174,6 @@ typedef struct Number
     };
     
     bool is_float;
-    bool is_negative;
-    u8 width;
 } Number;
 
 typedef union Character

@@ -39,6 +39,8 @@ Copy(void* src, void* dst, umm size)
     }
 }
 
+#define CopyStruct(src, dst) Copy((src), (dst), sizeof(*(src)))
+
 internal inline void
 Move(void* src, void* dst, umm size)
 {
