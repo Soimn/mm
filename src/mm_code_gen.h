@@ -2,51 +2,71 @@ Gather -> list of entities
 gen declarations and typedefs
 gen functions
 
-internal void
-GatherSymbols(Symbol* symbol)
+typedef struct Entity_Table
 {
-    if (symbol->kind == Symbol_Var)
-    {
-        NOT_IMPLEMENTED;
-    }
+    Symbol** entities;
+    u32 entity_count;
+    u32 entity_capacity;
+} Entity_Table;
+
+internal Symbol*
+CG_FindEntryPoint(Package_ID main_package)
+{
+    Package* package = Package_FromID(main_package);
+    ASSERT(package != 0);
     
-    else if (symbol->kind == Symbol_Const)
-    {
-        Type_Info* info = TypeInfo_FromID(symbol->type);
-        
-        if (info->kind == Type_Proc)
-        {
-            NOT_IMPLEMENTED;
-        }
-        
-        else
-        {
-            NOT_IMPLEMENTED;
-        }
-    }
-    
-    else if (symbol->kind == Symbol_Package)
-    {
+    for (Symbol_Table_Iterator it = Symbol)
         NOT_IMPLEMENTED;
-    }
+}
+
+internal void
+CG_GatherEntities(Entity_Table* table, Symbol* symbol)
+{
+    NOT_IMPLEMENTED;
+}
+
+internal void
+CGC_SortEntities(Entity_Table* table)
+{
+    NOT_IMPLEMENTED;
+}
+
+internal void
+CGC_GenForwardDeclarations(Entity_Table* table, File_Buffer* out_file)
+{
+    NOT_IMPLEMENTED;
+}
+
+internal void
+CGC_GenDefinitions(Entity_Table* table, File_Buffer* out_file)
+{
+    NOT_IMPLEMENTED;
+}
+
+internal bool
+CG_GenCCode(Package_ID main_package, File_Buffer* out_file)
+{
+    bool encountered_errors = false;
     
-    else if (symbol->kind == Symbol_Parameter)
+    Symbol* entry_point = CG_FindEntryPoint(main_package);
+    
+    if (entry_point == 0)
     {
-        NOT_IMPLEMENTED;
+        //// ERROR: missing entry point
+        encountered_errors = true;
     }
     
     else
     {
-        ASSERT(symbol->kind == Symbol_ReturnValue);
-        NOT_IMPLEMENTED;
+        Entity_Table entity_table;
+        
+        CG_GatherEntities(&entity_table, entry_point);
+        CGC_SortEntities(&entity_table);
+        CGC_GenForwardDeclarations(&entity_table, out_file);
+        CGC_GenDefinitions(&entity_table, out_file);
     }
-}
-
-internal void
-GenCCode(Package_ID main_package)
-{
-    NOT_IMPLEMENTED;
-    Symbol* entry_point = 0;
+    
+    return !encountered_errors;
 }
 
 

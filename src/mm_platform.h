@@ -104,12 +104,13 @@ typedef Buffer String;
 
 #define STRING(str) (String){ .data = (u8*)(str), .size = sizeof(str) - 1 }
 
-typedef struct Cap_Buffer
+typedef struct File_Buffer
 {
-    u8* data;
-    u64 size;
-    u64 capacity;
-} Cap_Buffer;
+    void* memory;
+    u32 size;
+    u32 offset;
+    bool written_past_end;
+} File_Buffer;
 
 #define Enum8(name)  u8
 #define Enum16(name) u16

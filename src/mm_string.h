@@ -1,27 +1,3 @@
-internal Buffer
-CapBuffer_FreeSpace(Cap_Buffer buffer)
-{
-    return (Buffer){
-        .data = buffer.data + buffer.size,
-        .size = buffer.capacity - buffer.size
-    };
-}
-
-internal Buffer
-CapBuffer_UsedSpace(Cap_Buffer buffer)
-{
-    return (Buffer){
-        .data = buffer.data,
-        .size = buffer.size
-    };
-}
-
-internal void
-CapBuffer_Grow(Cap_Buffer* buffer, umm amount)
-{
-    buffer->size = MIN(buffer->size + amount, buffer->capacity);
-}
-
 internal inline u8
 ToLowerCase(u8 c)
 {

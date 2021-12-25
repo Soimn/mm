@@ -2,7 +2,7 @@ typedef struct Scope_Chain
 {
     struct Scope_Chain* prev;
     struct Scope_Chain* next;
-    Symbol_Table symbol_table;
+    Symbol_Table* symbol_table;
 } Scope_Chain;
 
 typedef struct Checker_State
