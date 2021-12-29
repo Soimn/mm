@@ -106,9 +106,8 @@ enum AST_NODE_KIND
     
     AST_VariableDecl,
     AST_ConstantDecl,
-    AST_ImportDecl,
-    AST_ForeignDecl,
-    AST_LastStatement = AST_ForeignDecl,
+    AST_IncludeDecl,
+    AST_LastStatement = AST_IncludeDecl,
     
     AST_NODE_KIND_END
 };
@@ -124,8 +123,8 @@ typedef struct AST_Node
     
     union
     {
-        Identifier identifier;
-        String_Literal string;
+        Interned_String identifier;
+        Interned_String string;
         Character character;
         Number number;
         bool boolean;
@@ -176,7 +175,7 @@ typedef struct AST_Node
         
         struct
         {
-            Identifier name;
+            Interned_String name;
             struct AST_Node* params;
         } directive;
         
@@ -218,9 +217,8 @@ typedef struct AST_Node
         
         struct
         {
-            Symbol_Table symbol_table;
             struct AST_Node* body;
-            Identifier label;
+            Interned_String label;
             bool is_do;
         } scope_statement;
         
@@ -242,7 +240,7 @@ typedef struct AST_Node
         
         struct
         {
-            Identifier label;
+            Interned_String label;
         } break_statement, continue_statement;
         
         struct AST_Node* defer_statement;
@@ -272,14 +270,8 @@ typedef struct AST_Node
         
         struct
         {
-            String_Literal import_path;
-            Identifier alias;
-        } import_decl;
-        
-        struct
-        {
-            // TODO:
-            Identifier alias;
-        } foreign_decl;
+            Interned_String path;
+            File_ID id;
+        } include;
     };
 } AST_Node;

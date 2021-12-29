@@ -93,7 +93,7 @@ typedef struct Token
     union
     {
         String raw_string;
-        Identifier identifier;
+        Interned_String identifier;
         Number number;
     };
     
@@ -523,7 +523,7 @@ Lexer_Advance(Lexer* lexer)
                 
                 ident.size = lexer->cursor - start_of_token;
                 
-                token.identifier = Identifier_Add(ident);
+                token.identifier = String_Intern(ident);
             }
             
             else if (c >= '0' && c <= '9')

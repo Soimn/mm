@@ -2,29 +2,12 @@ typedef struct Parser_State
 {
     Lexer lexer;
     Token current_token;
-    Memory_Arena* ast_arena;
-    Memory_Arena* string_arena;
 } Parser_State;
 
 internal inline Token
 GetToken(Parser_State* state)
 {
     return state->current_token;
-}
-
-internal inline Token
-PeekToken(Parser_State* state, umm index)
-{
-    Token token = state->current_token;
-    
-    Lexer tmp_lexer = state->lexer;
-    
-    for (umm i = 1; i < index; ++i)
-    {
-        token = Lexer_Advance(&tmp_lexer);
-    }
-    
-    return token;
 }
 
 internal inline void
@@ -54,7 +37,7 @@ EatTokenOfKind(Parser_State* state, u8 kind)
 internal inline AST_Node*
 PushNode(Parser_State* state, u8 kind)
 {
-    AST_Node* result = Arena_PushSize(state->ast_arena, sizeof(AST_Node), ALIGNOF(AST_Node));
+    AST_Node* result = Arena_PushSize(&MM.ast_arena, sizeof(AST_Node), ALIGNOF(AST_Node));
     ZeroStruct(result);
     
     result->kind = kind;
@@ -176,12 +159,14 @@ ParseCharacter(String string, umm* cursor, Character* character)
 }
 
 internal bool
-ParseStringLiteral(Parser_State* state, String raw_string, String_Literal* string)
+ParseStringLiteral(Parser_State* state, String raw_string, Interned_String* result)
 {
     bool encountered_errors = false;
     
-    *string = (String_Literal){
-        .data = Arena_PushSize(state->string_arena, raw_string.size, 1),
+    Memory_Arena_Marker marker = Arena_BeginTempMemory(&MM.temp_arena);
+    
+    String string = {
+        .data = Arena_PushSize(&MM.temp_arena, raw_string.size, 1),
         .size = 0
     };
     
@@ -199,10 +184,14 @@ ParseStringLiteral(Parser_State* state, String raw_string, String_Literal* strin
                 if (character.bytes[advance - 1] != 0) break;
             }
             
-            Copy(character.bytes, string->data + string->size, advance);
-            string->size += advance;
+            Copy(character.bytes, string.data + string.size, advance);
+            string.size += advance;
         }
     }
+    
+    *result = String_Intern(string);
+    
+    Arena_EndTempMemory(&MM.temp_arena, marker);
     
     return !encountered_errors;
 }
@@ -267,7 +256,7 @@ ParseUsingExpressionAssignmentVarOrConstDecl(Parser_State* state, bool eat_multi
     AST_Node* expressions = 0;
     
     Token token = GetToken(state);
-    if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Using))
+    if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Using))
     {
         is_using = true;
         SkipTokens(state, 1);
@@ -434,15 +423,15 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     
     else if (token.kind == Token_Identifier)
     {
-        if (Identifier_IsKeyword(token.identifier, Keyword_True) || Identifier_IsKeyword(token.identifier, Keyword_False))
+        if (String_IsKeyword(token.identifier, Keyword_True) || String_IsKeyword(token.identifier, Keyword_False))
         {
             *expression = PushNode(state, AST_Boolean);
-            (*expression)->boolean = Identifier_IsKeyword(token.identifier, Keyword_True);
+            (*expression)->boolean = String_IsKeyword(token.identifier, Keyword_True);
             
             SkipTokens(state, 1);
         }
         
-        else if (Identifier_IsKeyword(token.identifier, Keyword_Proc))
+        else if (String_IsKeyword(token.identifier, Keyword_Proc))
         {
             SkipTokens(state, 1);
             
@@ -523,7 +512,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 else
                 {
                     token = GetToken(state);
-                    if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Do))
+                    if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
                     {
                         AST_Node* body = 0;
                         
@@ -547,7 +536,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             }
         }
         
-        else if (Identifier_IsKeyword(token.identifier, Keyword_Struct) || Identifier_IsKeyword(token.identifier, Keyword_Union))
+        else if (String_IsKeyword(token.identifier, Keyword_Struct) || String_IsKeyword(token.identifier, Keyword_Union))
         {
             SkipTokens(state, 1);
             
@@ -607,7 +596,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             }
         }
         
-        else if (Identifier_IsKeyword(token.identifier, Keyword_Enum))
+        else if (String_IsKeyword(token.identifier, Keyword_Enum))
         {
             SkipTokens(state, 1);
             
@@ -777,7 +766,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         
         else
         {
-            Identifier name = token.identifier;
+            Interned_String name = token.identifier;
             AST_Node* params = 0;
             
             SkipTokens(state, 1);
@@ -848,12 +837,16 @@ ParseTypeLevelExpression(Parser_State* state, AST_Node** expression)
             type = &(*expression)->unary_expr;
         }
         
-        else if (GetToken(state).kind == Token_Elipsis && PeekToken(state, 1).kind == Token_CloseBracket)
+        else if (EatTokenOfKind(state, Token_Elipsis))
         {
-            SkipTokens(state, 2);
-            
             *expression = PushNode(state, AST_DynamicArrayType);
             type = &(*expression)->unary_expr;
+            
+            if (!EatTokenOfKind(state, Token_CloseBracket))
+            {
+                //// ERROR: Missing closing bracket in dynamic array type specifier
+                encountered_errors = true;
+            }
         }
         
         else
@@ -1216,7 +1209,7 @@ ParseScope(Parser_State* state, AST_Node** scope)
     
     bool is_do_block = false;
     
-    if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Do))
+    if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
     {
         SkipTokens(state, 1);
         is_do_block = true;
@@ -1270,16 +1263,16 @@ IsIfWhenOrWhile(Token token, Token peek, Token peek_next)
     
     if (token.kind == Token_Identifier)
     {
-        Identifier check_ident = token.identifier;
+        Interned_String check_ident = token.identifier;
         
-        if (Identifier_IsKeyword(token.identifier, Keyword_Invalid) && peek.kind == Token_Colon)
+        if (String_IsKeyword(token.identifier, Keyword_Invalid) && peek.kind == Token_Colon)
         {
             check_ident = peek_next.identifier;
         }
         
-        result = (result && (Identifier_IsKeyword(check_ident, Keyword_If) ||
-                             Identifier_IsKeyword(check_ident, Keyword_When) ||
-                             Identifier_IsKeyword(check_ident, Keyword_While)));
+        result = (result && (String_IsKeyword(check_ident, Keyword_If) ||
+                             String_IsKeyword(check_ident, Keyword_When) ||
+                             String_IsKeyword(check_ident, Keyword_While)));
     }
     
     return result;
@@ -1293,17 +1286,29 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
     if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow loose ;
     else
     {
-        Token token      = GetToken(state);
-        Token peek       = PeekToken(state, 1);
-        Token peek_next  = PeekToken(state, 2);
+        Token token     = GetToken(state);
+        Token peek      = {0};
+        Token peek_next = {0};
+        
+        if (token.kind == Token_Identifier)
+        {
+            Lexer tmp_lexer = state->lexer;
+            
+            peek = Lexer_Advance(&tmp_lexer);
+            
+            if (peek.kind == Token_Colon)
+            {
+                peek_next = Lexer_Advance(&tmp_lexer);
+            }
+        }
         
         if (token.kind == Token_OpenBrace ||
             (token.kind == Token_Identifier                          &&
-             Identifier_IsKeyword(token.identifier, Keyword_Invalid) &&
+             String_IsKeyword(token.identifier, Keyword_Invalid) &&
              peek.kind == Token_Colon                                &&
              peek_next.kind == Token_OpenBrace))
         {
-            Identifier label = BLANK_IDENTIFIER;
+            Interned_String label = BLANK_IDENTIFIER;
             
             if (token.kind == Token_Identifier)
             {
@@ -1319,17 +1324,31 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
-        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Import))
+        else if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Include))
         {
-            NOT_IMPLEMENTED;
+            SkipTokens(state, 1);
+            token = GetToken(state);
+            
+            if (token.kind != Token_String)
+            {
+                //// ERROR: Missing include file path
+                encountered_errors = true;
+            }
+            
+            else
+            {
+                SkipTokens(state, 1);
+                
+                *next_statement = PushNode(state, AST_IncludeDecl);
+                
+                if (!ParseStringLiteral(state, token.raw_string, &(*next_statement)->include.path))
+                {
+                    encountered_errors = true;
+                }
+            }
         }
         
-        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Foreign))
-        {
-            NOT_IMPLEMENTED;
-        }
-        
-        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Else))
+        else if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Else))
         {
             //// ERROR: Encountered else without matching if
             encountered_errors = true;
@@ -1342,7 +1361,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             AST_Node* third  = 0;
             AST_Node* body   = 0;
             
-            if (Identifier_IsKeyword(token.kind == Token_Identifier, Keyword_Invalid))
+            if (String_IsKeyword(token.identifier, Keyword_Invalid))
             {
                 *next_statement = PushNode(state, AST_Scope);
                 (*next_statement)->scope_statement.label = token.identifier;
@@ -1356,8 +1375,8 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             token = GetToken(state);
             ASSERT(token.kind == Token_Identifier);
             
-            bool is_when  = Identifier_IsKeyword(token.identifier, Keyword_When);
-            bool is_while = Identifier_IsKeyword(token.identifier, Keyword_While);
+            bool is_when  = String_IsKeyword(token.identifier, Keyword_When);
+            bool is_while = String_IsKeyword(token.identifier, Keyword_While);
             
             SkipTokens(state, 1);
             
@@ -1429,12 +1448,12 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                     AST_Node* false_body = 0;
                     
                     token = GetToken(state);
-                    if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Else))
+                    if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Else))
                     {
                         SkipTokens(state, 1);
                         token = GetToken(state);
                         
-                        if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_If))
+                        if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_If))
                         {
                             if (!ParseStatement(state, &false_body))
                             {
@@ -1442,7 +1461,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                             }
                         }
                         
-                        else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Do))
+                        else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
                         {
                             if (!ParseScope(state, &false_body))
                             {
@@ -1481,16 +1500,16 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             }
         }
         
-        else if (token.kind == Token_Identifier && (Identifier_IsKeyword(token.identifier, Keyword_Break) ||
-                                                    Identifier_IsKeyword(token.identifier, Keyword_Continue)))
+        else if (token.kind == Token_Identifier && (String_IsKeyword(token.identifier, Keyword_Break) ||
+                                                    String_IsKeyword(token.identifier, Keyword_Continue)))
         {
-            bool is_break = Identifier_IsKeyword(token.identifier, Keyword_Break);
+            bool is_break = String_IsKeyword(token.identifier, Keyword_Break);
             
             SkipTokens(state, 1);
             
-            Identifier label = BLANK_IDENTIFIER;
+            Interned_String label = BLANK_IDENTIFIER;
             
-            if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow break; and continue;
+            if (GetToken(state).kind == Token_Semicolon); // NOTE: allow break; and continue;
             else
             {
                 token = GetToken(state);
@@ -1503,12 +1522,6 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 else
                 {
                     label = token.identifier;
-                    
-                    if (!EatTokenOfKind(state, Token_Semicolon))
-                    {
-                        //// ERROR: Missing semicolon after break/continue statement
-                        encountered_errors = true;
-                    }
                 }
             }
             
@@ -1516,45 +1529,31 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             (*next_statement)->break_statement.label = label;
         }
         
-        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Defer))
+        else if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Defer))
         {
             SkipTokens(state, 1);
             
             AST_Node* statement = 0;
             
-            if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow defer;
-            else
-            {
-                if (!ParseScope(state, &statement))
-                {
-                    encountered_errors = true;
-                }
-            }
-            
-            if (!encountered_errors)
+            if (!ParseStatement(state, &statement))
             {
                 *next_statement = PushNode(state, AST_Defer);
                 (*next_statement)->defer_statement = statement;
             }
         }
         
-        else if (token.kind == Token_Identifier && Identifier_IsKeyword(token.identifier, Keyword_Return))
+        else if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Return))
         {
             SkipTokens(state, 1);
             
             AST_Node* values = 0;
             
-            if (EatTokenOfKind(state, Token_Semicolon)); // NOTE: allow return;
+            if (GetToken(state).kind == Token_Semicolon); // NOTE: allow return;
             else
             {
-                if (!ParseNamedValueList(state, &values)) encountered_errors = true;
-                else
+                if (!ParseNamedValueList(state, &values))
                 {
-                    if (!EatTokenOfKind(state, Token_Semicolon))
-                    {
-                        //// ERROR: Missing terminating semicolon after return statement
-                        encountered_errors = true;
-                    }
+                    encountered_errors = true;
                 }
             }
             
@@ -1567,29 +1566,28 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
         
         else
         {
-            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, next_statement))encountered_errors = true;
+            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, next_statement))
+            {
+                encountered_errors = true;
+            }
+        }
+        
+        if (!EatTokenOfKind(state, Token_Semicolon))
+        {
+            if (((*next_statement)->kind == AST_VariableDecl || (*next_statement)->kind == AST_ConstantDecl) &&
+                (*next_statement)->var_decl.values != 0 && (*next_statement)->var_decl.values->next == 0 &&
+                ((*next_statement)->var_decl.values->kind == AST_Proc   ||
+                 (*next_statement)->var_decl.values->kind == AST_Struct ||
+                 (*next_statement)->var_decl.values->kind == AST_Union  ||
+                 (*next_statement)->var_decl.values->kind == AST_Enum))
+            {
+                // NOTE: Ignore missing semicolon
+            }
+            
             else
             {
-                if (!EatTokenOfKind(state, Token_Semicolon))
-                {
-                    if ((*next_statement)->kind == AST_Proc   ||
-                        (*next_statement)->kind == AST_Struct ||
-                        (*next_statement)->kind == AST_Enum   ||
-                        (((*next_statement)->kind == AST_VariableDecl || (*next_statement)->kind == AST_ConstantDecl) &&
-                         (*next_statement)->var_decl.values != 0 && (*next_statement)->var_decl.values->next == 0 &&
-                         ((*next_statement)->var_decl.values->kind == AST_Proc   ||
-                          (*next_statement)->var_decl.values->kind == AST_Struct ||
-                          (*next_statement)->var_decl.values->kind == AST_Enum)))
-                    {
-                        // NOTE: Ignore missing semicolon
-                    }
-                    
-                    else
-                    {
-                        //// ERROR: Missing terminating semicolon after statement
-                        encountered_errors = true;
-                    }
-                }
+                //// ERROR: Missing terminating semicolon after statement
+                encountered_errors = true;
             }
         }
     }
@@ -1598,75 +1596,30 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
 }
 
 internal bool
-ParsePackage(Package_ID package_id, Memory_Arena* ast_arena, Memory_Arena* string_arena)
+ParseFile(File* file)
 {
     bool encountered_errors = false;
     
-    Package* package = Package_FromID(package_id);
+    Parser_State state = {
+        .lexer = Lexer_Init(file->contents.data),
+    };
     
-    for (umm i = 0; i < package->file_count && !encountered_errors; ++i)
+    // NOTE: initialize state.current_token
+    SkipTokens(&state, 1);
+    
+    AST_Node** next_statement = (MM.ast == 0 ? &MM.ast : &MM.last_node->next);
+    
+    while (!encountered_errors)
     {
-        File* file = &package->files[i];
-        
-        // TODO: load file
-        u8* file_contents = 0;
-        NOT_IMPLEMENTED;
-        
-        Parser_State state = {
-            .lexer        = Lexer_Init(file_contents),
-            .ast_arena    = ast_arena,
-            .string_arena = string_arena
-        };
-        
-        // NOTE: initialize state.current_token
-        SkipTokens(&state, 1);
-        
-        Token token = GetToken(&state);
-        if (token.kind != Token_Identifier || !Identifier_IsKeyword(token.identifier, Keyword_Package))
-        {
-            //// ERROR: Missing package declaration
-            encountered_errors = true;
-        }
-        
+        if (GetToken(&state).kind == Token_EndOfStream) break;
         else
         {
-            SkipTokens(&state, 1);
-            token = GetToken(&state);
-            
-            if (token.kind != Token_Identifier)
-            {
-                //// ERROR: Missing package name
-                encountered_errors = true;
-            }
-            
-            else if (token.identifier != package->name)
-            {
-                //// ERROR: Package name mismatch
-                encountered_errors = true;
-            }
-            
+            if (!ParseStatement(&state, next_statement)) encountered_errors = true;
             else
             {
-                SkipTokens(&state, 1);
-                
-                if (!EatTokenOfKind(&state, Token_Semicolon))
+                if (next_statement != 0)
                 {
-                    //// ERROR: Missing semicolon after package declaration
-                    encountered_errors = true;
-                }
-            }
-        }
-        
-        AST_Node** next_statement = &file->ast;
-        
-        while (!encountered_errors)
-        {
-            if (GetToken(&state).kind == Token_EndOfStream) break;
-            else
-            {
-                if (!ParseStatement(&state, next_statement)) encountered_errors = true;
-                else
-                {
+                    MM.last_node   = *next_statement;
                     next_statement = &(*next_statement)->next;
                 }
             }

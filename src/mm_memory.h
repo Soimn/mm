@@ -102,30 +102,28 @@ typedef struct Memory_Arena_Marker
     u64 offset;
 } Memory_Arena_Marker;
 
+#define MEMORY_ARENA_PAGE_SIZE KB(4)
+
 typedef struct Memory_Arena
 {
     u64 base_address;
     u64 offset;
     u64 size;
-    
-    u64 high_water_mark;
 } Memory_Arena;
 
 internal inline void*
 Arena_PushSize(Memory_Arena* arena, umm size, u8 alignment)
 {
-    u64 base  = arena->base_address + arena->offset;
-    u8 offset = AlignOffset((void*)base, alignment);
+    u64 offset = arena->offset + AlignOffset((void*)(arena->base_address + arena->offset), alignment);
     
-    ASSERT(arena->offset + offset + size <= arena->size);
+    if (offset + size > arena->size)
+    {
+        System_GrowArena(arena, offset + size - arena->size);
+    }
     
-    arena->offset += offset + size;
+    arena->offset = offset;
     
-#if MM_DEBUG
-    arena->high_water_mark = MAX(arena->high_water_mark, arena->offset);
-#endif
-    
-    return (void*)(base + offset);
+    return (void*)offset;
 }
 
 internal inline void

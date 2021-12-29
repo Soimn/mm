@@ -104,14 +104,6 @@ typedef Buffer String;
 
 #define STRING(str) (String){ .data = (u8*)(str), .size = sizeof(str) - 1 }
 
-typedef struct File_Buffer
-{
-    void* memory;
-    u32 size;
-    u32 offset;
-    bool written_past_end;
-} File_Buffer;
-
 #define Enum8(name)  u8
 #define Enum16(name) u16
 #define Enum32(name) u32
@@ -161,10 +153,11 @@ typedef struct File_Buffer
 // NOTE: This is just a hack to work around a parsing bug in 4coder
 #define TYPEDEF_FUNC(return_val, name, ...) typedef return_val (*name)(__VA_ARGS__)
 
-typedef u32 Identifier;
-typedef String String_Literal;
+#define INTERNED_EMPTY_STRING 0
+#define BLANK_IDENTIFIER INTERNED_EMPTY_STRING
+#define EMPTY_STRING INTERNED_EMPTY_STRING
 
-#define BLANK_IDENTIFIER 0
+typedef u32 Interned_String;
 
 typedef struct Number
 {
@@ -182,13 +175,6 @@ typedef union Character
     u32 word;
     u8 bytes[4];
 } Character;
-
-typedef i32 Package_ID;
-typedef i32 File_ID;
-typedef u32 Type_ID;
-
-#define INVALID_PACKAGE_ID -1
-#define INVALID_FILE_ID -1
 
 enum KEYWORD_KIND
 {
@@ -214,67 +200,268 @@ enum KEYWORD_KIND
     Keyword_Using,
     Keyword_Defer,
     Keyword_Return,
-    Keyword_Import,
-    Keyword_Foreign,
-    Keyword_Package,
+    Keyword_Include,
     
     KEYWORD_COUNT,
 };
 
-// NOTE: This is just a hack to work around a parsing bug in 4coder
-struct Symbol;
-typedef struct Symbol* Symbol_Table_;
-typedef Symbol_Table_ Symbol_Table;
+typedef u32 File_ID;
 
 typedef struct File
 {
-    struct AST_Node* ast;
-    String file_name;
+    struct File* next;
+    String path;
+    String contents;
+    File_ID id;
+    
+    struct
+    {
+        File_ID id;
+        u32 offset;
+    } includer;
 } File;
 
-typedef struct Package
-{
-    String path;
-    File* files;
-    u32 file_count;
-    Identifier name;
-    Symbol_Table symbol_table;
-} Package;
+struct Memory_Arena;
+internal void System_InitArena(struct Memory_Arena* arena);
+internal void System_GrowArena(struct Memory_Arena* arena, umm overflow);
+internal bool System_ReadFile(struct Memory_Arena* arena, u8* cstring_path, String* contents);
 
 #include "mm_memory.h"
-#include "mm_string.h"
+
+typedef struct Path_Label
+{
+    String label;
+    String path;
+} Path_Label;
 
 typedef struct MM_State
 {
-    Memory_Arena temp_arena;
-    Memory_Arena string_arena;
+    union
+    {
+        struct
+        {
+            Memory_Arena misc_arena;
+            Memory_Arena ast_arena;
+            Memory_Arena intern_arena;
+            Memory_Arena temp_arena;
+        };
+        
+        Memory_Arena arena_bank[4];
+    };
     
-    Package* packages;
-    u32 package_count;
+    File* first_file;
+    File* last_file;
+    File_ID next_file_id;
     
-    File* files;
-    u32 file_count;
+    Path_Label* path_labels;
+    u32 path_label_count;
     
-    String* identifier_table;
-    u32 identifier_table_size;
+    struct AST_Node* ast;
+    struct AST_Node* last_node;
     
-    struct Type_Info* type_table;
-    u32 type_table_size;
+    Interned_String keyword_strings[KEYWORD_COUNT];
     
-    Identifier keyword_identifiers[KEYWORD_COUNT];
+    Interned_String intern_table[512];
 } MM_State;
 
 global MM_State MM;
 
-internal Identifier Identifier_Add(String string);
-internal String Identifier_ToString(Identifier identifier);
-internal inline bool Identifier_IsKeyword(Identifier identifier, Enum8(KEYWORD_KIND) keyword);
-internal inline Package* Package_FromID(Package_ID id);
-
+#include "mm_string.h"
 #include "mm_lexer.h"
-#include "mm_symbols.h"
 #include "mm_ast.h"
+#include "mm_symbols.h"
 #include "mm_parser.h"
-#include "mm_checker.h"
-#include "mm_code_gen.h"
-#include "mm.h"
+
+internal bool
+MM_AddFile(String path, File_ID includer_id, u32 includer_offset, File_ID* id)
+{
+    bool encountered_errors = false;
+    
+    String absolute_path = {0};
+    
+    String relative_path = path;
+    String label         = {0};
+    for (umm i = 0; i < path.size; ++i)
+    {
+        if (path.data[i] == ':')
+        {
+            if (i == 0)
+            {
+                //// ERROR: Missing label name
+                encountered_errors = true;
+            }
+            
+            else
+            {
+                label.data = absolute_path.data;
+                label.size = i;
+                relative_path.data += i + 1;
+                relative_path.size -= i + 1;
+                break;
+            }
+        }
+    }
+    
+    if (!encountered_errors)
+    {
+        String directory = {0};
+        
+        if (label.size == 0)
+        {
+            if (includer_id == 0); // NOTE: the main file path is already absolute
+            else
+            {
+                File* scan = MM.first_file;
+                for (; scan != 0; scan = scan->next)
+                {
+                    if (scan->id == includer_id) break;
+                }
+                
+                ASSERT(scan != 0);
+                
+                directory.data = scan->path.data;
+                
+                for (umm i = 0; i < scan->path.size; ++i)
+                {
+                    if (scan->path.data[i] == '/') directory.size = i + 1;
+                }
+            }
+        }
+        
+        else
+        {
+            Path_Label* path_label = 0;
+            for (umm i = 0; i < MM.path_label_count; ++i)
+            {
+                if (String_Compare(label, MM.path_labels[i].label))
+                {
+                    path_label = MM.path_labels + i;
+                    break;
+                }
+            }
+            
+            if (path_label == 0)
+            {
+                //// ERROR: no matching path label
+                encountered_errors = true;
+            }
+            
+            else
+            {
+                directory = path_label->path;
+            }
+        }
+        
+        if (!encountered_errors)
+        {
+            absolute_path = (String){
+                .data = Arena_PushSize(&MM.misc_arena, directory.size + relative_path.size + 1, ALIGNOF(u8)),
+                .size = directory.size + relative_path.size,
+            };
+            
+            Copy(directory.data, absolute_path.data, directory.size);
+            Copy(relative_path.data, absolute_path.data + directory.size, relative_path.size);
+            absolute_path.data[absolute_path.size] = 0;
+        }
+    }
+    
+    // TODO: This is not guaranteed to detect duplicates, since the paths my contain different separators
+    for (File* scan = MM.first_file; scan != 0; scan = scan->next)
+    {
+        if (String_Compare(absolute_path, scan->path))
+        {
+            //// ERROR: duplicate include
+            encountered_errors = true;
+            break;
+        }
+    }
+    
+    if (!encountered_errors)
+    {
+        String contents;
+        if (!System_ReadFile(&MM.misc_arena, absolute_path.data, &contents)) encountered_errors = true;
+        else
+        {
+            File* file = Arena_PushSize(&MM.misc_arena, sizeof(File), ALIGNOF(File));
+            
+            *file = (File){
+                .path     = absolute_path,
+                .contents = contents,
+                .id       = ++MM.next_file_id,
+                
+                .includer.id     = includer_id,
+                .includer.offset = includer_offset,
+            };
+            
+            if (id != 0) *id = file->id;
+            
+            if (MM.last_file) MM.last_file->next = file;
+            else              MM.first_file      = file;
+            
+            MM.last_file = file;
+            
+            if (!ParseFile(file))
+            {
+                encountered_errors = true;
+            }
+        }
+    }
+    
+    return !encountered_errors;
+}
+
+internal bool
+MM_Init(String main_file_path, Path_Label* path_labels, u32 path_label_count)
+{
+    bool encountered_errors = false;
+    
+    ZeroStruct(&MM);
+    
+    /// Init memory
+    for (umm i = 0; i < ARRAY_SIZE(MM.arena_bank); ++i)
+    {
+        System_InitArena(MM.arena_bank + i);
+    }
+    
+    /// Init keyword lookup table
+    String KeywordStrings[KEYWORD_COUNT] = {
+        [Keyword_Do]             = STRING("do"),
+        [Keyword_In]             = STRING("in"),
+        [Keyword_Where]          = STRING("where"),
+        [Keyword_Proc]           = STRING("proc"),
+        [Keyword_Struct]         = STRING("struct"),
+        [Keyword_Union]          = STRING("union"),
+        [Keyword_Enum]           = STRING("enum"),
+        [Keyword_True]           = STRING("true"),
+        [Keyword_False]          = STRING("false"),
+        [Keyword_As]             = STRING("as"),
+        [Keyword_If]             = STRING("if"),
+        [Keyword_Else]           = STRING("else"),
+        [Keyword_When]           = STRING("when"),
+        [Keyword_While]          = STRING("while"),
+        [Keyword_For]            = STRING("for"),
+        [Keyword_Break]          = STRING("break"),
+        [Keyword_Continue]       = STRING("continue"),
+        [Keyword_Using]          = STRING("using"),
+        [Keyword_Defer]          = STRING("defer"),
+        [Keyword_Return]         = STRING("return"),
+        [Keyword_Include]        = STRING("include"),
+    };
+    
+    for (umm i = Keyword_Invalid + 1; i < KEYWORD_COUNT; ++i)
+    {
+        MM.keyword_strings[i] = String_Intern(KeywordStrings[i]);
+    }
+    
+    /// Misc. init
+    MM.path_labels      = path_labels;
+    MM.path_label_count = path_label_count;
+    
+    /// Parse main file
+    if (!MM_AddFile(main_file_path, 0, 0, 0))
+    {
+        encountered_errors = true;
+    }
+    
+    return !encountered_errors;
+}

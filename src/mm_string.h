@@ -270,3 +270,169 @@ String_Format(Buffer out, const char* format, ...)
     
     return result;
 }
+
+internal String
+String_FromCString(u8* cstring)
+{
+    String result = { .data = cstring };
+    
+    for (u8* scan = cstring; *scan; ++scan) ++result.size;
+    
+    return result;
+}
+
+internal bool
+String_HasPrefix(String string, String prefix)
+{
+    return String_Compare((String){string.data, prefix.size}, prefix);
+}
+
+internal u64
+String_Hash(String string)
+{
+    u64 p_n   = 1;
+    u64 hash  = 0;
+    u64 m     = (u64)1.0e9 + 9;
+    
+    for (umm i = 0; i < string.size; ++i)
+    {
+        hash += ((u64)string.data[i] * p_n) % m;
+        p_n   = (p_n * 127) % m;
+    }
+    
+    return hash;
+}
+
+typedef struct Interned_String_Entry
+{
+    Interned_String next;
+    u32 hash;
+    String string;
+    u8 data[];
+} Interned_String_Entry;
+
+#define STRING_TO_ENTRY_POINTER(interned_string) (Interned_String_Entry*)(((interned_string) - sizeof(Interned_String_Entry)) + MM.intern_arena.base_address)
+
+#define POINTER_TO_INTERNED_STRING(pointer) (Interned_String)(((u64)(pointer) - MM.intern_arena.base_address) + sizeof(Interned_String_Entry))
+
+internal Interned_String
+String_Intern(String string)
+{
+    Interned_String result = INTERNED_EMPTY_STRING;
+    
+    if (string.size != 0)
+    {
+        u32 hash        = (u32)String_Hash(string);
+        u32 table_index = hash % ARRAY_SIZE(MM.intern_table);
+        
+        Interned_String_Entry* prev_entry = 0;
+        
+        for (Interned_String scan = MM.intern_table[table_index]; scan != 0; )
+        {
+            Interned_String_Entry* entry = STRING_TO_ENTRY_POINTER(scan);
+            
+            if (entry->hash == hash && String_Compare(entry->string, string))
+            {
+                result = scan;
+                break;
+            }
+            
+            prev_entry = entry;
+            scan       = entry->next;
+        }
+        
+        if (result == 0)
+        {
+            Interned_String_Entry* entry = Arena_PushSize(&MM.intern_arena,
+                                                          sizeof(Interned_String_Entry) + string.size,
+                                                          ALIGNOF(Interned_String_Entry));
+            
+            *entry = (Interned_String_Entry){
+                .next        = 0,
+                .hash        = hash,
+                .string.data = entry->data,
+                .string.size = string.size,
+            };
+            
+            Copy(string.data, entry->string.data, string.size);
+            
+            result = POINTER_TO_INTERNED_STRING(entry);
+            
+            if (prev_entry != 0) prev_entry->next             = result;
+            else                 MM.intern_table[table_index] = result;
+        }
+    }
+    
+    return result;
+}
+
+internal String
+Identifier_Of(Interned_String istring)
+{
+    String string = STRING("_");
+    
+    if (istring != 0)
+    {
+        Interned_String_Entry* entry = STRING_TO_ENTRY_POINTER(istring);
+        
+        ASSERT(String_Intern(entry->string) == istring);
+        
+        string = entry->string;
+    }
+    
+    return string;
+}
+
+internal String
+StringLiteral_Of(Interned_String istring)
+{
+    String string = STRING("");
+    
+    if (istring != 0)
+    {
+        Interned_String_Entry* entry = STRING_TO_ENTRY_POINTER(istring);
+        
+        ASSERT(String_Intern(entry->string) == istring);
+        
+        string = entry->string;
+    }
+    
+    return string;
+}
+
+#undef STRING_TO_ENTRY_POINTER
+#undef POINTER_TO_INTERNED_STRING
+
+internal bool
+String_IsKeyword(Interned_String string, Enum8(KEYWORD_KIND) keyword)
+{
+    return (MM.keyword_strings[keyword] == string);
+}
+
+u32
+Character_ToCodepoint(Character c)
+{
+    u32 codepoint;
+    
+    if ((c.bytes[0] & 0x80) == 0)
+    {
+        codepoint = c.bytes[0];
+    }
+    
+    else if ((c.bytes[0] & 0xE0) == 0xC0)
+    {
+        codepoint = (u32)(c.bytes[0] & 0x1F) << 6 | (u32)(c.bytes[1] & 0x3F);
+    }
+    
+    else if ((c.bytes[0] & 0xF0) == 0xE0)
+    {
+        codepoint = (u32)(c.bytes[0] & 0x0F) << 12 | (u32)(c.bytes[1] & 0x3F) << 6 | (u32)(c.bytes[2] & 0x3F);
+    }
+    
+    else
+    {
+        codepoint = (u32)(c.bytes[0] & 0x07) << 18 | (u32)(c.bytes[1] & 0x3F) << 12 | (u32)(c.bytes[2] & 0x3F) << 6 | (u32)(c.bytes[3] & 0x3F);
+    }
+    
+    return codepoint;
+}
