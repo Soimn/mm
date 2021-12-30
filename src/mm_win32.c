@@ -4,6 +4,7 @@
 #define VC_EXTRALEAN        1
 #include <windows.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #undef NOMINMAX
 #undef WIN32_LEAN_AND_MEAN
 #undef WIN32_MEAN_AND_LEAN
@@ -14,6 +15,31 @@
 #include "mm_platform.h"
 
 Memory_Arena Win32_Arena;
+Memory_Arena Win32_Temp_Arena;
+
+internal void
+Print(char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    
+    Memory_Arena_Marker marker = Arena_BeginTempMemory(&Win32_Temp_Arena);
+    
+    umm buffer_size = String_FormatArgList((Buffer){0}, format, args);
+    
+    Buffer buffer = {
+        .data = Arena_PushSize(&Win32_Temp_Arena, buffer_size, ALIGNOF(u8)),
+        .size = buffer_size,
+    };
+    
+    String_FormatArgList(buffer, format, args);
+    
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer.data, (u32)buffer_size, 0, 0);
+    
+    Arena_EndTempMemory(&Win32_Temp_Arena, marker);
+    
+    va_end(args);
+}
 
 internal void
 System_InitArena(Memory_Arena* arena)
@@ -54,11 +80,11 @@ System_GrowArena(Memory_Arena* arena, umm overflow)
 }
 
 internal bool
-System_ReadFile(Memory_Arena* arena, u8* path, String* contents)
+System_ReadFile(Memory_Arena* arena, Path path, String* contents)
 {
     bool encountered_errors = false;
     
-    HANDLE file = CreateFileA((LPCSTR)path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    HANDLE file = CreateFileA((LPCSTR)path.data, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     
     if (file == INVALID_HANDLE_VALUE) encountered_errors = true;
     else
@@ -85,28 +111,96 @@ System_ReadFile(Memory_Arena* arena, u8* path, String* contents)
     return !encountered_errors;
 }
 
-internal void
-Print(char* format, ...)
+internal bool
+System_ResolvePath(struct Memory_Arena* arena, Path wd, Path path, Path* resolved_dir, Path* resolved_path)
 {
-    va_list args;
-    va_start(args, format);
+    bool encountered_errors = false;
     
-    Memory_Arena_Marker marker = Arena_BeginTempMemory(&Win32_Arena);
+    if (!SetCurrentDirectory((LPCSTR)wd.data)) encountered_errors = true;
+    else
+    {
+        u32 required_size = GetFullPathNameA((LPCSTR)path.data, 0, 0, 0);
+        
+        Memory_Arena_Marker marker = Arena_BeginTempMemory(&Win32_Temp_Arena);
+        
+        u8* memory = Arena_PushSize(&Win32_Temp_Arena, required_size, ALIGNOF(u8));
+        
+        u8* filename;
+        if (!GetFullPathNameA((LPCSTR)path.data, required_size, (LPSTR)memory, (LPSTR*)&filename)) encountered_errors = true;
+        else
+        {
+            String dir = {
+                .data = memory,
+                .size = filename - (u8*)memory
+            };
+            
+            String full_path = String_FromCString(memory);
+            
+            HANDLE handle = CreateFile((LPCSTR)memory, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+            CloseHandle(handle);
+            
+            if (handle == INVALID_HANDLE_VALUE) encountered_errors = true;
+            else
+            {
+                if (resolved_dir)
+                {
+                    *resolved_dir = (Path){
+                        .data = Arena_PushSize(arena, dir.size + 1, ALIGNOF(u8)),
+                        .size = dir.size
+                    };
+                    
+                    Copy(dir.data, resolved_dir->data, dir.size);
+                    resolved_dir->data[resolved_dir->size] = 0;
+                }
+                
+                
+                if (resolved_path)
+                {
+                    *resolved_path = (Path){
+                        .data = Arena_PushSize(arena, full_path.size + 1, ALIGNOF(u8)),
+                        .size = full_path.size
+                    };
+                    
+                    Copy(full_path.data, resolved_path->data, full_path.size);
+                    resolved_path->data[resolved_path->size] = 0;
+                }
+            }
+        }
+        
+        Arena_EndTempMemory(&Win32_Temp_Arena, marker);
+    }
     
-    umm buffer_size = String_FormatArgList((Buffer){0}, format, args);
+    return !encountered_errors;
+}
+
+internal bool
+System_PathsRefSameFile(Path p0, Path p1)
+{
+    bool result = false;
     
-    Buffer buffer = {
-        .data = Arena_PushSize(&Win32_Arena, buffer_size, ALIGNOF(u8)),
-        .size = buffer_size,
-    };
+    HANDLE h0 = CreateFileA((LPCSTR)p0.data, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    HANDLE h1 = CreateFileA((LPCSTR)p1.data, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     
-    String_FormatArgList(buffer, format, args);
+    FILE_ID_INFO i0;
+    FILE_ID_INFO i1;
     
-    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer.data, (u32)buffer_size, 0, 0);
+    if (h0 == INVALID_HANDLE_VALUE                                     ||
+        h1 == INVALID_HANDLE_VALUE                                     ||
+        !GetFileInformationByHandleEx(h0, FileIdInfo, &i0, sizeof(i0)) ||
+        !GetFileInformationByHandleEx(h1, FileIdInfo, &i1, sizeof(i1)))
+    {
+        // TODO: What should be done in this case?
+    }
     
-    Arena_EndTempMemory(&Win32_Arena, marker);
+    else
+    {
+        result = StructCompare(&i0, &i1);
+    }
     
-    va_end(args);
+    CloseHandle(h0);
+    CloseHandle(h1);
+    
+    return result;
 }
 
 internal void
@@ -539,6 +633,36 @@ PrintAST()
     }
 }
 
+internal void
+ArgError(char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    
+    Memory_Arena_Marker marker = Arena_BeginTempMemory(&Win32_Temp_Arena);
+    
+    umm buffer_size = String_FormatArgList((Buffer){0}, format, args);
+    
+    Buffer buffer = {
+        .data = Arena_PushSize(&Win32_Temp_Arena, buffer_size, ALIGNOF(u8)),
+        .size = buffer_size,
+    };
+    
+    String_FormatArgList(buffer, format, args);
+    
+#define ERR_PREFIX "Invalid Argument Error: "
+#define ERR_SUFFIX "\n"
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ERR_PREFIX, sizeof(ERR_PREFIX) - 1, 0, 0);
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer.data, (u32)buffer_size, 0, 0);
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ERR_SUFFIX, sizeof(ERR_SUFFIX) - 1, 0, 0);
+#undef ERR_PREFIX
+#undef ERR_SUFFIX
+    
+    Arena_EndTempMemory(&Win32_Temp_Arena, marker);
+    
+    va_end(args);
+}
+
 typedef struct Command_Line_Arguments
 {
     Path_Label* path_labels;
@@ -551,72 +675,107 @@ ParseCommandLineArguments(u8* command_line, Command_Line_Arguments* args)
 {
     bool encountered_errors = false;
     
-    u8* scan       = command_line;
-    u8* last_slash = command_line;
-    while (*scan != 0 && *scan != ' ')
-    {
-        if (*scan == '\\') last_slash = scan;
-        ++scan;
-    }
+    // NOTE: usage mm [main file] [options]
+    // valid options: ...
     
-    /// Path labels
-    {
-        args->path_labels      = Arena_PushSize(&Win32_Arena, sizeof(Path_Label), ALIGNOF(Path_Label));
-        args->path_label_count = 1;
+    u8* scan = command_line;
+    
+    // TODO: Is it safe to assume this produces a valid path to core?
+    Path working_dir       = {0};
+    Path default_core_path = {0};
+    { /// Extract path to core folder
+        for (; *scan && *scan != ' '; ++scan);
+        if (*scan != 0) *scan++ = 0;
         
-        args->path_labels[0].label = STRING("core");
         
-        String exe_dir = {
-            .data = command_line,
-            .size = (last_slash - command_line) + 1
-        };
-        String addend = STRING("core/");
-        args->path_labels[0].path.data = Arena_PushSize(&Win32_Arena, exe_dir.size + addend.size, ALIGNOF(u8));
-        args->path_labels[0].path.size = exe_dir.size + addend.size;
+        PathRemoveFileSpecA((LPSTR)command_line);
         
-        Copy(exe_dir.data, args->path_labels[0].path.data, exe_dir.size);
-        Copy(addend.data, args->path_labels[0].path.data + exe_dir.size, addend.size);
-    }
-    
-    while (*scan == ' ') ++scan;
-    
-    /// main file
-    String main_file = {
-        .data = scan,
-        .size = 0,
-    };
-    
-    while (*scan != 0 && *scan != ' ')
-    {
-        ++scan;
-    }
-    
-    main_file.size = scan - main_file.data;
-    
-    if (main_file.size == 0)
-    {
-        //// ERROR: missing main file
-        encountered_errors = true;
-    }
-    
-    else
-    {
-        // HACK: fix this
-        if (String_HasPrefix(String_Tail(main_file, 1), STRING(":\\"))) args->main_file = main_file;
+        String exe_path = String_FromCString(command_line);
+        String addend   = STRING("\\core\\");
+        
+        Memory_Arena_Marker marker = Arena_BeginTempMemory(&Win32_Temp_Arena);
+        
+        String core_path;
+        core_path.size = exe_path.size + addend.size;
+        core_path.data = Arena_PushSize(&Win32_Temp_Arena, default_core_path.size + 1, ALIGNOF(u8));
+        
+        Copy(exe_path.data, core_path.data, exe_path.size);
+        Copy(addend.data, core_path.data + exe_path.size, addend.size);
+        core_path.data[core_path.size] = 0;
+        
+        u32 required_size = GetFullPathNameA((LPCSTR)core_path.data, 0, 0, 0);
+        
+        u8* memory = Arena_PushSize(&Win32_Arena, required_size, ALIGNOF(u8));
+        
+        if (!GetFullPathNameA((LPCSTR)core_path.data, required_size, (LPSTR)memory, 0)) encountered_errors = true;
         else
         {
-            umm required_size = GetCurrentDirectory(0, 0);
+            default_core_path = String_FromCString(memory);
             
-            args->main_file = (String){
-                .data = Arena_PushSize(&Win32_Arena, required_size + main_file.size - 1, ALIGNOF(u8)),
-                .size = required_size + main_file.size,
-            };
+            // TODO: WTF Windows
+            for (umm i = 0; i < default_core_path.size; ++i)
+            {
+                if (default_core_path.data[i] == 0x22)
+                {
+                    default_core_path.data += i + 1;
+                    default_core_path.size -= i + 1;
+                }
+            }
+        }
+        
+        Arena_EndTempMemory(&Win32_Temp_Arena, marker);
+        
+        if (!encountered_errors)
+        {
+            required_size = GetCurrentDirectory(0, 0);
             
-            GetCurrentDirectory((DWORD)args->main_file.size, (LPSTR)args->main_file.data);
-            args->main_file.data[required_size - 1] = '/';
-            Copy(main_file.data, args->main_file.data + required_size, main_file.size);
+            working_dir.size = required_size,
+            working_dir.data = Arena_PushSize(&Win32_Arena, required_size + 1, ALIGNOF(u8));
+            
+            if (!GetCurrentDirectory(required_size, (LPSTR)working_dir.data)) encountered_errors = true;
+            else
+            {
+                working_dir.data[working_dir.size - 1] = '\\';
+                working_dir.data[working_dir.size]     = 0;
+            }
         }
     }
+    
+    if (!encountered_errors)
+    {
+        while (*scan != 0 && *scan == ' ') ++scan;
+        
+        u8* start = scan;
+        
+        while (*scan != 0 && *scan != ' ') ++scan;
+        if (*scan != 0) *scan++ = 0;
+        
+        args->main_file = String_FromCString(start);
+        
+        if (args->main_file.size == 0)
+        {
+            ArgError("missing main file path");
+            encountered_errors = true;
+        }
+    }
+    
+    if (!encountered_errors)
+    {
+        // TODO: parse options
+    }
+    
+    args->path_labels      = Arena_PushSize(&Win32_Arena, sizeof(Path_Label) * 2, ALIGNOF(Path_Label));
+    args->path_label_count = 2;
+    
+    args->path_labels[0] = (Path_Label){
+        .label = {0},
+        .path  = working_dir
+    };
+    
+    args->path_labels[1] = (Path_Label){
+        .label = STRING("core"),
+        .path  = default_core_path
+    };
     
     return !encountered_errors;
 }
@@ -625,6 +784,7 @@ void __stdcall
 WinMainCRTStartup()
 {
     System_InitArena(&Win32_Arena);
+    System_InitArena(&Win32_Temp_Arena);
     
     Command_Line_Arguments args = {0};
     if (ParseCommandLineArguments((u8*)GetCommandLineA(), &args))

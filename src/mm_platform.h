@@ -101,6 +101,7 @@ typedef struct Buffer
 } Buffer;
 
 typedef Buffer String;
+typedef String Path;
 
 #define STRING(str) (String){ .data = (u8*)(str), .size = sizeof(str) - 1 }
 
@@ -210,7 +211,8 @@ typedef u32 File_ID;
 typedef struct File
 {
     struct File* next;
-    String path;
+    Path path;
+    Path dir;
     String contents;
     File_ID id;
     
@@ -224,14 +226,16 @@ typedef struct File
 struct Memory_Arena;
 internal void System_InitArena(struct Memory_Arena* arena);
 internal void System_GrowArena(struct Memory_Arena* arena, umm overflow);
-internal bool System_ReadFile(struct Memory_Arena* arena, u8* cstring_path, String* contents);
+internal bool System_ReadFile(struct Memory_Arena* arena, Path path, String* contents);
+internal bool System_ResolvePath(struct Memory_Arena* arena, Path wd, Path path, Path* resolved_dir, Path* resolved_path);
+internal bool System_PathsRefSameFile(Path p0, Path p1);
 
 #include "mm_memory.h"
 
 typedef struct Path_Label
 {
     String label;
-    String path;
+    Path path;
 } Path_Label;
 
 typedef struct MM_State
@@ -272,120 +276,128 @@ global MM_State MM;
 #include "mm_symbols.h"
 #include "mm_parser.h"
 
+internal File*
+MM_GetFile(File_ID id)
+{
+    File* file = MM.first_file;
+    for (; file != 0; file = file->next)
+    {
+        if (file->id == id) break;
+    }
+    
+    return file;
+}
+
 internal bool
 MM_AddFile(String path, File_ID includer_id, u32 includer_offset, File_ID* id)
 {
     bool encountered_errors = false;
     
-    String absolute_path = {0};
+    // NOTE: to simplify things, paths may only appear in one of these formats
+    //       label:forward_slash_sepped_relative_path
+    //       forward_slash_sepped_relative_path
     
-    if (includer_id == 0) absolute_path = path;
+    String label = {0};
+    
+    for (umm i = 0; i < path.size; ++i)
+    {
+        if (path.data[i] == ':')
+        {
+            label.data = path.data;
+            label.size = i;
+            
+            path.data += i + 1;
+            path.size -= i + 1;
+            break;
+        }
+    }
+    
+    Path wd = {0};
+    if (label.size == 0)
+    {
+        if (includer_id == 0) wd = MM.path_labels[0].path;
+        else                  wd = MM_GetFile(includer_id)->dir;
+    }
+    
     else
     {
-        String relative_path = path;
-        String label         = {0};
+        umm i = 1;
+        for (; i < MM.path_label_count; ++i)
+        {
+            if (String_Compare(label, MM.path_labels[i].label))
+            {
+                wd = MM.path_labels[i].path;
+                break;
+            }
+        }
+        
+        if (i == MM.path_label_count)
+        {
+            //// ERROR: Invalid label name
+            encountered_errors = true;
+        }
+    }
+    
+    Path resolved_path = {0};
+    Path resolved_dir  = {0};
+    if (!encountered_errors)
+    {
+        String ext = STRING(".m");
         for (umm i = 0; i < path.size; ++i)
         {
-            if (path.data[i] == ':')
+            if (path.data[i] == '.')
             {
-                if (i == 0)
+                ext = (String){0};
+                break;
+            }
+        }
+        
+        Memory_Arena_Marker marker = Arena_BeginTempMemory(&MM.temp_arena);
+        if (ext.size != 0)
+        {
+            u8* memory = Arena_PushSize(&MM.temp_arena, path.size + ext.size, ALIGNOF(u8));
+            
+            Copy(path.data, memory, path.size);
+            Copy(ext.data, memory + path.size, ext.size);
+            memory[path.size + ext.size] = 0;
+            
+            path.data  = memory;
+            path.size += ext.size;
+        }
+        
+        if (!System_ResolvePath(&MM.misc_arena, wd, path, &resolved_dir, &resolved_path))
+        {
+            //// ERROR: Invalid file path
+            encountered_errors = true;
+        }
+        
+        else
+        {
+            for (File* scan = MM.first_file; scan != 0; scan = scan->next)
+            {
+                if (System_PathsRefSameFile(resolved_path, scan->path))
                 {
-                    //// ERROR: Missing label name
+                    //// ERROR: duplicate include
                     encountered_errors = true;
-                }
-                
-                else
-                {
-                    label.data = absolute_path.data;
-                    label.size = i;
-                    relative_path.data += i + 1;
-                    relative_path.size -= i + 1;
                     break;
                 }
             }
         }
         
-        if (!encountered_errors)
-        {
-            String directory = {0};
-            
-            if (label.size == 0)
-            {
-                File* scan = MM.first_file;
-                for (; scan != 0; scan = scan->next)
-                {
-                    if (scan->id == includer_id) break;
-                }
-                
-                ASSERT(scan != 0);
-                
-                directory.data = scan->path.data;
-                
-                for (umm i = 0; i < scan->path.size; ++i)
-                {
-                    if (scan->path.data[i] == '/') directory.size = i + 1;
-                }
-            }
-            
-            else
-            {
-                Path_Label* path_label = 0;
-                for (umm i = 0; i < MM.path_label_count; ++i)
-                {
-                    if (String_Compare(label, MM.path_labels[i].label))
-                    {
-                        path_label = MM.path_labels + i;
-                        break;
-                    }
-                }
-                
-                if (path_label == 0)
-                {
-                    //// ERROR: no matching path label
-                    encountered_errors = true;
-                }
-                
-                else
-                {
-                    directory = path_label->path;
-                }
-            }
-            
-            if (!encountered_errors)
-            {
-                absolute_path = (String){
-                    .data = Arena_PushSize(&MM.misc_arena, directory.size + relative_path.size + 1, ALIGNOF(u8)),
-                    .size = directory.size + relative_path.size,
-                };
-                
-                Copy(directory.data, absolute_path.data, directory.size);
-                Copy(relative_path.data, absolute_path.data + directory.size, relative_path.size);
-                absolute_path.data[absolute_path.size] = 0;
-            }
-        }
-    }
-    
-    // TODO: This is not guaranteed to detect duplicates, since the paths my contain different separators
-    for (File* scan = MM.first_file; scan != 0; scan = scan->next)
-    {
-        if (String_Compare(absolute_path, scan->path))
-        {
-            //// ERROR: duplicate include
-            encountered_errors = true;
-            break;
-        }
+        Arena_EndTempMemory(&MM.temp_arena, marker);
     }
     
     if (!encountered_errors)
     {
         String contents;
-        if (!System_ReadFile(&MM.misc_arena, absolute_path.data, &contents)) encountered_errors = true;
+        if (!System_ReadFile(&MM.misc_arena, resolved_path, &contents)) encountered_errors = true;
         else
         {
             File* file = Arena_PushSize(&MM.misc_arena, sizeof(File), ALIGNOF(File));
             
             *file = (File){
-                .path     = absolute_path,
+                .path     = resolved_path,
+                .dir      = resolved_dir,
                 .contents = contents,
                 .id       = ++MM.next_file_id,
                 

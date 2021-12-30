@@ -350,7 +350,7 @@ String_Intern(String string)
         if (result == 0)
         {
             Interned_String_Entry* entry = Arena_PushSize(&MM.intern_arena,
-                                                          sizeof(Interned_String_Entry) + string.size,
+                                                          sizeof(Interned_String_Entry) + string.size + 1,
                                                           ALIGNOF(Interned_String_Entry));
             
             *entry = (Interned_String_Entry){
@@ -361,6 +361,7 @@ String_Intern(String string)
             };
             
             Copy(string.data, entry->string.data, string.size);
+            entry->string.data[entry->string.size] = 0;
             
             result = POINTER_TO_INTERNED_STRING(entry);
             
