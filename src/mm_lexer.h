@@ -74,7 +74,8 @@ enum TOKEN_KIND
     
     Token_OrOr = 180,                           // ||
     
-    Token_Identifier,
+    // NOTE: Token_Identifier is set to 200 to push it outside the range of binary expressions
+    Token_Identifier = 200,
     Token_String,
     Token_Character,
     Token_Number,

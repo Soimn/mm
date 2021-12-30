@@ -279,37 +279,37 @@ MM_AddFile(String path, File_ID includer_id, u32 includer_offset, File_ID* id)
     
     String absolute_path = {0};
     
-    String relative_path = path;
-    String label         = {0};
-    for (umm i = 0; i < path.size; ++i)
+    if (includer_id == 0) absolute_path = path;
+    else
     {
-        if (path.data[i] == ':')
+        String relative_path = path;
+        String label         = {0};
+        for (umm i = 0; i < path.size; ++i)
         {
-            if (i == 0)
+            if (path.data[i] == ':')
             {
-                //// ERROR: Missing label name
-                encountered_errors = true;
-            }
-            
-            else
-            {
-                label.data = absolute_path.data;
-                label.size = i;
-                relative_path.data += i + 1;
-                relative_path.size -= i + 1;
-                break;
+                if (i == 0)
+                {
+                    //// ERROR: Missing label name
+                    encountered_errors = true;
+                }
+                
+                else
+                {
+                    label.data = absolute_path.data;
+                    label.size = i;
+                    relative_path.data += i + 1;
+                    relative_path.size -= i + 1;
+                    break;
+                }
             }
         }
-    }
-    
-    if (!encountered_errors)
-    {
-        String directory = {0};
         
-        if (label.size == 0)
+        if (!encountered_errors)
         {
-            if (includer_id == 0); // NOTE: the main file path is already absolute
-            else
+            String directory = {0};
+            
+            if (label.size == 0)
             {
                 File* scan = MM.first_file;
                 for (; scan != 0; scan = scan->next)
@@ -326,42 +326,42 @@ MM_AddFile(String path, File_ID includer_id, u32 includer_offset, File_ID* id)
                     if (scan->path.data[i] == '/') directory.size = i + 1;
                 }
             }
-        }
-        
-        else
-        {
-            Path_Label* path_label = 0;
-            for (umm i = 0; i < MM.path_label_count; ++i)
-            {
-                if (String_Compare(label, MM.path_labels[i].label))
-                {
-                    path_label = MM.path_labels + i;
-                    break;
-                }
-            }
-            
-            if (path_label == 0)
-            {
-                //// ERROR: no matching path label
-                encountered_errors = true;
-            }
             
             else
             {
-                directory = path_label->path;
+                Path_Label* path_label = 0;
+                for (umm i = 0; i < MM.path_label_count; ++i)
+                {
+                    if (String_Compare(label, MM.path_labels[i].label))
+                    {
+                        path_label = MM.path_labels + i;
+                        break;
+                    }
+                }
+                
+                if (path_label == 0)
+                {
+                    //// ERROR: no matching path label
+                    encountered_errors = true;
+                }
+                
+                else
+                {
+                    directory = path_label->path;
+                }
             }
-        }
-        
-        if (!encountered_errors)
-        {
-            absolute_path = (String){
-                .data = Arena_PushSize(&MM.misc_arena, directory.size + relative_path.size + 1, ALIGNOF(u8)),
-                .size = directory.size + relative_path.size,
-            };
             
-            Copy(directory.data, absolute_path.data, directory.size);
-            Copy(relative_path.data, absolute_path.data + directory.size, relative_path.size);
-            absolute_path.data[absolute_path.size] = 0;
+            if (!encountered_errors)
+            {
+                absolute_path = (String){
+                    .data = Arena_PushSize(&MM.misc_arena, directory.size + relative_path.size + 1, ALIGNOF(u8)),
+                    .size = directory.size + relative_path.size,
+                };
+                
+                Copy(directory.data, absolute_path.data, directory.size);
+                Copy(relative_path.data, absolute_path.data + directory.size, relative_path.size);
+                absolute_path.data[absolute_path.size] = 0;
+            }
         }
     }
     

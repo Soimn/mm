@@ -541,14 +541,8 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             SkipTokens(state, 1);
             
             AST_Node* members = 0;
-            bool is_decl      = false;
             
-            if (EatTokenOfKind(state, Token_TripleMinus))
-            {
-                is_decl = true;
-            }
-            
-            else if (!EatTokenOfKind(state, Token_OpenBrace))
+            if (!EatTokenOfKind(state, Token_OpenBrace))
             {
                 //// ERROR: Missing body of struct
                 encountered_errors = true;
@@ -592,7 +586,6 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             {
                 *expression = PushNode(state, AST_Struct);
                 (*expression)->struct_type.members = members;
-                (*expression)->struct_type.is_decl = is_decl;
             }
         }
         
@@ -602,7 +595,6 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
             
             AST_Node* elem_type = 0;
             AST_Node* members   = 0;
-            bool is_decl        = false;
             
             token = GetToken(state);
             if (token.kind != Token_TripleMinus && token.kind != Token_OpenBrace)
@@ -613,12 +605,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 }
             }
             
-            if (EatTokenOfKind(state, Token_TripleMinus))
-            {
-                is_decl = true;
-            }
-            
-            else if (!EatTokenOfKind(state, Token_OpenBrace))
+            if (!EatTokenOfKind(state, Token_OpenBrace))
             {
                 //// ERROR: Missing body of enum
                 encountered_errors = true;
@@ -646,7 +633,6 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 *expression = PushNode(state, AST_Enum);
                 (*expression)->enum_type.elem_type = elem_type;
                 (*expression)->enum_type.members   = members;
-                (*expression)->enum_type.is_decl   = is_decl;
             }
         }
         
@@ -831,13 +817,17 @@ ParseTypeLevelExpression(Parser_State* state, AST_Node** expression)
     else if (EatTokenOfKind(state, Token_OpenBracket))
     {
         AST_Node** type = 0;
+        
+        Lexer tmp_lexer = state->lexer;
+        Token peek = Lexer_Advance(&tmp_lexer);
+        
         if (EatTokenOfKind(state, Token_CloseBracket))
         {
             *expression = PushNode(state, AST_SliceType);
             type = &(*expression)->unary_expr;
         }
         
-        else if (EatTokenOfKind(state, Token_Elipsis))
+        else if (GetToken(state).kind == Token_Elipsis && peek.kind == Token_CloseBracket)
         {
             *expression = PushNode(state, AST_DynamicArrayType);
             type = &(*expression)->unary_expr;
@@ -1270,9 +1260,9 @@ IsIfWhenOrWhile(Token token, Token peek, Token peek_next)
             check_ident = peek_next.identifier;
         }
         
-        result = (result && (String_IsKeyword(check_ident, Keyword_If) ||
-                             String_IsKeyword(check_ident, Keyword_When) ||
-                             String_IsKeyword(check_ident, Keyword_While)));
+        result = (String_IsKeyword(check_ident, Keyword_If)   ||
+                  String_IsKeyword(check_ident, Keyword_When) ||
+                  String_IsKeyword(check_ident, Keyword_While));
     }
     
     return result;
@@ -1525,8 +1515,20 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 }
             }
             
-            *next_statement = PushNode(state, (is_break ? AST_Break : AST_Continue));
-            (*next_statement)->break_statement.label = label;
+            if (!encountered_errors)
+            {
+                if (!EatTokenOfKind(state, Token_Semicolon))
+                {
+                    //// ERROR: Missing terminating semicolon after statement
+                    encountered_errors = true;
+                }
+                
+                else
+                {
+                    *next_statement = PushNode(state, (is_break ? AST_Break : AST_Continue));
+                    (*next_statement)->break_statement.label = label;
+                }
+            }
         }
         
         else if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Defer))
@@ -1559,35 +1561,43 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             
             if (!encountered_errors)
             {
-                *next_statement = PushNode(state, AST_Return);
-                (*next_statement)->return_statement.values = values;
+                if (!EatTokenOfKind(state, Token_Semicolon))
+                {
+                    //// ERROR: Missing terminating semicolon after statement
+                    encountered_errors = true;
+                }
+                
+                else
+                {
+                    *next_statement = PushNode(state, AST_Return);
+                    (*next_statement)->return_statement.values = values;
+                }
             }
         }
         
         else
         {
-            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, next_statement))
-            {
-                encountered_errors = true;
-            }
-        }
-        
-        if (!EatTokenOfKind(state, Token_Semicolon))
-        {
-            if (((*next_statement)->kind == AST_VariableDecl || (*next_statement)->kind == AST_ConstantDecl) &&
-                (*next_statement)->var_decl.values != 0 && (*next_statement)->var_decl.values->next == 0 &&
-                ((*next_statement)->var_decl.values->kind == AST_Proc   ||
-                 (*next_statement)->var_decl.values->kind == AST_Struct ||
-                 (*next_statement)->var_decl.values->kind == AST_Union  ||
-                 (*next_statement)->var_decl.values->kind == AST_Enum))
-            {
-                // NOTE: Ignore missing semicolon
-            }
-            
+            if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, next_statement)) encountered_errors = true;
             else
             {
-                //// ERROR: Missing terminating semicolon after statement
-                encountered_errors = true;
+                if (!EatTokenOfKind(state, Token_Semicolon))
+                {
+                    if (((*next_statement)->kind == AST_VariableDecl || (*next_statement)->kind == AST_ConstantDecl) &&
+                        (*next_statement)->var_decl.values != 0 && (*next_statement)->var_decl.values->next == 0 &&
+                        ((*next_statement)->var_decl.values->kind == AST_Proc   ||
+                         (*next_statement)->var_decl.values->kind == AST_Struct ||
+                         (*next_statement)->var_decl.values->kind == AST_Union  ||
+                         (*next_statement)->var_decl.values->kind == AST_Enum))
+                    {
+                        // NOTE: Ignore missing semicolon
+                    }
+                    
+                    else
+                    {
+                        //// ERROR: Missing terminating semicolon after statement
+                        encountered_errors = true;
+                    }
+                }
             }
         }
     }

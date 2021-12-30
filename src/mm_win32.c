@@ -90,7 +90,22 @@ Print(char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    NOT_IMPLEMENTED;
+    
+    Memory_Arena_Marker marker = Arena_BeginTempMemory(&Win32_Arena);
+    
+    umm buffer_size = String_FormatArgList((Buffer){0}, format, args);
+    
+    Buffer buffer = {
+        .data = Arena_PushSize(&Win32_Arena, buffer_size, ALIGNOF(u8)),
+        .size = buffer_size,
+    };
+    
+    String_FormatArgList(buffer, format, args);
+    
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer.data, (u32)buffer_size, 0, 0);
+    
+    Arena_EndTempMemory(&Win32_Arena, marker);
+    
     va_end(args);
 }
 
@@ -105,12 +120,18 @@ PrintASTNode(AST_Node* node, umm indent)
 {
     PrintIndent(indent);
     
-    if (node->kind == AST_Scope)
+    if (node == 0)
     {
-        Print("(Scope %S %b)", Identifier_Of(node->scope_statement.label), node->scope_statement.is_do);
+        Print("()");
+    }
+    
+    else if (node->kind == AST_Scope)
+    {
+        Print("(Scope %S %b)\n", Identifier_Of(node->scope_statement.label), node->scope_statement.is_do);
         for (AST_Node* child = node->scope_statement.body; child != 0; child = child->next)
         {
             PrintASTNode(child, indent + 1);
+            Print("\n");
         }
     }
     
@@ -170,101 +191,342 @@ PrintASTNode(AST_Node* node, umm indent)
         Print(")");
     }
     
-    /*
-    AST_Proc,
-    AST_ProcType,
-    AST_Struct,
-    AST_Union,
-    AST_Enum,
-    AST_Directive,
-    AST_Compound,
+    else if (node->kind == AST_Proc || node->kind == AST_ProcType)
+    {
+        Print("(%s (", (node->kind == AST_Proc ? "Proc" : "ProcType"));
+        
+        for (AST_Node* child = node->proc_literal.return_values; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print(") (");
+        
+        for (AST_Node* child = node->proc_literal.params; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print("))");
+        
+        if (node->kind == AST_Proc)
+        {
+            Print("\n");
+            PrintASTNode(node->proc_literal.body, indent);
+        }
+    }
     
-    // precedence 1: 20 - 39
-    AST_FirstTypeLevel = 20,
-    AST_PointerType = AST_FirstTypeLevel,
-    AST_SliceType,
-    AST_ArrayType,
-    AST_DynamicArrayType,
-    AST_LastTypeLevel = AST_DynamicArrayType,
+    else if (node->kind == AST_Struct || node->kind == AST_Union)
+    {
+        Print("(%s (", (node->kind == AST_Struct ? "Struct" : "Union"));
+        
+        for (AST_Node* child = node->struct_type.members; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print(") ");
+    }
     
-    // precedence 2: 40 - 59
-    AST_FirstPostfixLevel = 40,
-    AST_Subscript = AST_FirstPostfixLevel,
-    AST_Slice,
-    AST_Call,
-    AST_ElementOf,
-    AST_UfcsOf,
-    AST_LastPostfixLevel = AST_UfcsOf,
+    else if (node->kind == AST_Enum)
+    {
+        Print("(Enum (");
+        
+        for (AST_Node* child = node->enum_type.members; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print(") ");
+    }
     
-    // precedence 3: 60 - 79
-    AST_FirstPrefixLevel = 60,
-    AST_Negation = AST_FirstPrefixLevel,
-    AST_Complement,
-    AST_Not,
-    AST_Reference,
-    AST_Dereference,
-    AST_Spread,
-    AST_LastPrefixLevel = AST_Spread,
+    else if (node->kind == AST_Directive)
+    {
+        Print("(Directive %S (", Identifier_Of(node->directive.name));
+        
+        for (AST_Node* child = node->directive.params; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print("))");
+    }
     
-    // precedence 4: 80 - 99
-    AST_FirstRangeLevel = 80,
-    AST_ClosedRange = AST_FirstRangeLevel,
-    AST_HalfOpenRange,
-    AST_LastRangeLevel = AST_HalfOpenRange,
+    else if (node->kind == AST_Compound)
+    {
+        Print("(");
+        PrintASTNode(node->compound_expr, 0);
+        Print(")");
+    }
     
-    // precedence 5: 100 - 119
-    AST_FirstMulLevel = 100,
-    AST_Mul = AST_FirstMulLevel,
-    AST_Div,
-    AST_Rem,
-    AST_BitwiseAnd,
-    AST_ArithmeticRightShift,
-    AST_RightShift,
-    AST_LeftShift,
-    AST_LastMulLevel = AST_LeftShift,
+    else if (PRECEDENCE_FROM_KIND(node->kind) >= 4 && PRECEDENCE_FROM_KIND(node->kind) <= 9 ||
+             node->kind == AST_ElementOf || node->kind == AST_UfcsOf)
+    {
+        Print("(");
+        
+        switch (node->kind)
+        {
+            case AST_ClosedRange:          Print("..<"); break;
+            case AST_HalfOpenRange:        Print("..<"); break;
+            case AST_Mul:                  Print("*");   break;
+            case AST_Div:                  Print("/");   break;
+            case AST_Rem:                  Print("%");   break;
+            case AST_BitwiseAnd:           Print("&");   break;
+            case AST_ArithmeticRightShift: Print(">>>"); break;
+            case AST_RightShift:           Print(">>");  break;
+            case AST_LeftShift:            Print("<<");  break;
+            case AST_Add:                  Print("+");   break;
+            case AST_Sub:                  Print("-");   break;
+            case AST_BitwiseOr:            Print("|");   break;
+            case AST_BitwiseXor:           Print("^");   break;
+            case AST_IsEqual:              Print("==");  break;
+            case AST_IsNotEqual:           Print("!=");  break;
+            case AST_IsStrictlyLess:       Print("<");   break;
+            case AST_IsStrictlyGreater:    Print(">");   break;
+            case AST_IsLess:               Print("<=");  break;
+            case AST_IsGreater:            Print(">=");  break;
+            case AST_And:                  Print("&&");  break;
+            case AST_Or:                   Print("||");  break;
+            case AST_ElementOf:            Print(".");   break;
+            case AST_UfcsOf:               Print("->");  break;
+            INVALID_DEFAULT_CASE;
+        }
+        
+        Print(" ");
+        PrintASTNode(node->binary_expr.left, 0);
+        Print(" ");
+        PrintASTNode(node->binary_expr.right, 0);
+        Print(")");
+    }
     
-    // precedence 6: 120 - 139
-    AST_FirstAddLevel = 120,
-    AST_Add = AST_FirstAddLevel,
-    AST_Sub,
-    AST_BitwiseOr,
-    AST_BitwiseXor,
-    AST_LastAddLevel = AST_BitwiseOr,
+    else if (PRECEDENCE_FROM_KIND(node->kind) == 1 || PRECEDENCE_FROM_KIND(node->kind) == 3)
+    {
+        Print("(");
+        
+        switch (node->kind)
+        {
+            case AST_PointerType:      Print("PtrType");      break;
+            case AST_SliceType:        Print("SliceType");    break;
+            case AST_DynamicArrayType: Print("DynArrayType"); break;
+            case AST_Negation:         Print("-");            break;
+            case AST_Complement:       Print("~");            break;
+            case AST_Not:              Print("!");            break;
+            case AST_Reference:        Print("Ref");          break;
+            case AST_Dereference:      Print("Deref");        break;
+            case AST_Spread:           Print("Spread");       break;
+            
+            case AST_ArrayType:
+            {
+                Print("(ArrayType ");
+                PrintASTNode(node->array_type.size, 0);
+            } break;
+            
+            INVALID_DEFAULT_CASE;
+        }
+        
+        Print(" ");
+        if (node->kind == AST_ArrayType) PrintASTNode(node->array_type.elem_type, 0);
+        else                             PrintASTNode(node->unary_expr, 0);
+        Print(")");
+    }
     
-    // precedence 7: 140 - 159
-    AST_FirstComparative = 140,
-    AST_IsEqual = AST_FirstComparative,
-    AST_IsNotEqual,
-    AST_IsStrictlyLess,
-    AST_IsStrictlyGreater,
-    AST_IsLess,
-    AST_IsGreater,
-    AST_LastComparative = AST_IsGreater,
+    else if (node->kind == AST_Subscript)
+    {
+        Print("(Subs ");
+        PrintASTNode(node->subscript_expr.index, 0);
+        Print(" ");
+        PrintASTNode(node->subscript_expr.array, 0);
+        Print(")");
+    }
     
-    // precedence 8: 160 - 179
-    AST_And = 160,
+    else if (node->kind == AST_Slice)
+    {
+        Print("(Slice ");
+        PrintASTNode(node->slice_expr.start, 0);
+        Print(" ");
+        PrintASTNode(node->slice_expr.one_after_end, 0);
+        Print(" ");
+        PrintASTNode(node->slice_expr.array, 0);
+        Print(")");
+    }
     
-    // precedence 9: 180 - 199
-    AST_Or = 180,
+    else if (node->kind == AST_Call)
+    {
+        Print("(Call ");
+        PrintASTNode(node->call_expr.func, 0);
+        Print(" (");
+        
+        for (AST_Node* child = node->call_expr.params; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print("))");
+    }
     
-    // precedence 10: 200 - 219
-    AST_Conditional,
-    AST_LastExpression = AST_Conditional,
+    else if (node->kind == AST_Conditional)
+    {
+        Print("(Cond ");
+        PrintASTNode(node->conditional_expr.condition, 0);
+        Print(" ");
+        PrintASTNode(node->conditional_expr.true_clause, 0);
+        Print(" ");
+        PrintASTNode(node->conditional_expr.false_clause, 0);
+        Print(")");
+    }
     
-    AST_If,
-    AST_When,
-    AST_While,
-    AST_Break,
-    AST_Continue,
-    AST_Defer,
-    AST_Return,
-    AST_Using,
-    AST_Assignment,
+    else if (node->kind == AST_If)
+    {
+        Print("(If ");
+        PrintASTNode(node->if_statement.init, 0);
+        Print(" ");
+        PrintASTNode(node->if_statement.condition, 0);
+        Print(")\n");
+        PrintASTNode(node->if_statement.true_body, indent);
+        PrintASTNode(node->if_statement.false_body, indent);
+    }
     
-    AST_VariableDecl,
-    AST_ConstantDecl,
-    AST_IncludeDecl,
-*/
+    else if (node->kind == AST_When)
+    {
+        Print("(When ");
+        PrintASTNode(node->when_statement.init, 0);
+        Print(" ");
+        PrintASTNode(node->when_statement.condition, 0);
+        Print(")\n");
+        PrintASTNode(node->when_statement.true_body, indent);
+        PrintASTNode(node->when_statement.false_body, indent);
+    }
+    
+    else if (node->kind == AST_While)
+    {
+        Print("(While ");
+        PrintASTNode(node->while_statement.init, 0);
+        Print(" ");
+        PrintASTNode(node->while_statement.condition, 0);
+        Print(" ");
+        PrintASTNode(node->while_statement.step, 0);
+        Print(")\n");
+        PrintASTNode(node->while_statement.body, indent);
+    }
+    
+    else if (node->kind == AST_Break || node->kind == AST_Continue)
+    {
+        Print("(%s %S)", (node->kind == AST_Break ? "Break" : "Continue"), Identifier_Of(node->break_statement.label));
+    }
+    
+    else if (node->kind == AST_Defer)
+    {
+        Print("(Defer)\n");
+        PrintASTNode(node->defer_statement, indent);
+    }
+    
+    else if (node->kind == AST_Return)
+    {
+        Print("(Return (");
+        
+        for (AST_Node* child = node->return_statement.values; child != 0; child = child->next)
+        {
+            PrintASTNode(child, 0);
+            if (child->next != 0) Print(", ");
+        }
+        
+        Print("))");
+    }
+    
+    else if (node->kind == AST_Using)
+    {
+        Print("(Using ");
+        PrintASTNode(node->using_statement, 0);
+        Print(")");
+    }
+    
+    else if (node->kind == AST_Assignment)
+    {
+        Print("(");
+        switch (node->assignment_statement.kind)
+        {
+            case AST_Mul:                  Print("*");   break;
+            case AST_Div:                  Print("/");   break;
+            case AST_Rem:                  Print("%");   break;
+            case AST_BitwiseAnd:           Print("&");   break;
+            case AST_ArithmeticRightShift: Print(">>>"); break;
+            case AST_RightShift:           Print(">>");  break;
+            case AST_LeftShift:            Print("<<");  break;
+            case AST_Add:                  Print("+");   break;
+            case AST_Sub:                  Print("-");   break;
+            case AST_BitwiseOr:            Print("|");   break;
+            case AST_BitwiseXor:           Print("^");   break;
+            case AST_And:                  Print("&&");  break;
+            case AST_Or:                   Print("||");  break;
+            INVALID_DEFAULT_CASE;
+        }
+        
+        Print("= ");
+        PrintASTNode(node->assignment_statement.left, 0);
+        Print(" ");
+        PrintASTNode(node->assignment_statement.right, 0);
+        Print(")");
+    }
+    
+    else if (node->kind == AST_VariableDecl)
+    {
+        Print("(");
+        
+        for (AST_Node* name = node->var_decl.names; name != 0; name = name->next)
+        {
+            PrintASTNode(name, 0);
+            if (name->next != 0) Print(", ");
+        }
+        
+        Print(":");
+        PrintASTNode(node->var_decl.type, 0);
+        
+        Print("=");
+        
+        for (AST_Node* value = node->var_decl.values; value != 0; value = value->next)
+        {
+            PrintASTNode(value, 0);
+            if (value->next != 0) Print(", ");
+        }
+        
+        Print(")");
+    }
+    
+    else if (node->kind == AST_ConstantDecl)
+    {
+        Print("(");
+        
+        for (AST_Node* name = node->var_decl.names; name != 0; name = name->next)
+        {
+            PrintASTNode(name, 0);
+            if (name->next != 0) Print(", ");
+        }
+        
+        Print(":");
+        PrintASTNode(node->var_decl.type, 0);
+        
+        Print(":");
+        
+        for (AST_Node* value = node->var_decl.values; value != 0; value = value->next)
+        {
+            PrintASTNode(value, 0);
+            if (value->next != 0) Print(", ");
+        }
+        
+        Print(")");
+    }
+    
+    else
+    {
+        ASSERT(node->kind == AST_IncludeDecl);
+        Print("(Include %S)", StringLiteral_Of(node->include.path));
+    }
 }
 
 internal void
@@ -273,6 +535,7 @@ PrintAST()
     for (AST_Node* node = MM.ast; node != 0; node = node->next)
     {
         PrintASTNode(node, 0);
+        Print("\n");
     }
 }
 
@@ -305,7 +568,7 @@ ParseCommandLineArguments(u8* command_line, Command_Line_Arguments* args)
         
         String exe_dir = {
             .data = command_line,
-            .size = (last_slash - scan) + 1
+            .size = (last_slash - command_line) + 1
         };
         String addend = STRING("core/");
         args->path_labels[0].path.data = Arena_PushSize(&Win32_Arena, exe_dir.size + addend.size, ALIGNOF(u8));
@@ -323,10 +586,8 @@ ParseCommandLineArguments(u8* command_line, Command_Line_Arguments* args)
         .size = 0,
     };
     
-    last_slash = scan;
     while (*scan != 0 && *scan != ' ')
     {
-        if (*scan == '\\') last_slash = scan;
         ++scan;
     }
     
@@ -340,19 +601,20 @@ ParseCommandLineArguments(u8* command_line, Command_Line_Arguments* args)
     
     else
     {
-        if (String_Compare(main_file, STRING("C:\\"))) args->main_file = main_file;
+        // HACK: fix this
+        if (String_HasPrefix(String_Tail(main_file, 1), STRING(":\\"))) args->main_file = main_file;
         else
         {
             umm required_size = GetCurrentDirectory(0, 0);
             
             args->main_file = (String){
                 .data = Arena_PushSize(&Win32_Arena, required_size + main_file.size - 1, ALIGNOF(u8)),
-                .size = required_size - 1,
+                .size = required_size + main_file.size,
             };
             
             GetCurrentDirectory((DWORD)args->main_file.size, (LPSTR)args->main_file.data);
-            
-            Copy(main_file.data, args->main_file.data + required_size - 1, main_file.size);
+            args->main_file.data[required_size - 1] = '/';
+            Copy(main_file.data, args->main_file.data + required_size, main_file.size);
         }
     }
     
@@ -369,7 +631,7 @@ WinMainCRTStartup()
     {
         if (MM_Init(args.main_file, args.path_labels, args.path_label_count))
         {
-            NOT_IMPLEMENTED;
+            PrintAST();
         }
     }
     

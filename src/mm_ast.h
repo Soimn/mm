@@ -157,14 +157,12 @@ typedef struct AST_Node
         struct
         {
             struct AST_Node* members;
-            bool is_decl;
         } struct_type, union_type;
         
         struct
         {
             struct AST_Node* elem_type;
             struct AST_Node* members;
-            bool is_decl;
         } enum_type;
         
         struct

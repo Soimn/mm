@@ -287,6 +287,12 @@ String_HasPrefix(String string, String prefix)
     return String_Compare((String){string.data, prefix.size}, prefix);
 }
 
+internal String
+String_Tail(String string, umm index)
+{
+    return (String){.data = string.data + index, .size = string.size - index};
+}
+
 internal u64
 String_Hash(String string)
 {

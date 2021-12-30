@@ -121,9 +121,9 @@ Arena_PushSize(Memory_Arena* arena, umm size, u8 alignment)
         System_GrowArena(arena, offset + size - arena->size);
     }
     
-    arena->offset = offset;
+    arena->offset = offset + size;
     
-    return (void*)offset;
+    return (void*)(arena->base_address + offset);
 }
 
 internal inline void
