@@ -489,8 +489,6 @@ PrintASTNode(AST_Node* node, umm indent)
     else if (node->kind == AST_When)
     {
         Print("(When ");
-        PrintASTNode(node->when_statement.init, 0);
-        Print(" ");
         PrintASTNode(node->when_statement.condition, 0);
         Print(")\n");
         PrintASTNode(node->when_statement.true_body, indent);
@@ -536,7 +534,7 @@ PrintASTNode(AST_Node* node, umm indent)
     else if (node->kind == AST_Using)
     {
         Print("(Using ");
-        PrintASTNode(node->using_statement, 0);
+        PrintASTNode(node->using_statement.expression, 0);
         Print(")");
     }
     
@@ -620,16 +618,6 @@ PrintASTNode(AST_Node* node, umm indent)
     {
         ASSERT(node->kind == AST_IncludeDecl);
         Print("(Include %S)", StringLiteral_Of(node->include.path));
-    }
-}
-
-internal void
-PrintAST()
-{
-    for (AST_Node* node = MM.ast; node != 0; node = node->next)
-    {
-        PrintASTNode(node, 0);
-        Print("\n");
     }
 }
 
@@ -791,7 +779,12 @@ WinMainCRTStartup()
     {
         if (MM_Init(args.main_file, args.path_labels, args.path_label_count))
         {
-            PrintAST();
+            AST_Node* decl;
+            if (MM_ResolveNextDecl(&decl))
+            {
+                PrintASTNode(decl, 0);
+                Print("\n");
+            }
         }
     }
     

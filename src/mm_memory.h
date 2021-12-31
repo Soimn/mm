@@ -111,7 +111,7 @@ typedef struct Memory_Arena
     u64 size;
 } Memory_Arena;
 
-internal inline void*
+internal void*
 Arena_PushSize(Memory_Arena* arena, umm size, u8 alignment)
 {
     u64 offset = arena->offset + AlignOffset((void*)(arena->base_address + arena->offset), alignment);
@@ -124,6 +124,13 @@ Arena_PushSize(Memory_Arena* arena, umm size, u8 alignment)
     arena->offset = offset + size;
     
     return (void*)(arena->base_address + offset);
+}
+
+internal inline void
+Arena_PopSize(Memory_Arena* arena, umm size)
+{
+    ASSERT(arena->offset > size);
+    arena->offset -= size;
 }
 
 internal inline void
@@ -142,4 +149,57 @@ internal void
 Arena_EndTempMemory(Memory_Arena* arena, Memory_Arena_Marker marker)
 {
     arena->offset = marker.offset;
+}
+
+internal umm
+Arena_UsedSize(Memory_Arena* arena)
+{
+    return arena->offset;
+}
+
+typedef struct DynArray
+{
+    Memory_Arena arena;
+    u64 elem_size;
+} DynArray;
+
+internal DynArray
+DynArray__Init(umm elem_size)
+{
+    DynArray array = { .elem_size = elem_size };
+    System_InitArena(&array.arena);
+    
+    return array;
+}
+
+#define DynArray_Init(T) DynArray__Init(sizeof(T))
+
+internal umm
+DynArray_Size(DynArray* array)
+{
+    return Arena_UsedSize(&array->arena) / array->elem_size;
+}
+
+internal void*
+DynArray_Push(DynArray* array)
+{
+    return Arena_PushSize(&array->arena, array->elem_size, 1);
+}
+
+internal void
+DynArray_Pop(DynArray* array)
+{
+    Arena_PopSize(&array->arena, array->elem_size);
+}
+
+internal void*
+DynArray_PushMulti(DynArray* array, umm element_count)
+{
+    return Arena_PushSize(&array->arena, array->elem_size * element_count, 1);
+}
+
+internal void
+DynArray_PopMulti(DynArray* array, umm element_count)
+{
+    Arena_PopSize(&array->arena, array->elem_size * element_count);
 }

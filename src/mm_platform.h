@@ -248,9 +248,10 @@ typedef struct MM_State
             Memory_Arena ast_arena;
             Memory_Arena intern_arena;
             Memory_Arena temp_arena;
+            Memory_Arena check_arena;
         };
         
-        Memory_Arena arena_bank[4];
+        Memory_Arena arena_bank[5];
     };
     
     File* first_file;
@@ -261,11 +262,14 @@ typedef struct MM_State
     u32 path_label_count;
     
     struct AST_Node* ast;
-    struct AST_Node* last_node;
+    struct AST_Node* ast_last_node;
+    
+    bool encountered_errors;
     
     Interned_String keyword_strings[KEYWORD_COUNT];
     
     Interned_String intern_table[512];
+    struct Symbol* global_symbol_table[512];
 } MM_State;
 
 global MM_State MM;
@@ -275,6 +279,7 @@ global MM_State MM;
 #include "mm_ast.h"
 #include "mm_symbols.h"
 #include "mm_parser.h"
+#include "mm_checker.h"
 
 internal File*
 MM_GetFile(File_ID id)

@@ -119,6 +119,9 @@ typedef struct AST_Node
 {
     Enum8(AST_NODE_KIND) kind;
     
+    File_ID file_id;
+    u32 file_offset;
+    
     struct AST_Node* next;
     
     union
@@ -226,7 +229,14 @@ typedef struct AST_Node
             struct AST_Node* condition;
             struct AST_Node* true_body;
             struct AST_Node* false_body;
-        } if_statement, when_statement;
+        } if_statement;
+        
+        struct
+        {
+            struct AST_Node* condition;
+            struct AST_Node* true_body;
+            struct AST_Node* false_body;
+        } when_statement;
         
         struct
         {
@@ -243,7 +253,11 @@ typedef struct AST_Node
         
         struct AST_Node* defer_statement;
         
-        struct AST_Node* using_statement;
+        struct 
+        {
+            struct AST_Node* expression;
+            struct Symbol* symbol;
+        } using_statement;
         
         struct
         {
@@ -262,6 +276,7 @@ typedef struct AST_Node
             struct AST_Node* names;
             struct AST_Node* type;
             struct AST_Node* values;
+            struct Symbol* symbol;
             bool is_uninitialized;
             bool is_using;
         } var_decl, const_decl;
@@ -269,7 +284,7 @@ typedef struct AST_Node
         struct
         {
             Interned_String path;
-            File_ID id;
+            File_ID file_id;
         } include;
     };
 } AST_Node;

@@ -371,7 +371,7 @@ ParseUsingExpressionAssignmentVarOrConstDecl(Parser_State* state, bool eat_multi
             if (is_using)
             {
                 *node = PushNode(state, AST_Using);
-                (*node)->using_statement = expressions;
+                (*node)->using_statement.expression = expressions;
             }
             
             else
@@ -1378,7 +1378,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                 }
             }
             
-            if (!encountered_errors)
+            if (!encountered_errors && !is_when)
             {
                 if (EatTokenOfKind(state, Token_Semicolon))
                 {
@@ -1391,9 +1391,9 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                         }
                     }
                     
-                    if (!encountered_errors)
+                    if (!encountered_errors && is_while)
                     {
-                        if (is_while && EatTokenOfKind(state, Token_Semicolon))
+                        if (EatTokenOfKind(state, Token_Semicolon))
                         {
                             if (!ParseUsingExpressionAssignmentVarOrConstDecl(state, true, &third))
                             {
@@ -1443,7 +1443,15 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                         SkipTokens(state, 1);
                         token = GetToken(state);
                         
-                        if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_If))
+                        if (!is_when && token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_If))
+                        {
+                            if (!ParseStatement(state, &false_body))
+                            {
+                                encountered_errors = true;
+                            }
+                        }
+                        
+                        else if (is_when && token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_When))
                         {
                             if (!ParseStatement(state, &false_body))
                             {
@@ -1468,23 +1476,33 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                     
                     if (!encountered_errors)
                     {
-                        if (is_when) *next_statement = PushNode(state, AST_When);
-                        else         *next_statement = PushNode(state, AST_If);
-                        
-                        if (first && !second)
+                        if (is_when)
                         {
-                            (*next_statement)->if_statement.init      = 0;
-                            (*next_statement)->if_statement.condition = first;
+                            *next_statement = PushNode(state, AST_When);
+                            (*next_statement)->when_statement.condition = first;
+                            (*next_statement)->when_statement.true_body  = body;
+                            (*next_statement)->when_statement.false_body = false_body;
                         }
                         
                         else
                         {
-                            (*next_statement)->if_statement.init      = first;
-                            (*next_statement)->if_statement.condition = second;
+                            *next_statement = PushNode(state, AST_If);
+                            
+                            if (first && !second)
+                            {
+                                (*next_statement)->if_statement.init      = 0;
+                                (*next_statement)->if_statement.condition = first;
+                            }
+                            
+                            else
+                            {
+                                (*next_statement)->if_statement.init      = first;
+                                (*next_statement)->if_statement.condition = second;
+                            }
+                            
+                            (*next_statement)->if_statement.true_body  = body;
+                            (*next_statement)->if_statement.false_body = false_body;
                         }
-                        
-                        (*next_statement)->if_statement.true_body  = body;
-                        (*next_statement)->if_statement.false_body = false_body;
                     }
                 }
             }
@@ -1617,7 +1635,7 @@ ParseFile(File* file)
     // NOTE: initialize state.current_token
     SkipTokens(&state, 1);
     
-    AST_Node** next_statement = (MM.ast == 0 ? &MM.ast : &MM.last_node->next);
+    AST_Node** next_statement = (MM.ast == 0 ? &MM.ast : &MM.ast_last_node->next);
     
     while (!encountered_errors)
     {
@@ -1629,8 +1647,8 @@ ParseFile(File* file)
             {
                 if (next_statement != 0)
                 {
-                    MM.last_node   = *next_statement;
-                    next_statement = &(*next_statement)->next;
+                    MM.ast_last_node = *next_statement;
+                    next_statement          = &(*next_statement)->next;
                 }
             }
         }

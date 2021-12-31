@@ -373,6 +373,13 @@ String_Intern(String string)
     return result;
 }
 
+internal u32
+String_HashOfInternedString(Interned_String string)
+{
+    Interned_String_Entry* entry = STRING_TO_ENTRY_POINTER(string);
+    return entry->hash;
+}
+
 internal String
 Identifier_Of(Interned_String istring)
 {
