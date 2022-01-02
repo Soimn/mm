@@ -413,10 +413,18 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         }
     }
     
-    else if (token.kind == Token_Number)
+    else if (token.kind == Token_Int)
     {
-        *expression = PushNode(state, AST_Number);
-        (*expression)->number = token.number;
+        *expression = PushNode(state, AST_Int);
+        (*expression)->integer = token.integer;
+        
+        SkipTokens(state, 1);
+    }
+    
+    else if (token.kind == Token_Float)
+    {
+        *expression = PushNode(state, AST_Float);
+        (*expression)->floating = token.floating;
         
         SkipTokens(state, 1);
     }
@@ -829,7 +837,7 @@ ParseTypeLevelExpression(Parser_State* state, AST_Node** expression)
         
         else if (GetToken(state).kind == Token_Elipsis && peek.kind == Token_CloseBracket)
         {
-            *expression = PushNode(state, AST_DynamicArrayType);
+            *expression = PushNode(state, AST_DynArrayType);
             type = &(*expression)->unary_expr;
             
             if (!EatTokenOfKind(state, Token_CloseBracket))

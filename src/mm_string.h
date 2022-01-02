@@ -450,3 +450,19 @@ Character_ToCodepoint(Character c)
     
     return codepoint;
 }
+
+umm
+String_CountChars(String string)
+{
+    umm char_count = 0;
+    
+    for (umm i = 0; i < string.size; ++char_count)
+    {
+        if      ((string.data[i] & 0x80) == 0x00) i += 1;
+        else if ((string.data[i] & 0xE0) == 0xC0) i += 2;
+        else if ((string.data[i] & 0xF0) == 0xE0) i += 3;
+        else                                      i += 4;
+    }
+    
+    return char_count;
+}

@@ -78,7 +78,8 @@ enum TOKEN_KIND
     Token_Identifier = 200,
     Token_String,
     Token_Character,
-    Token_Number,
+    Token_Int,
+    Token_Float,
     
     Token_EndOfStream,
 };
@@ -95,7 +96,8 @@ typedef struct Token
     {
         String raw_string;
         Interned_String identifier;
-        Number number;
+        u64 integer;
+        f64 floating;
     };
     
 } Token;
@@ -608,17 +610,14 @@ Lexer_Advance(Lexer* lexer)
                                 f32 f;
                                 Copy(&integer, &f, sizeof(u32));
                                 
-                                token.kind = Token_Number;
-                                token.number.is_float = true;
-                                token.number.floating = f;
+                                token.kind     = Token_Float;
+                                token.floating = f;
                             }
                             
                             else if (digit_count == 16)
                             {
-                                Copy(&integer, &token.number.floating, sizeof(u32));
-                                
-                                token.kind = Token_Number;
-                                token.number.is_float    = true;
+                                token.kind = Token_Float;
+                                Copy(&integer, &token.floating, sizeof(u32));
                             }
                             
                             else
@@ -674,17 +673,15 @@ Lexer_Advance(Lexer* lexer)
                                 }
                             }
                             
-                            token.kind = Token_Number;
-                            token.number.is_float = true;
-                            token.number.floating = (integer + fraction) * adjustment;
+                            token.kind     = Token_Float;
+                            token.floating = (integer + fraction) * adjustment;
                         }
                     }
                     
                     else
                     {
-                        token.kind = Token_Number;
-                        token.number.is_float = false;
-                        token.number.integer  = integer;
+                        token.kind    = Token_Int;
+                        token.integer = integer;
                     }
                 }
             }

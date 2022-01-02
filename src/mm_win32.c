@@ -34,7 +34,7 @@ Print(char* format, ...)
     
     String_FormatArgList(buffer, format, args);
     
-    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer.data, (u32)buffer_size, 0, 0);
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer.data, (u32)buffer_size - 1, 0, 0);
     
     Arena_EndTempMemory(&Win32_Temp_Arena, marker);
     
@@ -244,10 +244,14 @@ PrintASTNode(AST_Node* node, umm indent)
         Print("(U+%u)", Character_ToCodepoint(node->character));
     }
     
-    else if (node->kind == AST_Number)
+    else if (node->kind == AST_Int)
     {
-        if (node->number.is_float) Print("(%f)", node->number.floating);
-        else                       Print("(%U)", node->number.integer);
+        Print("(%U)", node->integer);
+    }
+    
+    else if (node->kind == AST_Float)
+    {
+        Print("(%f)", node->floating);
     }
     
     else if (node->kind == AST_Boolean)
@@ -406,7 +410,7 @@ PrintASTNode(AST_Node* node, umm indent)
         {
             case AST_PointerType:      Print("PtrType");      break;
             case AST_SliceType:        Print("SliceType");    break;
-            case AST_DynamicArrayType: Print("DynArrayType"); break;
+            case AST_DynArrayType:     Print("DynArrayType"); break;
             case AST_Negation:         Print("-");            break;
             case AST_Complement:       Print("~");            break;
             case AST_Not:              Print("!");            break;
@@ -780,11 +784,13 @@ WinMainCRTStartup()
         if (MM_Init(args.main_file, args.path_labels, args.path_label_count))
         {
             AST_Node* decl;
-            if (MM_ResolveNextDecl(&decl))
+            while (MM_ResolveNextDecl(&decl))
             {
                 PrintASTNode(decl, 0);
                 Print("\n");
             }
+            
+            if (MM.encountered_errors) Print("Encountered errors\n");
         }
     }
     

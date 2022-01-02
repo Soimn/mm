@@ -160,17 +160,6 @@ typedef String Path;
 
 typedef u32 Interned_String;
 
-typedef struct Number
-{
-    union
-    {
-        u64 integer;
-        f64 floating;
-    };
-    
-    bool is_float;
-} Number;
-
 typedef union Character
 {
     u32 word;
@@ -222,6 +211,13 @@ typedef struct File
         u32 offset;
     } includer;
 } File;
+
+typedef u32 Type_ID;
+
+// NOTE: ugly hack due to 4coder parsing bug
+struct Symbol;
+typedef struct Symbol* _Symbol_Table;
+typedef _Symbol_Table Symbol_Table;
 
 struct Memory_Arena;
 internal void System_InitArena(struct Memory_Arena* arena);

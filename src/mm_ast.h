@@ -7,7 +7,8 @@ enum AST_NODE_KIND
     AST_Identifier = AST_FirstExpression,
     AST_String,
     AST_Char,
-    AST_Number,
+    AST_Int,
+    AST_Float,
     AST_Boolean,
     AST_StructLiteral,
     AST_ArrayLiteral,
@@ -24,8 +25,8 @@ enum AST_NODE_KIND
     AST_PointerType = AST_FirstTypeLevel,
     AST_SliceType,
     AST_ArrayType,
-    AST_DynamicArrayType,
-    AST_LastTypeLevel = AST_DynamicArrayType,
+    AST_DynArrayType,
+    AST_LastTypeLevel = AST_DynArrayType,
     
     // precedence 2: 40 - 59
     AST_FirstPostfixLevel = 40,
@@ -129,7 +130,8 @@ typedef struct AST_Node
         Interned_String identifier;
         Interned_String string;
         Character character;
-        Number number;
+        u64 integer;
+        f64 floating;
         bool boolean;
         
         struct
@@ -220,6 +222,7 @@ typedef struct AST_Node
         {
             struct AST_Node* body;
             Interned_String label;
+            Symbol_Table symbol_table;
             bool is_do;
         } scope_statement;
         
