@@ -1,3 +1,6 @@
+// TODO: the checker relies too much on the c type system
+// TODO: common type might conflict with procedures without return values
+
 enum CHECK_RESULT
 {
     Check_Error,      // NOTE: the decl is erroneous
@@ -184,19 +187,136 @@ CheckExpression(AST_Node* expr, Check_Info* info) // context info
             if (rhs_result != Check_Complete) result = rhs_result;
             else
             {
+                if (expr->kind == AST_ElementOf)
+                {
+                    NOT_IMPLEMENTED;
+                }
                 
-                /*
-                AST_IsEqual = AST_FirstComparative,
-                AST_IsNotEqual,
-                AST_IsStrictlyLess,
-                AST_IsStrictlyGreater,
-                AST_IsLess,
-                AST_IsGreater,
+                else if (expr->kind == AST_UfcsOf)
+                {
+                    NOT_IMPLEMENTED;
+                }
                 
-        expr->kind == AST_ElementOf || expr->kind == AST_UfcsOf
-                */
+                else if (expr->kind >= AST_FirstComparative && expr->kind <= AST_LastComparative)
+                {
+                    Type_ID common_type = Type_CommonType(lhs_info.type, rhs_info.type);
+                    
+                    if (common_type == Type_Nil)
+                    {
+                        //// ERROR: no common type between both sides of comparative operator
+                        result = Check_Error;
+                    }
+                    
+                    else if (Type_IsNumeric(common_type) || Type_IsBoolean(common_type) || common_type == Type_Char ||
+                             ((expr->kind == AST_IsEqual || expr->kind == AST_IsNotEqual) && (common_type == Type_Typeid || common_type == Type_String || common_type == Type_Cstring)))
+                    {
+                        //// ERROR: Illegal comparision
+                        result = Check_Error;
+                    }
+                    
+                    else
+                    {
+                        result = Check_Complete;
+                        
+                        *info = (Check_Info){
+                            .type     = common_type,
+                            .is_const = (lhs_info.is_const && rhs_info.is_const)
+                        };
+                    }
+                    
+                    bool val = false;
+                    
+                    switch (expr->kind)
+                    {
+                        case AST_IsEqual:
+                        case AST_IsNotEqual:
+                        {
+                            if (Type_IsBoolean(common_type))
+                            {
+                                val = (ConstVal_ToBool(lhs_info.const_val) == ConstVal_ToBool(rhs_info.const_val));
+                            }
+                            
+                            else if (Type_IsIntegral(common_type))
+                            {
+                                val = (ConstVal_ToU64(lhs_info.const_val) == ConstVal_ToU64(rhs_info.const_val));
+                            }
+                            
+                            else if (Type_IsFloating(common_type))
+                            {
+                                val = (ConstVal_ToF64(lhs_info.const_val) == ConstVal_ToF64(rhs_info.const_val));
+                            }
+                            
+                            else if (common_type == Type_Char)
+                            {
+                                val = (ConstVal_ToChar(lhs_info.const_val).word == ConstVal_ToChar(rhs_info.const_val).word);
+                            }
+                            
+                            else if (common_type == Type_Typeid)
+                            {
+                                val = (ConstVal_ToTypeid(lhs_info.const_val) == ConstVal_ToTypeid(rhs_info.const_val));
+                            }
+                            
+                            else if (common_type == Type_Cstring || common_type == Type_String)
+                            {
+                                val = (ConstVal_ToString(lhs_info.const_val) == ConstVal_ToString(rhs_info.const_val));
+                            }
+                            
+                            val ^= (expr->kind == AST_IsNotEqual);
+                        } break;
+                        
+                        case AST_IsLess:
+                        case AST_IsStrictlyGreater:
+                        {
+                            if (Type_IsIntegral(common_type))
+                            {
+                                val = (ConstVal_ToU64(lhs_info.const_val) <= ConstVal_ToU64(rhs_info.const_val));
+                            }
+                            
+                            else if (Type_IsFloating(common_type))
+                            {
+                                val = (ConstVal_ToF64(lhs_info.const_val) <= ConstVal_ToF64(rhs_info.const_val));
+                            }
+                            
+                            else
+                            {
+                                ASSERT(common_type == Type_Char);
+                                
+                                val = (ConstVal_ToChar(lhs_info.const_val).word <= ConstVal_ToChar(rhs_info.const_val).word);
+                            }
+                            
+                            val ^= (expr->kind == AST_IsStrictlyGreater);
+                        } break;
+                        
+                        case AST_IsGreater:
+                        case AST_IsStrictlyLess: 
+                        {
+                            if (Type_IsIntegral(common_type))
+                            {
+                                val = (ConstVal_ToU64(lhs_info.const_val) >= ConstVal_ToU64(rhs_info.const_val));
+                            }
+                            
+                            else if (Type_IsFloating(common_type))
+                            {
+                                val = (ConstVal_ToF64(lhs_info.const_val) >= ConstVal_ToF64(rhs_info.const_val));
+                            }
+                            
+                            else
+                            {
+                                ASSERT(common_type == Type_Char);
+                                
+                                val = (ConstVal_ToChar(lhs_info.const_val).word >= ConstVal_ToChar(rhs_info.const_val).word);
+                            }
+                            
+                            val ^= (expr->kind == AST_IsStrictlyLess);
+                        } break;
+                        
+                        INVALID_DEFAULT_CASE;
+                    }
+                    
+                    info->const_val = ConstVal_FromBool(val);
+                }
                 
-                if (expr->kind == AST_ClosedRange || expr->kind == AST_HalfOpenRange)
+                else if (expr->kind == AST_ClosedRange || expr->kind == AST_HalfOpenRange)
                 {
                     if (!Type_IsIntegral(lhs_info.type))
                     {
@@ -225,10 +345,13 @@ CheckExpression(AST_Node* expr, Check_Info* info) // context info
                             result = Check_Error;
                             
                             *info = (Check_Info){
-                                .type = common_type,
+                                .type     = Type_RangeOf(common_type, expr->kind == AST_HalfOpenRange),
+                                .is_const = (lhs_info.is_const && rhs_info.is_const),
+                                .const_val = ConstVal_FromRange((Range){
+                                                                    .start = ConstVal_ToU64(lhs_info.const_val),
+                                                                    .end   = ConstVal_ToU64(lhs_info.const_val),
+                                                                })
                             };
-                            
-                            NOT_IMPLEMENTED; // TODO: const range
                         }
                     }
                 }
@@ -297,127 +420,113 @@ CheckExpression(AST_Node* expr, Check_Info* info) // context info
                 else if (expr->kind >= AST_Mul && expr->kind <= AST_Rem ||
                          expr->kind >= AST_Add && expr->kind <= AST_Sub)
                 {
-                    if (!Type_IsNumeric(lhs_info.type))
+                    Type_ID common_type   = Type_CommonType(lhs_info.type, rhs_info.type);
+                    Type_ID stripped_type = Type_StripAlias(common_type);
+                    
+                    if (common_type == Type_Nil)
                     {
-                        //// ERROR: left hand side of arithmetic operator must be of numeric type
+                        //// ERROR: no common type between both sides of arithmetic operator
                         result = Check_Error;
                     }
                     
-                    else if (!Type_IsNumeric(rhs_info.type))
+                    else if (!Type_IsNumeric(stripped_type))
                     {
-                        //// ERROR: right hand side of arithmetic operator must be of numeric type
+                        //// ERROR: both sides of arithmetic operator must be of numerical type
                         result = Check_Error;
                     }
                     
                     else
                     {
-                        Type_ID common_type = Type_CommonType(lhs_info.type, rhs_info.type);
+                        result = Check_Complete;
                         
-                        if (common_type == Type_Nil)
-                        {
-                            //// ERROR: no common type between both sides of arithmetic operator
-                            result = Check_Error;
-                        }
+                        *info = (Check_Info){
+                            .type     = common_type,
+                            .is_const = (lhs_info.is_const && rhs_info.is_const)
+                        };
                         
-                        else
+                        common_type = Type_StripAlias(common_type);
+                        if (Type_IsIntegral(common_type))
                         {
-                            result = Check_Complete;
+                            u64 val = 0;
                             
-                            *info = (Check_Info){
-                                .type     = common_type,
-                                .is_const = (lhs_info.is_const && rhs_info.is_const)
-                            };
-                            
-                            common_type = Type_StripAlias(common_type);
-                            if (Type_IsIntegral(common_type))
+                            if (Type_IsSigned(common_type))
                             {
-                                if (Type_IsSigned(common_type))
-                                {
-                                    i64 lhs = ConstVal_ToI64(lhs_info.const_val);
-                                    i64 rhs = ConstVal_ToI64(rhs_info.const_val);
-                                    
-                                    i64 val = 0;
-                                    
-                                    switch (expr->kind)
-                                    {
-                                        case AST_Mul: val = lhs * rhs; break;
-                                        case AST_Div: val = lhs / rhs; break;
-                                        case AST_Rem: val = lhs % rhs; break;
-                                        case AST_Add: val = lhs + rhs; break;
-                                        case AST_Sub: val = lhs - rhs; break;
-                                        INVALID_DEFAULT_CASE;
-                                    }
-                                    
-                                    if      (common_type == Type_I8)  val = (i8)val;
-                                    else if (common_type == Type_I16) val = (i16)val;
-                                    else if (common_type == Type_I32) val = (i32)val;
-                                    NOT_IMPLEMENTED; // TODO: implications
-                                    
-                                    info->const_val = ConstVal_FromI64(val);
-                                }
+                                i64 lhs = (i64)ConstVal_ToU64(lhs_info.const_val);
+                                i64 rhs = (i64)ConstVal_ToU64(rhs_info.const_val);
                                 
-                                else
+                                switch (expr->kind)
                                 {
-                                    u64 lhs = ConstVal_ToU64(lhs_info.const_val);
-                                    u64 rhs = ConstVal_ToU64(rhs_info.const_val);
-                                    
-                                    u64 val = 0;
-                                    
-                                    switch (expr->kind)
-                                    {
-                                        case AST_Mul: val = lhs * rhs; break;
-                                        case AST_Div: val = lhs / rhs; break;
-                                        case AST_Rem: val = lhs % rhs; break;
-                                        case AST_Add: val = lhs + rhs; break;
-                                        case AST_Sub: val = lhs - rhs; break;
-                                        INVALID_DEFAULT_CASE;
-                                    }
-                                    
-                                    info->const_val = ConstVal_FromU64(val);
+                                    case AST_Mul: val = lhs * rhs; break;
+                                    case AST_Div: val = lhs / rhs; break;
+                                    case AST_Rem: val = lhs % rhs; break;
+                                    case AST_Add: val = lhs + rhs; break;
+                                    case AST_Sub: val = lhs - rhs; break;
+                                    INVALID_DEFAULT_CASE;
                                 }
                             }
                             
                             else
                             {
-                                f64 val = 0;
+                                u64 lhs = ConstVal_ToU64(lhs_info.const_val);
+                                u64 rhs = ConstVal_ToU64(rhs_info.const_val);
                                 
-                                f64 lhs = ConstVal_ConvertToF64(lhs_info.const_val, lhs_info.type);
-                                f64 rhs = ConstVal_ConvertToF64(rhs_info.const_val, rhs_info.type);
-                                
-                                if (common_type == Type_Float || common_type == Type_F64)
+                                switch (expr->kind)
                                 {
-                                    switch (expr->kind)
-                                    {
-                                        case AST_Mul: val = lhs * rhs; break;
-                                        case AST_Div: val = lhs / rhs; break;
-                                        case AST_Rem: NOT_IMPLEMENTED; break;
-                                        case AST_Add: val = lhs + rhs; break;
-                                        case AST_Sub: val = lhs - rhs; break;
-                                        INVALID_DEFAULT_CASE;
-                                    }
+                                    case AST_Mul: val = (u64)(lhs * rhs); break;
+                                    case AST_Div: val = (u64)(lhs / rhs); break;
+                                    case AST_Rem: val = (u64)(lhs % rhs); break;
+                                    case AST_Add: val = (u64)(lhs + rhs); break;
+                                    case AST_Sub: val = (u64)(lhs - rhs); break;
+                                    INVALID_DEFAULT_CASE;
                                 }
-                                
-                                else if (common_type == Type_F32)
-                                {
-                                    switch (expr->kind)
-                                    {
-                                        case AST_Mul: val = (f32)lhs * (f32)rhs; break;
-                                        case AST_Div: val = (f32)lhs / (f32)rhs; break;
-                                        case AST_Rem: NOT_IMPLEMENTED; break;
-                                        case AST_Add: val = (f32)lhs + (f32)rhs; break;
-                                        case AST_Sub: val = (f32)lhs - (f32)rhs; break;
-                                        INVALID_DEFAULT_CASE;
-                                    }
-                                }
-                                
-                                else
-                                {
-                                    ASSERT(common_type == Type_F16);
-                                    NOT_IMPLEMENTED;
-                                }
-                                
-                                info->const_val = ConstVal_FromF64(val);
                             }
+                            
+                            if      (common_type == Type_I8)  val = (i8)val;
+                            else if (common_type == Type_I16) val = (i16)val;
+                            else if (common_type == Type_I32) val = (i32)val;
+                            NOT_IMPLEMENTED; // TODO: implications
+                            
+                            info->const_val = ConstVal_FromU64(val);
+                        }
+                        
+                        else
+                        {
+                            f64 val = 0;
+                            
+                            f64 lhs = ConstVal_ConvertToF64(lhs_info.const_val, lhs_info.type);
+                            f64 rhs = ConstVal_ConvertToF64(rhs_info.const_val, rhs_info.type);
+                            
+                            if (common_type == Type_Float || common_type == Type_F64)
+                            {
+                                switch (expr->kind)
+                                {
+                                    case AST_Mul: val = lhs * rhs; break;
+                                    case AST_Div: val = lhs / rhs; break;
+                                    case AST_Add: val = lhs + rhs; break;
+                                    case AST_Sub: val = lhs - rhs; break;
+                                    INVALID_DEFAULT_CASE;
+                                }
+                            }
+                            
+                            else if (common_type == Type_F32)
+                            {
+                                switch (expr->kind)
+                                {
+                                    case AST_Mul: val = (f32)lhs * (f32)rhs; break;
+                                    case AST_Div: val = (f32)lhs / (f32)rhs; break;
+                                    case AST_Add: val = (f32)lhs + (f32)rhs; break;
+                                    case AST_Sub: val = (f32)lhs - (f32)rhs; break;
+                                    INVALID_DEFAULT_CASE;
+                                }
+                            }
+                            
+                            else
+                            {
+                                ASSERT(common_type == Type_F16);
+                                NOT_IMPLEMENTED;
+                            }
+                            
+                            info->const_val = ConstVal_FromF64(val);
                         }
                     }
                 }
@@ -508,7 +617,7 @@ CheckExpression(AST_Node* expr, Check_Info* info) // context info
                     
                     if (Type_IsIntegral(operand_type))
                     {
-                        info->const_val = ConstVal_FromI64(-ConstVal_ToI64(operand_info.const_val));
+                        info->const_val = ConstVal_FromU64((u64)-(i64)ConstVal_ToU64(operand_info.const_val));
                     }
                     
                     else

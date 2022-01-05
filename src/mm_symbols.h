@@ -1,10 +1,29 @@
+typedef struct Range
+{
+    u64 start;
+    u64 end;
+} Range;
+
 typedef union Const_Val
 {
     u64 integer;
     f64 floating;
     Interned_String string;
     Character character;
+    Range range;
 } Const_Val;
+
+internal inline Const_Val
+ConstVal_FromRange(Range val)
+{
+    return (Const_Val){ .range = val };
+}
+
+internal inline Range
+ConstVal_ToRange(Const_Val val)
+{
+    return val.range;
+}
 
 internal inline Const_Val
 ConstVal_FromBool(bool val)
@@ -28,18 +47,6 @@ internal inline u64
 ConstVal_ToU64(Const_Val val)
 {
     return val.integer;
-}
-
-internal inline Const_Val
-ConstVal_FromI64(i64 val)
-{
-    return (Const_Val){ .integer = (u64)val };
-}
-
-internal inline i64
-ConstVal_ToI64(Const_Val val)
-{
-    return (i64)val.integer;
 }
 
 internal inline Const_Val
@@ -190,6 +197,7 @@ enum TYPE_INFO_KIND
     TypeInfo_Proc,
     
     TypeInfo_Alias,
+    TypeInfo_Range,
 };
 
 typedef struct Type_Info
@@ -373,6 +381,16 @@ Type_AliasTo(Type_ID aliased_type, Interned_String name)
     return type;
 }
 
+internal Type_ID
+Type_RangeOf(Type_ID elem_type, bool is_half_open)
+{
+    Type_ID type = Type_Nil;
+    
+    NOT_IMPLEMENTED;
+    
+    return type;
+}
+
 internal inline bool
 Type_IsTyped(Type_ID type)
 {
@@ -451,8 +469,9 @@ Type_IsImplicitlyCastableTo(Type_ID type, Type_ID target)
     type   = Type_StripAlias(type);
     target = Type_StripAlias(target);
     
-    if      (type == target)                         result = true;
-    else if (type == Type_Any || target == Type_Any) result = true;
+    if      (type == target)     result = true;
+    else if (target == Type_Any) result = true;
+    else if (type == Type_Any)   result = false;
     else if (Type_IsTyped(target))
     {
         if ((type == Type_UntypedInt || type == Type_UntypedBool || type == Type_UntypedChar) && 
@@ -538,7 +557,7 @@ ConstVal_ConvertToF64(Const_Val val, Type_ID val_type)
     {
         ASSERT(Type_IsIntegral(val_type));
         
-        if (Type_IsSigned(val_type)) result = (f64)ConstVal_ToI64(val);
+        if (Type_IsSigned(val_type)) result = (f64)(i64)ConstVal_ToU64(val);
         else                         result = (f64)ConstVal_ToU64(val);
     }
     
