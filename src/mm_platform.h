@@ -136,6 +136,8 @@ typedef String Path;
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define ABS(n) ((n) < 0 ? -(n) : (n))
+#define SGN(n) ((n) < 0 ? -1 : ((n) == 0 ? 0 : 1))
 
 #define KB(N) ((umm)(N) << 10)
 #define MB(N) ((umm)(N) << 20)
@@ -271,6 +273,7 @@ typedef struct MM_State
 global MM_State MM;
 
 #include "mm_string.h"
+#include "mm_bignum.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_symbols.h"

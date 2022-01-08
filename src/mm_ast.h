@@ -45,6 +45,7 @@ enum AST_NODE_KIND
     AST_Reference,
     AST_Dereference,
     AST_Spread,
+    AST_Cast,
     AST_LastPrefixLevel = AST_Spread,
     
     // precedence 4: 80 - 99
