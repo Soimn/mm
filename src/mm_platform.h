@@ -162,11 +162,13 @@ typedef String Path;
 
 typedef u32 Interned_String;
 
-typedef union Character
+typedef u32 Character;
+
+typedef union UTF8_Word
 {
-    u32 word;
     u8 bytes[4];
-} Character;
+    u32 word;
+} UTF8_Word;
 
 enum KEYWORD_KIND
 {
@@ -261,6 +263,9 @@ typedef struct MM_State
     
     struct AST_Node* ast;
     struct AST_Node* ast_last_node;
+    
+    struct AST_Node* checked_ast;
+    struct AST_Node* checked_ast_last_node;
     
     bool encountered_errors;
     

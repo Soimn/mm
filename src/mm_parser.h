@@ -86,37 +86,13 @@ ParseCharacter(String string, umm* cursor, Character* character)
             
             if (!encountered_errors)
             {
-                if (codepoint <= 0x7F)
-                {
-                    character->bytes[0] = (u8)codepoint;
-                }
-                
-                else if (codepoint <= 0x7FF)
-                {
-                    character->bytes[0] = 0xC0 | (u8)((codepoint & 0x7C0) >> 6);
-                    character->bytes[1] = 0x80 | (u8)((codepoint & 0x03F) >> 0);
-                }
-                
-                else if (codepoint <= 0xFFFF)
-                {
-                    character->bytes[0] = 0xE0 | (u8)((codepoint & 0xF000) >> 12);
-                    character->bytes[1] = 0x80 | (u8)((codepoint & 0x0FC0) >> 6);
-                    character->bytes[2] = 0x80 | (u8)((codepoint & 0x003F) >> 0);
-                }
-                
-                else if (codepoint <= 0x10FFFF)
-                {
-                    character->bytes[0] = 0xF0 | (u8)((codepoint & 0x1C0000) >> 18);
-                    character->bytes[1] = 0x80 | (u8)((codepoint & 0x03F000) >> 12);
-                    character->bytes[2] = 0x80 | (u8)((codepoint & 0x000FC0) >> 6);
-                    character->bytes[3] = 0x80 | (u8)((codepoint & 0x00003F) >> 0);
-                }
-                
-                else
+                if (codepoint > 0x10FFFF)
                 {
                     //// ERROR: Unicode codepoint out of UTF-8 range
                     encountered_errors = true;
                 }
+                
+                else *character = (Character)codepoint;
             }
         }
         
@@ -126,17 +102,17 @@ ParseCharacter(String string, umm* cursor, Character* character)
             
             switch (string.data[*cursor])
             {
-                case '\"': character->bytes[0] = '\"'; break;
-                case '\'': character->bytes[0] = '\''; break;
-                case '\\': character->bytes[0] = '\\'; break;
+                case '\"': *character = '\"'; break;
+                case '\'': *character = '\''; break;
+                case '\\': *character = '\\'; break;
                 
-                case 'a': character->bytes[0] = '\a'; break;
-                case 'b': character->bytes[0] = '\b'; break;
-                case 'f': character->bytes[0] = '\f'; break;
-                case 'n': character->bytes[0] = '\n'; break;
-                case 'r': character->bytes[0] = '\r'; break;
-                case 't': character->bytes[0] = '\t'; break;
-                case 'v': character->bytes[0] = '\v'; break;
+                case 'a': *character = '\a'; break;
+                case 'b': *character = '\b'; break;
+                case 'f': *character = '\f'; break;
+                case 'n': *character = '\n'; break;
+                case 'r': *character = '\r'; break;
+                case 't': *character = '\t'; break;
+                case 'v': *character = '\v'; break;
                 
                 default:
                 {
@@ -151,7 +127,7 @@ ParseCharacter(String string, umm* cursor, Character* character)
     
     else
     {
-        character->bytes[0] = string.data[*cursor];
+        *character = string.data[*cursor];
         *cursor += 1;
     }
     
@@ -177,14 +153,16 @@ ParseStringLiteral(Parser_State* state, String raw_string, Interned_String* resu
         if (!ParseCharacter(raw_string, &cursor, &character)) encountered_errors = true;
         else
         {
+            UTF8_Word word = Character_ToUTF8Word(character);
+            
             umm advance = 4;
             
             for (; advance > 1; --advance)
             {
-                if (character.bytes[advance - 1] != 0) break;
+                if (word.bytes[advance - 1] != 0) break;
             }
             
-            Copy(character.bytes, string.data + string.size, advance);
+            Copy(word.bytes, string.data + string.size, advance);
             string.size += advance;
         }
     }
@@ -1199,18 +1177,17 @@ ParseExpression(Parser_State* state, AST_Node** expression)
 }
 
 internal bool
-ParseScope(Parser_State* state, AST_Node** scope)
+ParseScopeBody(Parser_State* state, AST_Node** body, bool* is_do_block)
 {
     bool encountered_errors = false;
     
     Token token = GetToken(state);
     
-    bool is_do_block = false;
-    
+    *is_do_block = false;
     if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
     {
         SkipTokens(state, 1);
-        is_do_block = true;
+        *is_do_block = true;
     }
     
     else if (!EatTokenOfKind(state, Token_OpenBrace))
@@ -1218,13 +1195,13 @@ ParseScope(Parser_State* state, AST_Node** scope)
         INVALID_CODE_PATH;
     }
     
-    AST_Node* body            = 0;
-    AST_Node** next_statement = &body;
+    *body                     = 0;
+    AST_Node** next_statement = body;
     while (!encountered_errors)
     {
         if (EatTokenOfKind(state, Token_CloseBrace))
         {
-            if (is_do_block)
+            if (*is_do_block)
             {
                 //// ERROR: Missing statement
                 encountered_errors = true;
@@ -1242,14 +1219,25 @@ ParseScope(Parser_State* state, AST_Node** scope)
             }
         }
         
-        if (is_do_block) break;
-        else             continue;
+        if (*is_do_block) break;
+        else              continue;
     }
+    
+    return !encountered_errors;
+}
+
+internal bool
+ParseScope(Parser_State* state, AST_Node** scope)
+{
+    bool encountered_errors = false;
     
     *scope = PushNode(state, AST_Scope);
     (*scope)->scope_statement.label = BLANK_IDENTIFIER;
-    (*scope)->scope_statement.body  = body;
-    (*scope)->scope_statement.is_do = is_do_block;
+    
+    if (!ParseScopeBody(state, &(*scope)->scope_statement.body, &(*scope)->scope_statement.is_do))
+    {
+        encountered_errors = true;
+    }
     
     return !encountered_errors;
 }
@@ -1357,7 +1345,6 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             AST_Node* first  = 0;
             AST_Node* second = 0;
             AST_Node* third  = 0;
-            AST_Node* body   = 0;
             
             if (String_IsKeyword(token.identifier, Keyword_Invalid))
             {
@@ -1414,85 +1401,116 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
             
             if (!encountered_errors)
             {
-                if (!ParseScope(state, &body))
-                {
-                    encountered_errors = true;
-                }
-            }
-            
-            if (!encountered_errors)
-            {
                 if (is_while)
                 {
-                    *next_statement = PushNode(state, AST_While);
-                    
-                    if (first && !second && !third)
-                    {
-                        (*next_statement)->while_statement.init      = 0;
-                        (*next_statement)->while_statement.condition = first;
-                        (*next_statement)->while_statement.step      = 0;
-                    }
-                    
+                    AST_Node* body;
+                    if (!ParseScope(state, &body)) encountered_errors = true;
                     else
                     {
-                        (*next_statement)->while_statement.init      = first;
-                        (*next_statement)->while_statement.condition = second;
-                        (*next_statement)->while_statement.step      = third;
+                        *next_statement = PushNode(state, AST_While);
+                        
+                        if (first && !second && !third)
+                        {
+                            (*next_statement)->while_statement.init      = 0;
+                            (*next_statement)->while_statement.condition = first;
+                            (*next_statement)->while_statement.step      = 0;
+                        }
+                        
+                        else
+                        {
+                            (*next_statement)->while_statement.init      = first;
+                            (*next_statement)->while_statement.condition = second;
+                            (*next_statement)->while_statement.step      = third;
+                        }
+                    }
+                }
+                
+                else if (is_when)
+                {
+                    AST_Node* true_body  = 0;
+                    AST_Node* false_body = 0;
+                    
+                    bool ignored;
+                    if (!ParseScopeBody(state, &true_body, &ignored)) encountered_errors = true;
+                    else
+                    {
+                        token = GetToken(state);
+                        if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Else))
+                        {
+                            SkipTokens(state, 1);
+                            token = GetToken(state);
+                            
+                            if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_When))
+                            {
+                                if (!ParseStatement(state, &false_body))
+                                {
+                                    encountered_errors = true;
+                                }
+                            }
+                            
+                            else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
+                            {
+                                if (!ParseScopeBody(state, &false_body, &ignored))
+                                {
+                                    encountered_errors = true;
+                                }
+                            }
+                            
+                            else
+                            {
+                                //// ERROR: Missing body of else statement
+                                encountered_errors = true;
+                            }
+                        }
+                        
+                        if (!encountered_errors)
+                        {
+                            *next_statement = PushNode(state, AST_When);
+                            (*next_statement)->when_statement.condition  = first;
+                            (*next_statement)->when_statement.true_body  = true_body;
+                            (*next_statement)->when_statement.false_body = false_body;
+                        }
                     }
                 }
                 
                 else
                 {
+                    AST_Node* true_body  = 0;
                     AST_Node* false_body = 0;
                     
-                    token = GetToken(state);
-                    if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Else))
+                    if (!ParseScope(state, &true_body)) encountered_errors = true;
+                    else
                     {
-                        SkipTokens(state, 1);
                         token = GetToken(state);
-                        
-                        if (!is_when && token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_If))
+                        if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Else))
                         {
-                            if (!ParseStatement(state, &false_body))
+                            SkipTokens(state, 1);
+                            token = GetToken(state);
+                            
+                            if (token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_If))
                             {
+                                if (!ParseStatement(state, &false_body))
+                                {
+                                    encountered_errors = true;
+                                }
+                            }
+                            
+                            else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
+                            {
+                                if (!ParseScope(state, &false_body))
+                                {
+                                    encountered_errors = true;
+                                }
+                            }
+                            
+                            else
+                            {
+                                //// ERROR: Missing body of else statement
                                 encountered_errors = true;
                             }
                         }
                         
-                        else if (is_when && token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_When))
-                        {
-                            if (!ParseStatement(state, &false_body))
-                            {
-                                encountered_errors = true;
-                            }
-                        }
-                        
-                        else if (token.kind == Token_OpenBrace || token.kind == Token_Identifier && String_IsKeyword(token.identifier, Keyword_Do))
-                        {
-                            if (!ParseScope(state, &false_body))
-                            {
-                                encountered_errors = true;
-                            }
-                        }
-                        
-                        else
-                        {
-                            //// ERROR: Missing body of else statement
-                            encountered_errors = true;
-                        }
-                    }
-                    
-                    if (!encountered_errors)
-                    {
-                        if (is_when)
-                        {
-                            *next_statement = PushNode(state, AST_When);
-                            (*next_statement)->when_statement.condition = first;
-                            (*next_statement)->when_statement.true_body  = body;
-                            (*next_statement)->when_statement.false_body = false_body;
-                        }
-                        
-                        else
+                        if (!encountered_errors)
                         {
                             *next_statement = PushNode(state, AST_If);
                             
@@ -1508,7 +1526,7 @@ ParseStatement(Parser_State* state, AST_Node** next_statement)
                                 (*next_statement)->if_statement.condition = second;
                             }
                             
-                            (*next_statement)->if_statement.true_body  = body;
+                            (*next_statement)->if_statement.true_body  = true_body;
                             (*next_statement)->if_statement.false_body = false_body;
                         }
                     }

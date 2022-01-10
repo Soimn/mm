@@ -241,7 +241,7 @@ PrintASTNode(AST_Node* node, umm indent)
     
     else if (node->kind == AST_Char)
     {
-        Print("(U+%u)", Character_ToCodepoint(node->character));
+        Print("(U+%u)", node->character);
     }
     
     else if (node->kind == AST_Int)

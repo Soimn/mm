@@ -423,32 +423,68 @@ String_IsKeyword(Interned_String string, Enum8(KEYWORD_KIND) keyword)
     return (MM.keyword_strings[keyword] == string);
 }
 
-u32
-Character_ToCodepoint(Character c)
+Character
+Character_FromUTF8Word(UTF8_Word wd)
 {
-    u32 codepoint;
+    Character character;
     
-    if ((c.bytes[0] & 0x80) == 0)
+    if ((wd.bytes[0] & 0x80) == 0)
     {
-        codepoint = c.bytes[0];
+        character = wd.bytes[0];
     }
     
-    else if ((c.bytes[0] & 0xE0) == 0xC0)
+    else if ((wd.bytes[0] & 0xE0) == 0xC0)
     {
-        codepoint = (u32)(c.bytes[0] & 0x1F) << 6 | (u32)(c.bytes[1] & 0x3F);
+        character = (u32)(wd.bytes[0] & 0x1F) << 6 | (u32)(wd.bytes[1] & 0x3F);
     }
     
-    else if ((c.bytes[0] & 0xF0) == 0xE0)
+    else if ((wd.bytes[0] & 0xF0) == 0xE0)
     {
-        codepoint = (u32)(c.bytes[0] & 0x0F) << 12 | (u32)(c.bytes[1] & 0x3F) << 6 | (u32)(c.bytes[2] & 0x3F);
+        character = (u32)(wd.bytes[0] & 0x0F) << 12 | (u32)(wd.bytes[1] & 0x3F) << 6 | (u32)(wd.bytes[2] & 0x3F);
     }
     
     else
     {
-        codepoint = (u32)(c.bytes[0] & 0x07) << 18 | (u32)(c.bytes[1] & 0x3F) << 12 | (u32)(c.bytes[2] & 0x3F) << 6 | (u32)(c.bytes[3] & 0x3F);
+        character = (u32)(wd.bytes[0] & 0x07) << 18 | (u32)(wd.bytes[1] & 0x3F) << 12 | (u32)(wd.bytes[2] & 0x3F) << 6 | (u32)(wd.bytes[3] & 0x3F);
     }
     
-    return codepoint;
+    return character;
+}
+
+UTF8_Word
+Character_ToUTF8Word(Character character)
+{
+    UTF8_Word word = {0};
+    
+    if (character <= 0x7F)
+    {
+        word.bytes[0] = (u8)character;
+    }
+    
+    else if (character <= 0x7FF)
+    {
+        word.bytes[0] = 0xC0 | (u8)((character & 0x7C0) >> 6);
+        word.bytes[1] = 0x80 | (u8)((character & 0x03F) >> 0);
+    }
+    
+    else if (character <= 0xFFFF)
+    {
+        word.bytes[0] = 0xE0 | (u8)((character & 0xF000) >> 12);
+        word.bytes[1] = 0x80 | (u8)((character & 0x0FC0) >> 6);
+        word.bytes[2] = 0x80 | (u8)((character & 0x003F) >> 0);
+    }
+    
+    else
+    {
+        ASSERT(character <= 0x10FFFF);
+        
+        word.bytes[0] = 0xF0 | (u8)((character & 0x1C0000) >> 18);
+        word.bytes[1] = 0x80 | (u8)((character & 0x03F000) >> 12);
+        word.bytes[2] = 0x80 | (u8)((character & 0x000FC0) >> 6);
+        word.bytes[3] = 0x80 | (u8)((character & 0x00003F) >> 0);
+    }
+    
+    return word;
 }
 
 umm
