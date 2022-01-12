@@ -3,8 +3,6 @@
 #define WIN32_MEAN_AND_LEAN 1
 #define VC_EXTRALEAN        1
 #include <windows.h>
-#include <shellapi.h>
-#include <shlwapi.h>
 #undef NOMINMAX
 #undef WIN32_LEAN_AND_MEAN
 #undef WIN32_MEAN_AND_LEAN
@@ -355,13 +353,6 @@ PrintASTNode(AST_Node* node, umm indent)
         Print("))");
     }
     
-    else if (node->kind == AST_Compound)
-    {
-        Print("(");
-        PrintASTNode(node->compound_expr, 0);
-        Print(")");
-    }
-    
     else if (PRECEDENCE_FROM_KIND(node->kind) >= 4 && PRECEDENCE_FROM_KIND(node->kind) <= 9 ||
              node->kind == AST_ElementOf || node->kind == AST_UfcsOf)
     {
@@ -680,7 +671,19 @@ ParseCommandLineArguments(u8* command_line, Command_Line_Arguments* args)
         if (*scan != 0) *scan++ = 0;
         
         
-        PathRemoveFileSpecA((LPSTR)command_line);
+        //PathRemoveFileSpecA((LPSTR)command_line);
+        {
+            u8* last_slash = 0;
+            for (u8* path_scan = command_line; *path_scan != 0; ++path_scan)
+            {
+                if (*path_scan == '/' || *path_scan == '\\')
+                {
+                    last_slash = path_scan;
+                }
+            }
+            
+            if (last_slash != 0) *last_slash = 0;
+        }
         
         String exe_path = String_FromCString(command_line);
         String addend   = STRING("\\core\\");

@@ -631,10 +631,8 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         }
     }
     
-    else if (token.kind == Token_Period)
+    else if (EatTokenOfKind(state, Token_Period))
     {
-        SkipTokens(state, 1);
-        
         if (EatTokenOfKind(state, Token_OpenBrace))
         {
             AST_Node* params = 0;
@@ -704,17 +702,17 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         
     }
     
-    else if (token.kind == Token_OpenParen)
+    else if (EatTokenOfKind(state, Token_OpenParen))
     {
-        SkipTokens(state, 1);
-        
-        AST_Node* compound = 0;
-        
-        if (!ParseExpression(state, &compound)) encountered_errors = true;
+        if (!ParseExpression(state, expression)) encountered_errors = true;
         else
         {
-            *expression = PushNode(state, AST_Compound);
-            (*expression)->compound_expr = compound;
+            if (PRECEDENCE_FROM_KIND((*expression)->kind) >= 4 && PRECEDENCE_FROM_KIND((*expression)->kind) <= 9)
+            {
+                // NOTE: leave "is_compound" note to avoid precedence fixing ripping apart compound
+                //       expressions
+                (*expression)->binary_expr.is_compound = true;
+            }
             
             if (!EatTokenOfKind(state, Token_CloseParen))
             {
@@ -724,10 +722,8 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         }
     }
     
-    else if (token.kind == Token_Pound)
+    else if (EatTokenOfKind(state, Token_Pound))
     {
-        SkipTokens(state, 1);
-        
         token = GetToken(state);
         
         if (token.kind != Token_Identifier)
@@ -1115,7 +1111,19 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                     
                     for (;;)
                     {
-                        if (PRECEDENCE_FROM_KIND((*slot)->kind) <= precedence)
+                        // NOTE: Without compensating for compound expressions, this would just be
+                        //       if (PRECEDENCE_FROM_KIND((*slot)->kind) <= precedence)
+                        //       However, since there is no AST_Compound node, something has to
+                        //       prevent this loop from ripping apart () in expressions such as
+                        //       (a + b) * c
+                        //       This is done by checking if the expression is binary and a "is_compound"
+                        //       note was left by ParsePrimaryExpression, or that it would be impossible
+                        //       to find an expression of that precedence level without (), e.g.
+                        //       conditional expressions (which have precedence 10)
+                        //       The is binary check is uses short circuiting of ||
+                        if (PRECEDENCE_FROM_KIND((*slot)->kind) <= precedence ||
+                            PRECEDENCE_FROM_KIND((*slot)->kind) > 9           ||
+                            PRECEDENCE_FROM_KIND((*slot)->kind) >= 4 && (*slot)->binary_expr.is_compound)
                         {
                             AST_Node* left = *slot;
                             

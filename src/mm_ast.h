@@ -18,7 +18,6 @@ enum AST_NODE_KIND
     AST_Union,
     AST_Enum,
     AST_Directive,
-    AST_Compound,
     
     // precedence 1: 20 - 39
     AST_FirstTypeLevel = 20,
@@ -189,6 +188,8 @@ typedef struct AST_Node
         {
             struct AST_Node* left;
             struct AST_Node* right;
+            
+            bool is_compound;
         } binary_expr;
         
         struct AST_Node* unary_expr;
