@@ -497,20 +497,10 @@ Type_IsImplicitlyCastableTo(Type_ID src, Type_ID dst)
 {
     bool result = false;
     
-    if      (src == dst)                                                    result = true;
-    else if (dst == Type_Any)                                               result = true;
-    else if (Type_ToDefTyped(src) == dst)                                   result = true;
-    else if (src == Type_UntypedString && dst == Type_Cstring)              result = true;
-    else if (src == Type_Byte && (dst == Type_I8 || dst == Type_U8))        result = true;
-    else if (!Type_IsTyped(src) && Type_IsNumeric(src) && dst == Type_Bool) result = true;
-    else if (src == Type_UntypedChar)
-    {
-        if (Type_IsTyped(dst) && (Type_IsFloating(dst) || Type_IsIntegral(dst) && Type_Sizeof(dst) >= 4))
-        {
-            result = true;
-        }
-    }
-    
+    if      (src == dst)                                                                      result = true;
+    else if (dst == Type_Any)                                                                 result = true;
+    else if (src == Type_Byte && (dst == Type_I8 || dst == Type_U8 || dst == Type_Bool))      result = true;
+    else if (Type_ToDefTyped(src) == dst || src == Type_UntypedString && dst == Type_Cstring) result = true;
     else
     {
         Type_Info* src_info = MM_TypeInfoOf(src);
@@ -524,9 +514,37 @@ Type_IsImplicitlyCastableTo(Type_ID src, Type_ID dst)
                 result = true;
             }
         }
+        
+        else if (src == Type_UntypedString && dst_info != 0 && dst_info->kind == TypeInfo_Slice &&
+                 (dst_info->elem_type == Type_Char || dst_info->elem_type == Type_Byte))
+        {
+            result = true;
+        }
+        
     }
     
     return result;
+}
+
+internal bool
+Type_IsImplicitlyCastableToIntegralType(Type_ID type)
+{
+    type = Type_StripAlias(type);
+    return (Type_IsIntegral(type) || Type_IsChar(type) || Type_IsBoolean(type) || type == Type_Byte);
+}
+
+internal bool
+Type_IsImplicitlyCastableToNumericType(Type_ID type)
+{
+    type = Type_StripAlias(type);
+    return (Type_IsNumeric(type) || Type_IsChar(type) || Type_IsBoolean(type) || type == Type_Byte);
+}
+
+internal bool
+Type_IsImplicitlyCastableToBooleanType(Type_ID type)
+{
+    type = Type_StripAlias(type);
+    return (Type_IsIntegral(type) || Type_IsChar(type) || Type_IsBoolean(type) || type == Type_Byte);
 }
 
 internal bool
@@ -587,35 +605,66 @@ ConstVal_IsImplicitlyConvertibleTo(Const_Val src_val, Type_ID dst_type)
     if (Type_IsImplicitlyCastableTo(src_val.type, dst_type)) result = true;
     else if (!Type_IsTyped(src_val.type) && Type_IsTyped(dst_type))
     {
-        if      (src_val.type == Type_Bool && Type_IsNumeric(dst_type)) result = true;
-        else if ((src_val.type == Type_UntypedInt || src_val.type == Type_UntypedChar) && Type_IsNumeric(dst_type))
+        if (src_val.type == Type_UntypedInt && dst_type == Type_Byte)
         {
-            if (Type_IsFloating(dst_type))
+            result = (BigInt_EffectiveByteSize(src_val.untyped_int) == 1);
+        }
+        
+        else if ((Type_IsNumeric(src_val.type) || src_val.type == Type_UntypedChar || src_val.type == Type_UntypedBool) &&
+                 (Type_IsNumeric(dst_type) || dst_type == Type_Char || dst_type == Type_Bool))
+        {
+            if (dst_type == Type_Bool) result = true;
+            else
             {
-                Big_Float f;
-                if (src_val.type == Type_UntypedChar) f = BigFloat_FromF64(src_val.character);
-                else                                  f = BigFloat_FromBigInt(src_val.untyped_int);
+                if (src_val.type == Type_UntypedFloat)
+                {
+                    if (Type_IsFloating(dst_type))
+                    {
+                        result = (BigFloat_EffectiveByteSize(src_val.untyped_float) <= Type_Sizeof(dst_type));
+                    }
+                    
+                    else
+                    {
+                        bool did_truncate = false;
+                        Big_Int int_val = BigInt_FromBigFloat(src_val.untyped_float, &did_truncate);
+                        
+                        result = (!did_truncate && BigInt_EffectiveByteSize(int_val) <= Type_Sizeof(dst_type));
+                    }
+                }
                 
-                result = (BigFloat_EffectiveByteSize(f) <= Type_Sizeof(dst_type));
+                else
+                {
+                    if (Type_IsFloating(dst_type))
+                    {
+                        Big_Float f;
+                        if (src_val.type == Type_UntypedChar) f = BigFloat_FromF64(src_val.character);
+                        else                                  f = BigFloat_FromBigInt(src_val.untyped_int);
+                        
+                        result = (BigFloat_EffectiveByteSize(f) <= Type_Sizeof(dst_type));
+                    }
+                    
+                    else result = (ConstVal_Sizeof(src_val) <= Type_Sizeof(dst_type));
+                }
             }
-            
-            else if (ConstVal_Sizeof(src_val) <= Type_Sizeof(dst_type)) result = true;
         }
         
         else if (src_val.type == Type_UntypedString)
         {
             Type_Info* dst_info = MM_TypeInfoOf(dst_type);
             
-            if (dst_info != 0 && dst_info->kind == TypeInfo_Array)
+            if (dst_info != 0)
             {
-                if (dst_info->elem_type == Type_Byte && dst_info->array.size == StringLiteral_Of(src_val.string).size)
+                if (dst_info->kind == TypeInfo_Array)
                 {
-                    result = true;
-                }
-                
-                else if (dst_info->elem_type == Type_Char && dst_info->array.size == String_CountChars(StringLiteral_Of(src_val.string)))
-                {
-                    result = true;
+                    if (dst_info->elem_type == Type_Byte && dst_info->array.size == StringLiteral_Of(src_val.string).size)
+                    {
+                        result = true;
+                    }
+                    
+                    else if (dst_info->elem_type == Type_Char && dst_info->array.size == String_CountChars(StringLiteral_Of(src_val.string)))
+                    {
+                        result = true;
+                    }
                 }
             }
         }
@@ -698,14 +747,47 @@ ConstVal_CastTo(Const_Val val, Type_ID dst)
     return result;
 }
 
-internal bool
-ConstVal_ToBool(Const_Val val)
+internal inline Const_Val
+ConstVal_FromUntypedString(Interned_String string)
 {
-    return val.boolean;
+    return (Const_Val){
+        .type   = Type_UntypedString,
+        .string = string
+    };
 }
 
-internal Const_Val
-ConstVal_FromBool(bool val)
+internal inline Const_Val
+ConstVal_FromUntypedChar(Character character)
 {
-    return (Const_Val){ .boolean = val };
+    return (Const_Val){
+        .type      = Type_UntypedChar,
+        .character = character
+    };
+}
+
+internal inline Const_Val
+ConstVal_FromUntypedInt(Big_Int untyped_int)
+{
+    return (Const_Val){
+        .type        = Type_UntypedInt,
+        .untyped_int = untyped_int
+    };
+}
+
+internal inline Const_Val
+ConstVal_FromUntypedFloat(Big_Float untyped_float)
+{
+    return (Const_Val){
+        .type          = Type_UntypedFloat,
+        .untyped_float = untyped_float
+    };
+}
+
+internal inline Const_Val
+ConstVal_FromUntypedBool(bool boolean)
+{
+    return (Const_Val){
+        .type    = Type_UntypedBool,
+        .boolean = boolean
+    };
 }

@@ -96,8 +96,8 @@ typedef struct Token
     {
         String raw_string;
         Interned_String identifier;
-        u64 integer;
-        f64 floating;
+        Big_Int integer;
+        Big_Float floating;
     };
     
 } Token;
@@ -531,6 +531,8 @@ Lexer_Advance(Lexer* lexer)
             
             else if (c >= '0' && c <= '9')
             {
+                // TODO: Bignum parsing
+                
                 bool is_hex    = false;
                 bool is_binary = false;
                 bool is_float  = false;
@@ -611,13 +613,16 @@ Lexer_Advance(Lexer* lexer)
                                 Copy(&integer, &f, sizeof(u32));
                                 
                                 token.kind     = Token_Float;
-                                token.floating = f;
+                                token.floating = BigFloat_FromF64((f64)f);
                             }
                             
                             else if (digit_count == 16)
                             {
-                                token.kind = Token_Float;
-                                Copy(&integer, &token.floating, sizeof(u32));
+                                f64 f;
+                                Copy(&integer, &f, sizeof(u32));
+                                
+                                token.kind     = Token_Float;
+                                token.floating = BigFloat_FromF64(f);
                             }
                             
                             else
@@ -673,15 +678,17 @@ Lexer_Advance(Lexer* lexer)
                                 }
                             }
                             
+                            f64 f = (integer + fraction) * adjustment;
+                            
                             token.kind     = Token_Float;
-                            token.floating = (integer + fraction) * adjustment;
+                            token.floating = BigFloat_FromF64(f);
                         }
                     }
                     
                     else
                     {
                         token.kind    = Token_Int;
-                        token.integer = integer;
+                        token.integer = BigInt_FromU64(integer);
                     }
                 }
             }

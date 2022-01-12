@@ -9,6 +9,8 @@ typedef struct Big_Float
 } Big_Float;
 
 internal u64 BigInt_ToU64(Big_Int val);
+internal Big_Int BigInt_FromU64(u64 val);
+internal Big_Int BigInt_FromBigFloat(Big_Float val, bool* did_truncate);
 internal umm U64_EffectiveByteSize(u64 val);
 internal umm I64_EffectiveByteSize(i64 val);
 internal umm BigInt_EffectiveByteSize(Big_Int val);
@@ -21,6 +23,26 @@ internal u64
 BigInt_ToU64(Big_Int val)
 {
     u64 result = 0;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal Big_Int
+BigInt_FromU64(u64 val)
+{
+    Big_Int result = {0};
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal Big_Int
+BigInt_FromBigFloat(Big_Float val, bool* did_truncate)
+{
+    Big_Int result = {0};
     
     NOT_IMPLEMENTED;
     
