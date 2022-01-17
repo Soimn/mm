@@ -394,7 +394,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     else if (token.kind == Token_Int)
     {
         *expression = PushNode(state, AST_Int);
-        (*expression)->integer = token.integer;
+        (*expression)->number = token.number;
         
         SkipTokens(state, 1);
     }
@@ -402,7 +402,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     else if (token.kind == Token_Float)
     {
         *expression = PushNode(state, AST_Float);
-        (*expression)->floating = token.floating;
+        (*expression)->number = token.number;
         
         SkipTokens(state, 1);
     }

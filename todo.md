@@ -7,3 +7,7 @@
 
 
 Type_CommonType is where 4.0 == 4 is useful
+
+is untyped bool useful?
+
+REMEMBER SIGNED VS UNSIGNED FOR BIG NUMS

@@ -96,8 +96,7 @@ typedef struct Token
     {
         String raw_string;
         Interned_String identifier;
-        Big_Int integer;
-        Big_Float floating;
+        Big_Num number;
     };
     
 } Token;
@@ -613,7 +612,8 @@ Lexer_Advance(Lexer* lexer)
                                 Copy(&integer, &f, sizeof(u32));
                                 
                                 token.kind     = Token_Float;
-                                token.floating = BigFloat_FromF64((f64)f);
+                                //token.floating = BigFloat_FromF64((f64)f);
+                                NOT_IMPLEMENTED;
                             }
                             
                             else if (digit_count == 16)
@@ -622,7 +622,8 @@ Lexer_Advance(Lexer* lexer)
                                 Copy(&integer, &f, sizeof(u32));
                                 
                                 token.kind     = Token_Float;
-                                token.floating = BigFloat_FromF64(f);
+                                //token.floating = BigFloat_FromF64(f);
+                                NOT_IMPLEMENTED;
                             }
                             
                             else
@@ -678,17 +679,19 @@ Lexer_Advance(Lexer* lexer)
                                 }
                             }
                             
-                            f64 f = (integer + fraction) * adjustment;
+                            //f64 f = (integer + fraction) * adjustment;
                             
                             token.kind     = Token_Float;
-                            token.floating = BigFloat_FromF64(f);
+                            //token.floating = BigFloat_FromF64(f);
+                            NOT_IMPLEMENTED;
                         }
                     }
                     
                     else
                     {
                         token.kind    = Token_Int;
-                        token.integer = BigInt_FromU64(integer);
+                        //token.integer = BigInt_FromU64(integer);
+                        NOT_IMPLEMENTED;
                     }
                 }
             }

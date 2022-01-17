@@ -59,7 +59,7 @@ enum AST_NODE_KIND
     AST_Div,
     AST_Rem,
     AST_BitwiseAnd,
-    AST_ArithmeticRightShift,
+    AST_ArithRightShift,
     AST_RightShift,
     AST_LeftShift,
     AST_LastMulLevel = AST_LeftShift,
@@ -130,8 +130,7 @@ typedef struct AST_Node
         Interned_String identifier;
         Interned_String string;
         Character character;
-        Big_Int integer;
-        Big_Float floating;
+        Big_Num number;
         bool boolean;
         
         struct

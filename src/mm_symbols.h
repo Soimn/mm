@@ -14,8 +14,7 @@ enum SYMBOL_STATE
 
 typedef union Const_Val
 {
-    Big_Int big_int;
-    Big_Float big_float;
+    Big_Num num;
     Interned_String string;
 } Const_Val;
 

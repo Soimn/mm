@@ -10,8 +10,6 @@ enum
     Type_UntypedChar,
     Type_LastUntypedType = Type_UntypedString,
     
-    Type_Bool,
-    
     Type_String,
     Type_Cstring,
     Type_Char,
@@ -19,6 +17,14 @@ enum
     Type_Typeid,
     
     Type_Byte,
+    
+    Type_FirstBoolean,
+    Type_Bool = Type_FirstBoolean,
+    Type_B8,
+    Type_B16,
+    Type_B32,
+    Type_B64,
+    Type_LastBoolean = Type_B64,
     
     Type_FirstIntegral,
     Type_FirstSigned = Type_FirstIntegral,
@@ -106,7 +112,7 @@ Type_IsTyped(Type_ID type)
 internal inline bool
 Type_IsBoolean(Type_ID type)
 {
-    return (type == Type_UntypedBool || type == Type_Bool);
+    return (type == Type_UntypedBool || type >= Type_FirstBoolean && type <= Type_LastBoolean);
 }
 
 internal inline bool
@@ -180,13 +186,15 @@ Type_Sizeof(Type_ID type)
     {
         switch (type)
         {
-            case Type_Bool:
             case Type_Byte:
+            case Type_Bool:
+            case Type_B8:
             case Type_I8:
             case Type_U8:
             result = 1;
             break;
             
+            case Type_B16:
             case Type_I16:
             case Type_U16:
             case Type_F16:
@@ -195,6 +203,7 @@ Type_Sizeof(Type_ID type)
             
             case Type_Char:
             case Type_Typeid:
+            case Type_B32:
             case Type_I32:
             case Type_U32:
             case Type_F32:
@@ -202,6 +211,7 @@ Type_Sizeof(Type_ID type)
             break;
             
             case Type_Cstring:
+            case Type_B64:
             case Type_Int:
             case Type_I64:
             case Type_Uint:
@@ -265,6 +275,7 @@ Type_IsImplicitlyCastableTo(Type_ID src, Type_ID dst)
     if      (src == dst)                                                                      result = true;
     else if (dst == Type_Any)                                                                 result = true;
     else if (Type_ToDefTyped(src) == dst || src == Type_UntypedString && dst == Type_Cstring) result = true;
+    else if (src == Type_UntypedBool && Type_IsBoolean(dst))                                  result = true;
     else
     {
         Type_Info* src_info = MM_TypeInfoOf(src);

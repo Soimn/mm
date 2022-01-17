@@ -242,14 +242,9 @@ PrintASTNode(AST_Node* node, umm indent)
         Print("(U+%u)", node->character);
     }
     
-    else if (node->kind == AST_Int)
+    else if (node->kind == AST_Int || node->kind == AST_Float)
     {
-        Print("(%U)", node->integer);
-    }
-    
-    else if (node->kind == AST_Float)
-    {
-        Print("(%f)", node->floating);
+        Print("(%N)", node->number);
     }
     
     else if (node->kind == AST_Boolean)
@@ -366,7 +361,7 @@ PrintASTNode(AST_Node* node, umm indent)
             case AST_Div:                  Print("/");   break;
             case AST_Rem:                  Print("%");   break;
             case AST_BitwiseAnd:           Print("&");   break;
-            case AST_ArithmeticRightShift: Print(">>>"); break;
+            case AST_ArithRightShift:      Print(">>>"); break;
             case AST_RightShift:           Print(">>");  break;
             case AST_LeftShift:            Print("<<");  break;
             case AST_Add:                  Print("+");   break;
@@ -542,7 +537,7 @@ PrintASTNode(AST_Node* node, umm indent)
             case AST_Div:                  Print("/");   break;
             case AST_Rem:                  Print("%");   break;
             case AST_BitwiseAnd:           Print("&");   break;
-            case AST_ArithmeticRightShift: Print(">>>"); break;
+            case AST_ArithRightShift:      Print(">>>"); break;
             case AST_RightShift:           Print(">>");  break;
             case AST_LeftShift:            Print("<<");  break;
             case AST_Add:                  Print("+");   break;
