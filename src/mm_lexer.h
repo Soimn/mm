@@ -96,7 +96,8 @@ typedef struct Token
     {
         String raw_string;
         Interned_String identifier;
-        Big_Num number;
+        Big_Int integer;
+        Big_Float floating;
     };
     
 } Token;
@@ -548,7 +549,7 @@ Lexer_Advance(Lexer* lexer)
                 umm digit_count = !(is_hex || is_binary);
                 umm base = (is_hex ? 16 : (is_binary ? 2 : 10));
                 
-                umm integer           = (c - '0');
+                Big_Int integer = BigInt_FromU64(c - '0');
                 bool integer_overflow = false;
                 
                 while (true)
@@ -586,12 +587,12 @@ Lexer_Advance(Lexer* lexer)
                     else break;
                     
                     lexer->cursor += 1;
-                    digit_count    += 1;
+                    digit_count   += 1;
                     
-                    umm new_integer = integer * 10 + digit * base;
+                    Big_Int new_integer = BigInt_Add(BigInt_Mul(integer, BigInt_FromU64(10)), BigInt_FromU64(digit*base));
                     
-                    integer_overflow = integer_overflow || (new_integer < integer);
-                    integer          = new_integer;
+                    integer_overflow = (integer_overflow || BigInt_IsLess(new_integer, integer));
+                    integer = new_integer;
                 }
                 
                 if (integer_overflow)
@@ -606,24 +607,25 @@ Lexer_Advance(Lexer* lexer)
                     {
                         if (is_hex)
                         {
+                            u64 integer_val = BigInt_ToU64(integer);
+                            
                             if (digit_count == 8)
                             {
+                                
                                 f32 f;
-                                Copy(&integer, &f, sizeof(u32));
+                                Copy(&integer_val, &f, sizeof(u32));
                                 
                                 token.kind     = Token_Float;
-                                //token.floating = BigFloat_FromF64((f64)f);
-                                NOT_IMPLEMENTED;
+                                token.floating = BigFloat_FromF64((f64)f);
                             }
                             
                             else if (digit_count == 16)
                             {
                                 f64 f;
-                                Copy(&integer, &f, sizeof(u32));
+                                Copy(&integer_val, &f, sizeof(u32));
                                 
                                 token.kind     = Token_Float;
-                                //token.floating = BigFloat_FromF64(f);
-                                NOT_IMPLEMENTED;
+                                token.floating = BigFloat_FromF64(f);
                             }
                             
                             else
@@ -635,6 +637,7 @@ Lexer_Advance(Lexer* lexer)
                         
                         else
                         {
+                            // TODO: replace this shitty float parser
                             f64 fraction            = 0;
                             umm fraction_adjustment = 1;
                             
@@ -679,19 +682,17 @@ Lexer_Advance(Lexer* lexer)
                                 }
                             }
                             
-                            //f64 f = (integer + fraction) * adjustment;
+                            f64 f = (BigInt_ToU64(integer) + fraction) * adjustment;
                             
                             token.kind     = Token_Float;
-                            //token.floating = BigFloat_FromF64(f);
-                            NOT_IMPLEMENTED;
+                            token.floating = BigFloat_FromF64(f);
                         }
                     }
                     
                     else
                     {
                         token.kind    = Token_Int;
-                        //token.integer = BigInt_FromU64(integer);
-                        NOT_IMPLEMENTED;
+                        token.integer = integer;
                     }
                 }
             }

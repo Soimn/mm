@@ -1,458 +1,464 @@
-typedef union Big_Num
-{
-    f64 flt_parts[2];
-    
-    struct
-    {
-        f64 low;
-        f64 high;
-    };
-} Big_Num;
-
 typedef union I128
 {
-    u64 parts[2];
+    u32 p[4];
     
     struct
     {
-        u64 low;
-        u64 high;
+        u64 lo;
+        u64 hi;
     };
 } I128;
 
-global Big_Num Big_0;
-
-internal Big_Num BigNum_FromU64(u64 val);
-internal Big_Num BigNum_FromF64(f64 val);
-internal Big_Num BigNum_Truncate(Big_Num val);
-internal Big_Num BigNum_IChangeWidth(Big_Num val);
-internal Big_Num BigNum_FChangeWidth(Big_Num val);
-internal Big_Num BigNum_IAdd(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_ISub(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_IMul(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_IDiv(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_FAdd(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_FSub(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_FMul(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_FDiv(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_Rem(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_Complement(Big_Num val, umm byte_size);
-internal Big_Num BigNum_BitAnd(Big_Num v0, Big_Num v1);
-internal Big_Num BigNum_BitOr(Big_Num v0, Big_Num v1);
-internal Big_Num BigNum_BitXor(Big_Num v0, Big_Num v1);
-internal Big_Num BigNum_LeftShift(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_RightShift(Big_Num v0, Big_Num v1, imm byte_size);
-internal Big_Num BigNum_ARightShift(Big_Num v0, Big_Num v1, imm byte_size);
-internal bool BigNum_IsEqual(Big_Num v0, Big_Num v1);
-internal bool BigNum_IsStrictLess(Big_Num v0, Big_Num v1);
-internal bool BigNum_IsStrictGreater(Big_Num v0, Big_Num v1);
-
-internal umm BigNum_IEffectiveSize(Big_Num val);
-internal umm BigNum_FEffectiveSize(Big_Num val);
-
-internal u64 BigNum_ToU64(Big_Num val);
-
-internal I128
-I128_FromBigNum(Big_Num val)
+internal inline I128
+I128_BitShl(I128 v, u64 shift_amount)
 {
-    I128 result = {0};
+    shift_amount = shift_amount & 0x7F;
     
-    ASSERT(!"float");
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-I128_ToBigNum(I128 val)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal I128
-I128_ChangeWidth(I128 val, imm src_size, imm dst_size, bool should_extend_sign)
-{
-    I128 result = {0};
-    
-    ASSERT(!"float");
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FromU64(u64 val)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FromF64(f64 val)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_Truncate(Big_Num val)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_IChangeWidth(Big_Num val)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FChangeWidth(Big_Num val)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_IAdd(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    ASSERT(byte_size == -1 || 
-           byte_size > 0 && BigNum_IEffectiveSize(v0) <= (umm)byte_size && BigNum_IEffectiveSize(v1) <= (umm)byte_size);
-    
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    // NOTE: Check if the last matching 0 comes before the last matching 1
-    //        10101011001
-    //        01011001011
-    //  ~& => 000001xxxxx
-    //   & => 00001xxxxxx
-    u64 carry = ((~i0.low & ~i1.low) < (i0.low & i1.low));
-    
-    I128 result = {
-        .low  = i0.low  + i1.low,
-        .high = i0.high + i1.high + carry,
+    return (I128){
+        .lo = v.lo << shift_amount,
+        .hi = (v.hi << shift_amount) | (v.lo >> (64 - shift_amount)),
     };
-    
-    return I128_ToBigNum(I128_ChangeWidth(result, -1, byte_size, false));
 }
 
-internal Big_Num
-BigNum_ISub(Big_Num v0, Big_Num v1, imm byte_size)
+internal inline I128
+I128_BitShr(I128 v, u64 shift_amount)
 {
-    ASSERT(byte_size == -1 || 
-           byte_size > 0 && BigNum_IEffectiveSize(v0) <= (umm)byte_size && BigNum_IEffectiveSize(v1) <= (umm)byte_size);
+    shift_amount = shift_amount & 0x7F;
     
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    i1.low  = ~i1.low + 1;
-    i1.high = ~i1.high;
-    
-    // NOTE: Check if the last matching 0 comes before the last matching 1
-    //        10101011001
-    //        01011001011
-    //  ~& => 000001xxxxx
-    //   & => 00001xxxxxx
-    //
-    //        The two's complement operation can also overflow, but the only way
-    //        for it to produce a carry is with an initial and final value of 0,
-    //        implying carry can never be more than 1
-    u64 carry = (i1.low == 0 || (~i0.low & ~i1.low) < (i0.low & i1.low));
-    
-    I128 result = {
-        .low  = i0.low  + i1.low,
-        .high = i0.high + i1.high + carry,
+    return (I128){
+        .lo = (v.lo >> shift_amount) | (v.hi << (64 - shift_amount)),
+        .hi = v.hi >> shift_amount,
     };
-    
-    return I128_ToBigNum(I128_ChangeWidth(result, -1, byte_size, false));
 }
 
-internal Big_Num
-BigNum_IMul(Big_Num v0, Big_Num v1, imm byte_size)
+internal inline I128
+I128_BitSar(I128 v, u64 shift_amount)
 {
-    Big_Num result = {0};
+    shift_amount = shift_amount & 0x7F;
     
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_IDiv(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FAdd(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FSub(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FMul(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_FDiv(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_Rem(Big_Num v0, Big_Num v1, imm byte_size)
-{
-    Big_Num result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal Big_Num
-BigNum_Complement(Big_Num val, umm byte_size)
-{
-    I128 i = I128_FromBigNum(val);
-    
-    I128 result = {
-        .low  = ~i.low,
-        .high = ~i.high,
+    return (I128){
+        .lo = (v.lo >> shift_amount) | ((i64)v.hi << (64 - shift_amount)),
+        .hi = (i64)v.hi >> shift_amount,
     };
-    
-    return I128_ToBigNum(result);
 }
 
-internal Big_Num
-BigNum_BitAnd(Big_Num v0, Big_Num v1)
+internal inline I128
+I128_BitOr(I128 v0, I128 v1)
 {
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    I128 result = {
-        .low  = i0.low  & i1.low,
-        .high = i0.high & i1.high,
+    return (I128){
+        .lo = v0.lo | v1.lo,
+        .hi = v0.hi | v1.hi,
     };
-    
-    return I128_ToBigNum(result);
 }
 
-internal Big_Num
-BigNum_BitOr(Big_Num v0, Big_Num v1)
+internal inline I128
+I128_BitXor(I128 v0, I128 v1)
 {
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    I128 result = {
-        .low  = i0.low  | i1.low,
-        .high = i0.high | i1.high,
+    return (I128){
+        .lo = v0.lo ^ v1.lo,
+        .hi = v0.hi ^ v1.hi,
     };
-    
-    return I128_ToBigNum(result);
 }
 
-internal Big_Num
-BigNum_BitXor(Big_Num v0, Big_Num v1)
+internal inline I128
+I128_BitAnd(I128 v0, I128 v1)
 {
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    I128 result = {
-        .low  = i0.low  ^ i1.low,
-        .high = i0.high ^ i1.high,
+    return (I128){
+        .lo = v0.lo & v1.lo,
+        .hi = v0.hi & v1.hi,
     };
-    
-    return I128_ToBigNum(result);
 }
 
-internal Big_Num
-BigNum_LeftShift(Big_Num v0, Big_Num v1, imm byte_size)
+internal inline I128
+I128_BitNot(I128 v)
 {
-    ASSERT(byte_size == -1 || 
-           byte_size > 0 && BigNum_IEffectiveSize(v0) <= (umm)byte_size && BigNum_IEffectiveSize(v1) <= (umm)byte_size);
-    
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    umm shift_amount = i1.low & 0x7F;
-    
-    // NOTE: case analysis for shifting low into high
-    // 0  <= shift_amount <= 64   high |= low >> (64 - shift_amount), high |= low >> (64 - MIN(64, shift_amount))
-    // 65 <= shift_amount <= 127  high |= low << (shift_amount - 64), high |= low << (MAX(64, shift_amount) - 64)
-    
-    I128 result = {
-        .low  = i0.low  << shift_amount,
-        .high = i0.high << shift_amount | (i0.low >> (64 - MIN(64, shift_amount))) << (MAX(64, shift_amount) - 64),
+    return (I128){
+        .lo = ~v.lo,
+        .hi = ~v.hi,
     };
-    
-    return I128_ToBigNum(I128_ChangeWidth(result, -1, byte_size, false));
 }
 
-internal Big_Num
-BigNum_ARightShift(Big_Num v0, Big_Num v1, imm byte_size)
+internal inline I128
+I128_Add(I128 v0, I128 v1)
 {
-    ASSERT(byte_size == -1 || 
-           byte_size > 0 && BigNum_IEffectiveSize(v0) <= (umm)byte_size && BigNum_IEffectiveSize(v1) <= (umm)byte_size);
-    
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
     I128 result;
-    if (byte_size == -1)
+    
+    _addcarryx_u64(_addcarryx_u64(0, v0.lo, v1.lo, &result.lo), v0.hi, v1.hi, &result.hi);
+    
+    return result;
+}
+
+internal inline I128
+I128_Neg(I128 v)
+{
+    I128 result;
+    
+    _addcarryx_u64(_addcarryx_u64(0, ~v.lo, 1, &result.lo), ~v.hi, 0, &result.hi);
+    
+    return result;
+}
+
+internal inline I128
+I128_Sub(I128 v0, I128 v1)
+{
+    return I128_Add(v0, I128_Neg(v1));
+}
+
+internal inline bool
+I128_IsStrictlyLess(I128 v0, I128 v1)
+{
+    return (v0.hi < v1.hi || v0.hi == v1.hi && v0.lo < v1.lo);
+}
+
+internal inline bool
+I128_IsStrictlyGreater(I128 v0, I128 v1)
+{
+    return (v0.hi > v1.hi || v0.hi == v1.hi && v0.lo > v1.lo);
+}
+
+internal inline bool
+I128_IsLess(I128 v0, I128 v1)
+{
+    return !I128_IsStrictlyGreater(v0, v1);
+}
+
+internal inline bool
+I128_IsGreater(I128 v0, I128 v1)
+{
+    return !I128_IsStrictlyLess(v0, v1);
+}
+
+internal inline bool
+I128_IsEqual(I128 v0, I128 v1)
+{
+    return StructCompare(&v0, &v1);
+}
+
+internal inline I128
+I128_Mul(I128 v0, I128 v1)
+{
+    u64 s0 = (u64)((i64)v0.hi >> 63);
+    u64 s1 = (u64)((i64)v1.hi >> 63);
+    
+    v0.lo = (v0.lo ^ s0) - s0;
+    v0.hi = (v0.hi ^ s0) - s0;
+    
+    v1.lo = (v1.lo ^ s1) - s1;
+    v1.hi = (v1.hi ^ s1) - s1;
+    
+    s0 = s0 ^ s1;
+    
+    I128 r;
+    
+    r.lo  = _mul128(v0.lo, v1.lo, (i64*)&r.hi);
+    r.hi += v0.hi*v1.lo + v0.lo*v1.hi;
+    
+    r.lo = (r.lo ^ s0) - s0;
+    r.hi = (r.hi ^ s0) - s0;
+    
+    return r;
+}
+
+internal I128
+I128_DivMod(I128 u, I128 v, I128* r)
+{
+    ASSERT(v.lo != 0 || v.hi != 0);
+    
+    I128 q = {0};
+    
+    u64 s0 = (u64)((i64)u.hi >> 63);
+    u64 s1 = (u64)((i64)v.hi >> 63);
+    
+    u.lo = (u.lo ^ s0) - s0;
+    u.hi = (u.hi ^ s0) - s0;
+    
+    v.lo = (v.lo ^ s1) - s1;
+    v.hi = (v.hi ^ s1) - s1;
+    
+    s0 = s0 ^ s1;
+    
+    umm m = __lzcnt64(u.hi) + (u.hi == 0 ? __lzcnt64(u.lo) : 0);
+    umm n = __lzcnt64(v.hi) + (v.hi == 0 ? __lzcnt64(v.lo) : 0);
+    
+    if (n > m) *r = u;
+    else
     {
-        umm shift_amount = i1.low & 0x7F;
+        umm distance = m - n;
         
-        // NOTE: case analysis for shifting high into low
-        // 0  <= shift_amount <= 64   low |= high << (64 - shift_amount), low |= high << (64 - MIN(64, shift_amount))
-        // 65 <= shift_amount <= 127  low |= high >> (shift_amount - 64), low |= high >> (MAX(64, shift_amount) - 64)
+        v = I128_BitShl(v, distance);
         
-        // NOTE: i0.high is casted to i64 to perform an arithmetic right shift instead of a logical shift
-        //       this is done both for the high part, and the low adjustment part, to ensure the sign bit
-        //       is properly propagated
+        for (imm i = distance; i >= 0; --i)
+        {
+            q = I128_BitShl(q, 1);
+            
+            if (I128_IsGreater(u, v))
+            {
+                I128_Sub(u, v);
+                
+                q.lo |= 1;
+            }
+            
+            I128_BitShr(v, 1);
+        }
         
-        result = (I128){
-            .low  = i0.low >> shift_amount | ((i64)i0.high >> (MAX(shift_amount, 64) - 64)) << (64 - MIN(64, shift_amount)),
-            .high = (i64)i0.high >> shift_amount,
-        };
+        *r = u;
     }
     
-    // NOTE: there is probably a better way of doing this, but it does not matter much
-    else if (byte_size == 8) result = (I128){ .low = (i64)i0.low >> (i1.low & 0x3F) };
-    else if (byte_size == 4) result = (I128){ .low = (i32)i0.low >> (i1.low & 0x1F) };
-    else if (byte_size == 2) result = (I128){ .low = (i16)i0.low >> (i1.low & 0x0F) };
-    else                     result = (I128){ .low = (i8) i0.low >> (i1.low & 0x07) };
+    q.lo = (q.lo ^ s0) - s0;
+    q.hi = (q.hi ^ s0) - s0;
     
-    return I128_ToBigNum(result);
+    return q;
 }
 
-internal Big_Num
-BigNum_RightShift(Big_Num v0, Big_Num v1, imm byte_size)
+typedef struct Big_Int
 {
-    ASSERT(byte_size == -1 || 
-           byte_size > 0 && BigNum_IEffectiveSize(v0) <= (umm)byte_size && BigNum_IEffectiveSize(v1) <= (umm)byte_size);
-    
-    I128 i0 = I128_FromBigNum(v0);
-    I128 i1 = I128_FromBigNum(v1);
-    
-    umm shift_amount = i1.low & 0x7F;
-    
-    // NOTE: case analysis for shifting high into low
-    // 0  <= shift_amount <= 64   low |= high << (64 - shift_amount), low |= high << (64 - MIN(64, shift_amount))
-    // 65 <= shift_amount <= 127  low |= high >> (shift_amount - 64), low |= high >> (MAX(64, shift_amount) - 64)
-    
-    I128 result = {
-        .low  = i0.low  >> shift_amount | (i0.high >> (MAX(shift_amount, 64) - 64)) << (64 - MIN(64, shift_amount)),
-        .high = i0.high >> shift_amount,
+    I128 val;
+} Big_Int;
+
+global Big_Int BigInt_0;
+
+internal inline Big_Int
+BigInt_FromU64(u64 val)
+{
+    return (Big_Int){ .val.lo = val };
+}
+
+internal inline Big_Int
+BigInt_FromI64(i64 val)
+{
+    return (Big_Int){
+        .val.lo = val,
+        .val.hi = val >> 63,
     };
-    
-    return I128_ToBigNum(result);
 }
 
-internal bool
-BigNum_IsEqual(Big_Num v0, Big_Num v1)
+internal inline u64
+BigInt_ToU64(Big_Int val)
 {
-    bool result = false;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
+    return val.val.lo;
 }
 
-internal bool
-BigNum_IsStrictLess(Big_Num v0, Big_Num v1)
+internal inline i64
+BigInt_ToI64(Big_Int val)
 {
-    bool result = false;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
+    return val.val.lo;
 }
 
-internal bool
-BigNum_IsStrictGreater(Big_Num v0, Big_Num v1)
+internal inline Big_Int
+BigInt_BitShl(Big_Int v0, Big_Int v1)
 {
-    bool result = false;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
+    return (Big_Int){ I128_BitShl(v0.val, v1.val.lo) };
 }
 
-internal umm
-BigNum_IEffectiveSize(Big_Num val)
+internal inline Big_Int
+BigInt_BitShr(Big_Int v0, Big_Int v1)
 {
-    umm result = 0;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
+    return (Big_Int){ I128_BitShr(v0.val, v1.val.lo) };
 }
 
-internal umm
-BigNum_FEffectiveSize(Big_Num val)
+internal inline Big_Int
+BigInt_BitSar(Big_Int v0, Big_Int v1)
 {
-    umm result = 0;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
+    return (Big_Int){ I128_BitSar(v0.val, v1.val.lo) };
 }
 
-internal u64
-BigNum_ToU64(Big_Num val)
+internal inline Big_Int
+BigInt_BitOr(Big_Int v0, Big_Int v1)
 {
-    I128 i = I128_FromBigNum(val);
+    return (Big_Int){ I128_BitOr(v0.val, v1.val) };
+}
+
+internal inline Big_Int
+BigInt_BitXor(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){ I128_BitXor(v0.val, v1.val) };
+}
+
+internal inline Big_Int
+BigInt_BitAnd(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){ I128_BitAnd(v0.val, v1.val) };
+}
+
+internal inline Big_Int
+BigInt_BitNot(Big_Int v)
+{
+    return (Big_Int){ I128_BitNot(v.val) };
+}
+
+internal inline Big_Int
+BigInt_Add(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){ I128_Add(v0.val, v1.val) };
+}
+
+internal inline Big_Int
+BigInt_Neg(Big_Int v)
+{
+    return (Big_Int){ I128_Neg(v.val) };
+}
+
+internal inline Big_Int
+BigInt_Sub(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){ I128_Add(v0.val, I128_Neg(v1.val)) };
+}
+
+internal inline bool
+BigInt_IsStrictlyLess(Big_Int v0, Big_Int v1)
+{
+    return (v0.val.hi < v1.val.hi || v0.val.hi == v1.val.hi && v0.val.lo < v1.val.lo);
+}
+
+internal inline bool
+BigInt_IsStrictlyGreater(Big_Int v0, Big_Int v1)
+{
+    return (v0.val.hi > v1.val.hi || v0.val.hi == v1.val.hi && v0.val.lo > v1.val.lo);
+}
+
+internal inline bool
+BigInt_IsLess(Big_Int v0, Big_Int v1)
+{
+    return !I128_IsStrictlyGreater(v0.val, v1.val);
+}
+
+internal inline bool
+BigInt_IsGreater(Big_Int v0, Big_Int v1)
+{
+    return !I128_IsStrictlyLess(v0.val, v1.val);
+}
+
+internal inline bool
+BigInt_IsEqual(Big_Int v0, Big_Int v1)
+{
+    return !I128_IsEqual(v0.val, v1.val);
+}
+
+internal inline Big_Int
+BigInt_Mul(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){ I128_Mul(v0.val, v1.val) };
+}
+
+internal inline Big_Int
+BigInt_DivMod(Big_Int v0, Big_Int v1, Big_Int* r)
+{
+    return (Big_Int){ I128_DivMod(v0.val, v1.val, (I128*)r) };
+}
+
+// HACK, TODO: Implement proper Big_Float logic
+typedef struct Big_Float
+{
+    f64 val;
+} Big_Float;
+
+global Big_Float BigFloat_0;
+
+internal inline Big_Float
+BigFloat_FromF64(f64 val)
+{
+    return (Big_Float){ val };
+}
+
+internal inline Big_Float
+BigFloat_Add(Big_Float v0, Big_Float v1)
+{
+    return (Big_Float){ v0.val + v1.val };
+}
+
+internal inline Big_Float
+BigFloat_Neg(Big_Float v)
+{
+    return (Big_Float){ -v.val };
+}
+
+internal inline Big_Float
+BigFloat_Sub(Big_Float v0, Big_Float v1)
+{
+    return (Big_Float){ v0.val - v1.val };
+}
+
+internal inline bool
+BigFloat_IsStrictlyLess(Big_Float v0, Big_Float v1)
+{
+    return (v0.val < v1.val);
+}
+
+internal inline bool
+BigFloat_IsStrictlyGreater(Big_Float v0, Big_Float v1)
+{
+    return (v0.val > v1.val);
+}
+
+internal inline bool
+BigFloat_IsLess(Big_Float v0, Big_Float v1)
+{
+    return (v0.val <= v1.val);
+}
+
+internal inline bool
+BigFloat_IsGreater(Big_Float v0, Big_Float v1)
+{
+    return (v0.val >= v1.val);
+}
+
+internal inline bool
+BigFloat_IsEqual(Big_Float v0, Big_Float v1)
+{
+    return (v0.val == v1.val);
+}
+
+internal inline Big_Float
+BigFloat_Mul(Big_Float v0, Big_Float v1)
+{
+    return (Big_Float){ v0.val * v1.val };
+}
+
+internal inline Big_Float
+BigFloat_Div(Big_Float v0, Big_Float v1)
+{
+    return (Big_Float){ v0.val / v1.val };
+}
+
+internal inline Big_Float
+BigFloat_FromBigInt(Big_Int val)
+{
+    return (Big_Float){ (f64)val.val.hi * ((u64)1 << 32) + val.val.lo };
+}
+
+// HACK: Replace this
+internal inline Big_Float
+BigFloat_Truncate(Big_Float val)
+{
+    union { u64 i; f64 f; } bits = { .f = val.val };
     
-    ASSERT(i.high == 0);
+    i64 exponent = ((bits.i & 0x7FF0000000000000) >> 52) - 1023;
     
-    return i.low;
+    bits.i &= ~(0x000FFFFFFFFFFFFF >> MIN(MAX(exponent, 0), 52));
+    
+    return (Big_Float){ bits.f };
+}
+
+internal inline Big_Float
+BigFloat_FromU64(u64 val)
+{
+    return (Big_Float){ (f64)val };
+}
+
+internal inline Big_Float
+BigFloat_FromI64(i64 val)
+{
+    return (Big_Float){ (f64)val };
+}
+
+internal inline i64
+BigFloat_ToI64(Big_Float val)
+{
+    return (i64)val.val;
+}
+
+internal inline u64
+BigFloat_ToU64(Big_Float val)
+{
+    return (u64)val.val;
 }

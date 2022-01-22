@@ -130,7 +130,8 @@ typedef struct AST_Node
         Interned_String identifier;
         Interned_String string;
         Character character;
-        Big_Num number;
+        Big_Int integer;
+        Big_Float floating;
         bool boolean;
         
         struct

@@ -121,7 +121,7 @@ typedef String Path;
 #define STRINGIFY(a) _STRINGIFY(a)
 
 #if MM_DEBUG
-#define ASSERT(EX) ((EX) ? 1 : *(volatile int*)0)
+#define ASSERT(EX) ((EX) ? 1 : (*(volatile int*)0 = 0))
 #else
 #define ASSERT(EX)
 #endif
@@ -139,6 +139,8 @@ typedef String Path;
 #define ABS(n) ((n) < 0 ? -(n) : (n))
 #define SGN(n) ((n) < 0 ? -1 : ((n) == 0 ? 0 : 1))
 
+#define BYTE_MASK(n) (~(u64)0 >> (8*(n)))
+
 #define KB(N) ((umm)(N) << 10)
 #define MB(N) ((umm)(N) << 20)
 #define GB(N) ((umm)(N) << 30)
@@ -147,8 +149,6 @@ typedef String Path;
 #define MS(N) ((f32)N / 1000)
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
-
-#define XOR_SWAP(A, B) ((A) ^= ((B) ^= ((A) ^= (B))))
 
 #define internal static
 #define global static
@@ -282,6 +282,7 @@ global MM_State MM;
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_types.h"
+#include "mm_constval.h"
 #include "mm_symbols.h"
 #include "mm_parser.h"
 #include "mm_checker.h"

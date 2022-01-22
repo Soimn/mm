@@ -12,12 +12,6 @@ enum SYMBOL_STATE
     SymbolState_Resolved,
 };
 
-typedef union Const_Val
-{
-    Big_Num num;
-    Interned_String string;
-} Const_Val;
-
 typedef struct Symbol
 {
     struct Symbol* next;

@@ -242,9 +242,14 @@ PrintASTNode(AST_Node* node, umm indent)
         Print("(U+%u)", node->character);
     }
     
-    else if (node->kind == AST_Int || node->kind == AST_Float)
+    else if (node->kind == AST_Int)
     {
-        Print("(%N)", node->number);
+        NOT_IMPLEMENTED;
+    }
+    
+    else if (node->kind == AST_Float)
+    {
+        NOT_IMPLEMENTED;
     }
     
     else if (node->kind == AST_Boolean)

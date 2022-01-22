@@ -43,7 +43,6 @@ enum
     
     Type_FirstFloating,
     Type_Float = Type_FirstFloating,
-    Type_F16,
     Type_F32,
     Type_F64,
     Type_LastFloating = Type_F64,
@@ -197,7 +196,6 @@ Type_Sizeof(Type_ID type)
             case Type_B16:
             case Type_I16:
             case Type_U16:
-            case Type_F16:
             result = 2;
             break;
             
@@ -275,7 +273,7 @@ Type_IsImplicitlyCastableTo(Type_ID src, Type_ID dst)
     if      (src == dst)                                                                      result = true;
     else if (dst == Type_Any)                                                                 result = true;
     else if (Type_ToDefTyped(src) == dst || src == Type_UntypedString && dst == Type_Cstring) result = true;
-    else if (src == Type_UntypedBool && Type_IsBoolean(dst))                                  result = true;
+    else if (src == Type_UntypedBool && (Type_IsBoolean(dst) || Type_IsNumeric(dst)))         result = true;
     else
     {
         Type_Info* src_info = MM_TypeInfoOf(src);

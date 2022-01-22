@@ -63,316 +63,160 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 else
                 {
                     Type_ID common_type = Type_NoType;
-                    Big_Num lhs, rhs = {0};
                     
+                    Type_ID t0 = lhs_info.type;
+                    Type_ID t1 = rhs_info.type;
+                    
+                    Const_Val lhs = lhs_info.const_val;
+                    Const_Val rhs = rhs_info.const_val;
+                    
+                    if (Type_IsTyped(t0) && Type_IsTyped(t1))
                     {
-                        Type_ID t0 = lhs_info.type;
-                        Type_ID t1 = rhs_info.type;
-                        
-                        Big_Num v0 = lhs_info.const_val.num;
-                        Big_Num v1 = rhs_info.const_val.num;
-                        
-                        bool is_flipped = false;
-                        
                         if (t0 == t1) common_type = t0;
-                        else if (!Type_IsTyped(t0) || !Type_IsTyped(t1))
+                        else NOT_IMPLEMENTED; // TODO: pointers
+                    }
+                    
+                    else if (Type_IsTyped(t0) ^ Type_IsTyped(t1))
+                    {
+                        if (Type_IsTyped(t1))
                         {
-                            if (Type_IsTyped(t0) || Type_IsTyped(t1))
+                            if (!ConstVal_CoerceUntypedToType(t1, t0, rhs, &rhs))
                             {
-                                
-                                if (Type_IsTyped(t1))
-                                {
-                                    Type_ID t_tmp = t1;
-                                    t1 = t0;
-                                    t0 = t_tmp;
-                                    
-                                    Big_Num v_tmp = v1;
-                                    v1 = v0;
-                                    v0 = v_tmp;
-                                    
-                                    is_flipped = true;
-                                }
-                                
-                                if (t1 == Type_UntypedInt || t1 == Type_UntypedChar)
-                                {
-                                    if (Type_IsIntegral(t0) || t0 == Type_Typeid || t0 == Type_Byte)
-                                    {
-                                        if (BigNum_IEffectiveSize(v1) <= Type_Sizeof(t0)) common_type = t0;
-                                        else
-                                        {
-                                            //// ERROR: conversion loss
-                                            common_type = Type_NoType;
-                                        }
-                                    }
-                                    
-                                    else if (Type_IsFloating(t0))
-                                    {
-                                        if (BigNum_FEffectiveSize(v1) <= Type_Sizeof(t0)) common_type = t0;
-                                        else
-                                        {
-                                            //// ERROR: conversion loss
-                                            common_type = Type_NoType;
-                                        }
-                                    }
-                                }
-                                
-                                else if (t1 == Type_UntypedFloat)
-                                {
-                                    if (Type_IsFloating(t0))
-                                    {
-                                        if (BigNum_FEffectiveSize(v1) <= Type_Sizeof(t0)) common_type = t0;
-                                        else
-                                        {
-                                            //// ERROR: conversion loss
-                                            common_type = Type_NoType;
-                                        }
-                                    }
-                                    
-                                    else if (Type_IsIntegral(t0))
-                                    {
-                                        if (BigNum_IsEqual(BigNum_Truncate(v1), v1) &&
-                                            BigNum_IEffectiveSize(v1) <= Type_Sizeof(t0)) common_type = t0;
-                                        else
-                                        {
-                                            //// ERROR: conversion loss
-                                            common_type = Type_NoType;
-                                        }
-                                    }
-                                }
-                                
-                                else if (t1 == Type_UntypedBool)
-                                {
-                                    if (Type_IsBoolean(t0))
-                                    {
-                                        common_type = t0;
-                                    }
-                                }
-                                
-                                else common_type = Type_NoType;
+                                //// ERROR
+                                info.result = Check_Error;
+                            }
+                        }
+                        
+                        else
+                        {
+                            if (!ConstVal_CoerceUntypedToType(t1, t0, lhs, &lhs))
+                            {
+                                //// ERROR
+                                info.result = Check_Error;
+                            }
+                        }
+                    }
+                    
+                    else
+                    {
+                        if (t0 == Type_UntypedInt && t1 == Type_UntypedFloat ||
+                            t1 == Type_UntypedInt && t0 == Type_UntypedFloat)
+                        {
+                            common_type = Type_UntypedFloat;
+                            
+                            if (t0 == Type_UntypedFloat) rhs.big_float = BigFloat_FromBigInt(rhs.big_int);
+                            else                         lhs.big_float = BigFloat_FromBigInt(lhs.big_int);
+                        }
+                        
+                        if (t0 == Type_UntypedChar && t1 == Type_UntypedFloat ||
+                            t1 == Type_UntypedChar && t0 == Type_UntypedFloat)
+                        {
+                            common_type = Type_UntypedFloat;
+                            
+                            if (t0 == Type_UntypedFloat) rhs.big_float = BigFloat_FromF64((f64)rhs.uint64);
+                            else                         lhs.big_float = BigFloat_FromF64((f64)lhs.uint64);
+                        }
+                        
+                        else if (t0 == Type_UntypedInt  && t1 == Type_UntypedChar ||
+                                 t0 == Type_UntypedChar && t1 == Type_UntypedInt)
+                        {
+                            common_type = Type_UntypedChar;
+                            
+                            Big_Int i;
+                            
+                            if (t0 == Type_UntypedInt)
+                            {
+                                i          = lhs.big_int;
+                                lhs.uint64 = BigInt_ToU64(lhs.big_int);
                             }
                             
                             else
                             {
-                                if (t0 == Type_UntypedInt  && t1 == Type_UntypedChar ||
-                                    t0 == Type_UntypedChar && t1 == Type_UntypedInt)
-                                {
-                                    common_type = Type_UntypedChar;
-                                }
-                                
-                                else if (t0 == Type_UntypedInt   && t1 == Type_UntypedFloat ||
-                                         t0 == Type_UntypedFloat && t1 == Type_UntypedInt)
-                                {
-                                    common_type = Type_UntypedFloat;
-                                }
+                                i          = rhs.big_int;
+                                rhs.uint64 = BigInt_ToU64(rhs.big_int);
+                            }
+                            
+                            if (BigInt_IsLess(i, BigInt_0))
+                            {
+                                //// ERROR: Cannot coerce negative untyped integer to untyped char
+                                info.result = Check_Error;
+                            }
+                            
+                            else if (BigInt_IsGreater(i, BigInt_FromU64(U32_MAX)))
+                            {
+                                //// ERROR: untyped integer is too large too fit into untyped char
+                                info.result = Check_Error;
                             }
                         }
                         
-                        lhs = (is_flipped ? v1 : v0);
-                        rhs = (is_flipped ? v0 : v1);
+                        else if (t0 == Type_UntypedInt && t1 == Type_UntypedBool ||
+                                 t1 == Type_UntypedInt && t0 == Type_UntypedBool)
+                        {
+                            if (t0 == Type_UntypedInt) lhs.boolean = !BigInt_IsEqual(lhs.big_int, BigInt_0);
+                            else                       rhs.boolean = !BigInt_IsEqual(rhs.big_int, BigInt_0);
+                        }
+                        
+                        else if (t0 == Type_UntypedChar && t1 == Type_UntypedBool ||
+                                 t1 == Type_UntypedChar && t0 == Type_UntypedBool)
+                        {
+                            if (t0 == Type_UntypedChar) lhs.boolean = (lhs.uint64 != 0);
+                            else                        rhs.boolean = (rhs.uint64 != 0);
+                        }
                     }
                     
                     if (common_type == Type_NoType)
                     {
-                        //// ERROR: No common type found
+                        //// ERROR: No common type between left and right hand side of binary operator
                         info.result = Check_Error;
                     }
                     
                     else
                     {
-                        info = (Check_Info){
-                            .result   = Check_Error, // NOTE: Assume the worst, correct if wrong
-                            .is_const = (lhs_info.is_const && rhs_info.is_const)
-                        };
-                        
-                        imm byte_size = (Type_IsTyped(common_type) ? Type_Sizeof(common_type) : -1);
-                        
                         switch (expression->kind)
                         {
-                            case AST_Add:
-                            case AST_Sub:
-                            case AST_IsStrictlyLess:
-                            case AST_IsStrictlyGreater:
-                            case AST_IsLess:
-                            case AST_IsGreater:
-                            {
-                                // TODO: pointer arithmetic
-                                if (!Type_IsNumeric(common_type))
-                                {
-                                    //// ERROR: operator requires common numeric type
-                                    info.result = Check_Error;
-                                }
-                                
-                                else
-                                {
-                                    info.result = Check_Complete;
-                                    info.type   = (expression->kind == AST_Add || expression->kind == AST_Sub
-                                                   ? common_type
-                                                   : Type_UntypedBool);
-                                    
-                                    if (Type_IsFloating(common_type) && (expression->kind == AST_Add || expression->kind == AST_Sub))
-                                    {
-                                        if (expression->kind == AST_Add)
-                                        {
-                                            info.const_val.num = BigNum_FAdd(lhs, rhs, byte_size);
-                                        }
-                                        
-                                        else
-                                        {
-                                            info.const_val.num = BigNum_FSub(lhs, rhs, byte_size);
-                                        }
-                                    }
-                                    
-                                    else
-                                    {
-                                        switch (expression->kind)
-                                        {
-                                            case AST_Add:
-                                            {
-                                                info.const_val.num = BigNum_IAdd(lhs, rhs, byte_size);
-                                            } break;
-                                            
-                                            case AST_Sub:
-                                            {
-                                                info.const_val.num = BigNum_ISub(lhs, rhs, byte_size);
-                                            } break;
-                                            
-                                            case AST_IsGreater:
-                                            case AST_IsStrictlyLess:
-                                            {
-                                                bool val = BigNum_IsStrictLess(lhs, rhs);
-                                                info.const_val.num = BigNum_FromU64((expression->kind == AST_IsGreater) ^ val);
-                                            } break;
-                                            
-                                            case AST_IsLess:
-                                            case AST_IsStrictlyGreater:
-                                            {
-                                                bool val = BigNum_IsStrictGreater(lhs, rhs);
-                                                info.const_val.num = BigNum_FromU64((expression->kind == AST_IsLess) ^ val);
-                                            } break;
-                                            
-                                            INVALID_DEFAULT_CASE;
-                                        }
-                                    }
-                                }
-                            } break;
+                            /// numeric
+                            AST_Mul,
+                            AST_Div,
                             
-                            case AST_Mul:
-                            case AST_Div:
-                            {
-                                if (!Type_IsNumeric(common_type))
-                                {
-                                    //// ERROR: operator requires common numeric type
-                                    info.result = Check_Error;
-                                }
-                                
-                                else
-                                {
-                                    info.result = Check_Complete;
-                                    info.type   = common_type;
-                                    
-                                    if (Type_IsFloating(common_type))
-                                    {
-                                        if (expression->kind == AST_Mul) info.const_val.num = BigNum_FMul(lhs, rhs, byte_size);
-                                        else                             info.const_val.num = BigNum_FDiv(lhs, rhs, byte_size);
-                                    }
-                                    
-                                    else
-                                    {
-                                        if (expression->kind == AST_Mul) info.const_val.num = BigNum_IMul(lhs, rhs, byte_size);
-                                        else                             info.const_val.num = BigNum_IDiv(lhs, rhs, byte_size);
-                                    }
-                                }
-                            } break;
+                            /// integral
+                            AST_Rem,
+                            AST_ClosedRange,
+                            AST_HalfOpenRange,
                             
-                            case AST_Rem:
-                            case AST_BitwiseOr:
-                            case AST_BitwiseXor:
-                            case AST_BitwiseAnd:
-                            case AST_ClosedRange:
-                            case AST_HalfOpenRange:
-                            case AST_LeftShift:
-                            case AST_RightShift:
-                            case AST_ArithRightShift:
-                            {
-                                if (!Type_IsIntegral(common_type))
-                                {
-                                    //// ERROR: operator requires common integral type
-                                    info.result = Check_Error;
-                                }
-                                
-                                else
-                                {
-                                    info.result = Check_Complete;
-                                    info.type   = common_type;
-                                    
-                                    switch (expression->kind)
-                                    {
-                                        case AST_Rem:             info.const_val.num = BigNum_Rem(lhs, rhs, byte_size);         break;
-                                        case AST_BitwiseOr:       info.const_val.num = BigNum_BitOr(lhs, rhs);                  break;
-                                        case AST_BitwiseXor:      info.const_val.num = BigNum_BitXor(lhs, rhs);                 break;
-                                        case AST_BitwiseAnd:      info.const_val.num = BigNum_BitAnd(lhs, rhs);                 break;
-                                        case AST_LeftShift:       info.const_val.num = BigNum_LeftShift(lhs, rhs, byte_size);   break;
-                                        case AST_RightShift:      info.const_val.num = BigNum_RightShift(lhs, rhs, byte_size);  break;
-                                        case AST_ArithRightShift: info.const_val.num = BigNum_ARightShift(lhs, rhs, byte_size); break;
-                                        
-                                        case AST_ClosedRange:
-                                        {
-                                            NOT_IMPLEMENTED;
-                                        } break;
-                                        
-                                        case AST_HalfOpenRange:
-                                        {
-                                            NOT_IMPLEMENTED;
-                                        } break;
-                                        
-                                        
-                                        
-                                        INVALID_DEFAULT_CASE;
-                                    }
-                                }
-                            } break;
+                            /// numeric, pointer
+                            AST_Add,
+                            AST_Sub,
+                            AST_IsStrictlyLess,
+                            AST_IsStrictlyGreater,
+                            AST_IsLess,
+                            AST_IsGreater,
                             
-                            case AST_IsEqual:
-                            case AST_IsNotEqual:
-                            {
-                                // TODO: pointers
-                                if (!Type_IsNumeric(common_type) && !Type_IsBoolean(common_type) &&
-                                    common_type != Type_Typeid && common_type != Type_Byte)
-                                {
-                                    //// ERROR: operator requires numeric, boolean, typeid or byte type
-                                    info.result = Check_Error;
-                                }
-                                
-                                else
-                                {
-                                    info.result = Check_Complete;
-                                    info.type   = Type_UntypedBool;
-                                    
-                                    info.const_val.num = BigNum_FromU64(BigNum_IsEqual(lhs, rhs) ^ (expression->kind == AST_IsNotEqual));
-                                }
-                            } break;
+                            /// typed integral
+                            AST_BitwiseOr,
+                            AST_BitwiseXor,
+                            AST_BitwiseAnd,
+                            AST_ArithRightShift,
+                            AST_RightShift,
+                            AST_LeftShift,
                             
-                            case AST_And:
-                            case AST_Or:
-                            {
-                                if (!Type_IsBoolean(common_type))
-                                {
-                                    //// ERROR: operator requires common boolean type
-                                    info.result = Check_Error;
-                                }
-                                
-                                else
-                                {
-                                    info.result = Check_Complete;
-                                    info.type   = Type_UntypedBool;
-                                    
-                                    u64 lhs_u64 = BigNum_ToU64(lhs);
-                                    u64 rhs_u64 = BigNum_ToU64(rhs);
-                                    
-                                    if (expression->kind == AST_And) info.const_val.num = BigNum_FromU64(lhs_u64 && rhs_u64);
-                                    else                             info.const_val.num = BigNum_FromU64(lhs_u64 || rhs_u64);
-                                }
-                            } break;
+                            /// int, float, ~~string~~, char, any?, typeid, byte?, bool, pointer, proc....
+                            AST_IsEqual,
+                            AST_IsNotEqual,
+                            
+                            TypeInfo_Pointer,
+                            TypeInfo_DynArray,
+                            TypeInfo_Slice,
+                            
+                            TypeInfo_Struct,
+                            TypeInfo_Union,
+                            TypeInfo_Enum,
+                            TypeInfo_Proc,
+                            
+                            TypeInfo_Range,
+                            
+                            /// boolean
+                            AST_And,
+                            AST_Or,
                             
                             INVALID_DEFAULT_CASE;
                         }
@@ -438,13 +282,37 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                                 .is_const = operand_info.is_const,
                             };
                             
-                            imm byte_size = (Type_IsTyped(info.type) ? Type_Sizeof(info.type) : -1);
-                            
-                            if (Type_IsFloating(info.type))
+                            if (Type_IsFloating(operand_info.type))
                             {
-                                info.const_val.num = BigNum_FSub(Big_0, operand_info.const_val.num, byte_size);
+                                if (!Type_IsTyped(operand_info.type))
+                                {
+                                    info.const_val.big_int = BigInt_Neg(operand_info.const_val.big_int);
+                                }
+                                
+                                else if (operand_info.type == Type_F64)
+                                {
+                                    info.const_val.float64 = -operand_info.const_val.float64;
+                                }
+                                
+                                else
+                                {
+                                    ASSERT(operand_info.type == Type_F32);
+                                    info.const_val.float32 = -operand_info.const_val.float32;
+                                }
                             }
-                            else info.const_val.num = BigNum_ISub(Big_0, operand_info.const_val.num, byte_size);
+                            
+                            else
+                            {
+                                if (!Type_IsTyped(operand_info.type))
+                                {
+                                    info.const_val.big_int = BigInt_Neg(operand_info.const_val.big_int);
+                                }
+                                
+                                else
+                                {
+                                    info.const_val.uint64 = (~operand_info.const_val.uint64 + 1) & BYTE_MASK(Type_Sizeof(operand_info.type));
+                                }
+                            }
                         }
                     } break;
                     
@@ -462,27 +330,37 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                                 .result    = Check_Complete,
                                 .type      = operand_info.type,
                                 .is_const  = operand_info.is_const,
-                                .const_val.num = BigNum_Complement(operand_info.const_val.num, Type_Sizeof(info.type)),
+                                .const_val.uint64 = ~operand_info.const_val.uint64 & BYTE_MASK(Type_Sizeof(operand_info.type))
                             };
                         }
                     } break;
                     
                     case AST_Not:
                     {
-                        if (!Type_IsBoolean(operand_info.type))
+                        if (!Type_IsBoolean(operand_info.type) && !Type_IsIntegral(operand_info.type))
                         {
-                            //// ERROR: logical operator requires boolean type
+                            //// ERROR: logical operator requires boolean or integral type
                             info.result = Check_Error;
                         }
                         
                         else
                         {
                             info = (Check_Info){
-                                .result    = Check_Complete,
-                                .type      = operand_info.type,
-                                .is_const  = operand_info.is_const,
-                                .const_val.num = BigNum_FromU64(BigNum_IsEqual(operand_info.const_val.num, Big_0)),
+                                .result   = Check_Complete,
+                                .type     = operand_info.type,
+                                .is_const = operand_info.is_const,
                             };
+                            
+                            if (Type_IsBoolean(operand_info.type)) info.const_val.boolean = !operand_info.const_val.boolean;
+                            else
+                            {
+                                if (operand_info.type == Type_UntypedInt)
+                                {
+                                    info.const_val.big_int = BigInt_FromU64(BigInt_IsEqual(operand_info.const_val.big_int, BigInt_0));
+                                }
+                                
+                                else info.const_val.uint64 = (info.const_val.uint64 == 0 ? 1 : 0);
+                            }
                         }
                     } break;
                     
@@ -522,7 +400,7 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                         .result    = Check_Complete,
                         .type      = Type_UntypedChar,
                         .is_const  = true,
-                        .const_val.num = BigNum_FromU64(expression->character)
+                        .const_val.uint64 = expression->character
                     };
                 } break;
                 
@@ -532,7 +410,7 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                         .result    = Check_Complete,
                         .type      = Type_UntypedInt,
                         .is_const  = true,
-                        .const_val.num = expression->number
+                        .const_val.big_int = expression->integer
                     };
                 } break;
                 
@@ -542,7 +420,7 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                         .result    = Check_Complete,
                         .type      = Type_UntypedFloat,
                         .is_const  = true,
-                        .const_val.num = expression->number
+                        .const_val.big_float = expression->floating
                     };
                 } break;
                 
@@ -552,7 +430,7 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                         .result    = Check_Complete,
                         .type      = Type_UntypedBool,
                         .is_const  = true,
-                        .const_val.num = BigNum_FromU64(expression->boolean)
+                        .const_val.boolean = expression->boolean
                     };
                 } break;
                 
