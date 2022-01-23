@@ -319,3 +319,118 @@ ConstVal_CoerceUntypedToType(Type_ID src, Type_ID dst, Const_Val val, Const_Val*
     
     return !encountered_errors;
 }
+
+internal bool
+ConstVal_ConvertToCommonType(Type_ID t0, Const_Val v0, Type_ID t1, Const_Val v1, Type_ID* common_type, Const_Val* v0_out, Const_Val* v1_out)
+{
+    bool encountered_errors = false;
+    
+    // NOTE: init for convenience
+    *common_type = Type_NoType;
+    *v0_out = v0;
+    *v1_out = v1;
+    
+    if (Type_IsTyped(t0) && Type_IsTyped(t1))
+    {
+        if (t0 == t1) *common_type = t0;
+        else          *common_type = Type_NoType;
+    }
+    
+    else if (Type_IsTyped(t0) ^ Type_IsTyped(t1))
+    {
+        if (Type_IsTyped(t1))
+        {
+            *common_type = t1;
+            
+            if (!ConstVal_CoerceUntypedToType(t0, t1, v0, v0_out))
+            {
+                //// ERROR
+                encountered_errors = true;
+            }
+        }
+        
+        else
+        {
+            *common_type = t0;
+            
+            if (!ConstVal_CoerceUntypedToType(t1, t0, v1, v1_out))
+            {
+                //// ERROR
+                encountered_errors = true;
+            }
+        }
+    }
+    
+    else
+    {
+        if (t0 == Type_UntypedInt && t1 == Type_UntypedFloat ||
+            t1 == Type_UntypedInt && t0 == Type_UntypedFloat)
+        {
+            *common_type = Type_UntypedFloat;
+            
+            if (t0 == Type_UntypedFloat) v1_out->big_float = BigFloat_FromBigInt(v1.big_int);
+            else                         v0_out->big_float = BigFloat_FromBigInt(v0.big_int);
+        }
+        
+        if (t0 == Type_UntypedChar && t1 == Type_UntypedFloat ||
+            t1 == Type_UntypedChar && t0 == Type_UntypedFloat)
+        {
+            *common_type = Type_UntypedFloat;
+            
+            if (t0 == Type_UntypedFloat) v1_out->big_float = BigFloat_FromF64((f64)v1.uint64);
+            else                         v0_out->big_float = BigFloat_FromF64((f64)v0.uint64);
+        }
+        
+        else if (t0 == Type_UntypedInt  && t1 == Type_UntypedChar ||
+                 t0 == Type_UntypedChar && t1 == Type_UntypedInt)
+        {
+            *common_type = Type_UntypedChar;
+            
+            Big_Int i;
+            
+            if (t0 == Type_UntypedInt)
+            {
+                i          = v0.big_int;
+                v0_out->uint64 = BigInt_ToU64(v0.big_int);
+            }
+            
+            else
+            {
+                i          = v1.big_int;
+                v1_out->uint64 = BigInt_ToU64(v1.big_int);
+            }
+            
+            if (BigInt_IsLess(i, BigInt_0))
+            {
+                //// ERROR: Cannot coerce negative untyped integer to untyped char
+                encountered_errors = true;
+            }
+            
+            else if (BigInt_IsGreater(i, BigInt_FromU64(U32_MAX)))
+            {
+                //// ERROR: untyped integer is too large too fit into untyped char
+                encountered_errors = true;
+            }
+        }
+        
+        else if (t0 == Type_UntypedInt && t1 == Type_UntypedBool ||
+                 t1 == Type_UntypedInt && t0 == Type_UntypedBool)
+        {
+            *common_type = Type_UntypedBool;
+            
+            if (t0 == Type_UntypedInt) v0_out->boolean = !BigInt_IsEqual(v0.big_int, BigInt_0);
+            else                       v1_out->boolean = !BigInt_IsEqual(v1.big_int, BigInt_0);
+        }
+        
+        else if (t0 == Type_UntypedChar && t1 == Type_UntypedBool ||
+                 t1 == Type_UntypedChar && t0 == Type_UntypedBool)
+        {
+            *common_type = Type_UntypedBool;
+            
+            if (t0 == Type_UntypedChar) v0_out->boolean = (v0.uint64 != 0);
+            else                        v1_out->boolean = (v1.uint64 != 0);
+        }
+    }
+    
+    return !encountered_errors;
+}

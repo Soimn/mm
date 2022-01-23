@@ -218,7 +218,6 @@ typedef struct File
 
 typedef u32 Type_ID;
 
-// NOTE: ugly hack due to 4coder parsing bug
 struct Symbol;
 typedef struct Symbol* _Symbol_Table;
 typedef _Symbol_Table Symbol_Table;
@@ -272,7 +271,6 @@ typedef struct MM_State
     Interned_String keyword_strings[KEYWORD_COUNT];
     
     Interned_String intern_table[512];
-    struct Symbol* global_symbol_table[512];
 } MM_State;
 
 global MM_State MM;

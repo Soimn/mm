@@ -56,109 +56,19 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 if (rhs_info.result != Check_Complete) info.result = rhs_info.result;
                 else
                 {
-                    Type_ID common_type = Type_NoType;
+                    Type_ID common_type;
+                    Const_Val lhs;
+                    Const_Val rhs;
                     
-                    Type_ID t0 = lhs_info.type;
-                    Type_ID t1 = rhs_info.type;
-                    
-                    Const_Val lhs = lhs_info.const_val;
-                    Const_Val rhs = rhs_info.const_val;
-                    
-                    if (Type_IsTyped(t0) && Type_IsTyped(t1))
+                    ASSERT(Type_IsTyped(lhs_info.type) || lhs_info.is_const);
+                    ASSERT(Type_IsTyped(rhs_info.type) || rhs_info.is_const);
+                    if (!ConstVal_ConvertToCommonType(lhs_info.type, lhs_info.const_val, rhs_info.type, rhs_info.const_val, &common_type, &lhs, &rhs))
                     {
-                        if (t0 == t1) common_type = t0;
-                        else          common_type = Type_NoType;
+                        //// ERROR
+                        info.result = Check_Error;
                     }
                     
-                    else if (Type_IsTyped(t0) ^ Type_IsTyped(t1))
-                    {
-                        if (Type_IsTyped(t1))
-                        {
-                            if (!ConstVal_CoerceUntypedToType(t1, t0, rhs, &rhs))
-                            {
-                                //// ERROR
-                                info.result = Check_Error;
-                            }
-                        }
-                        
-                        else
-                        {
-                            if (!ConstVal_CoerceUntypedToType(t1, t0, lhs, &lhs))
-                            {
-                                //// ERROR
-                                info.result = Check_Error;
-                            }
-                        }
-                    }
-                    
-                    else
-                    {
-                        if (t0 == Type_UntypedInt && t1 == Type_UntypedFloat ||
-                            t1 == Type_UntypedInt && t0 == Type_UntypedFloat)
-                        {
-                            common_type = Type_UntypedFloat;
-                            
-                            if (t0 == Type_UntypedFloat) rhs.big_float = BigFloat_FromBigInt(rhs.big_int);
-                            else                         lhs.big_float = BigFloat_FromBigInt(lhs.big_int);
-                        }
-                        
-                        if (t0 == Type_UntypedChar && t1 == Type_UntypedFloat ||
-                            t1 == Type_UntypedChar && t0 == Type_UntypedFloat)
-                        {
-                            common_type = Type_UntypedFloat;
-                            
-                            if (t0 == Type_UntypedFloat) rhs.big_float = BigFloat_FromF64((f64)rhs.uint64);
-                            else                         lhs.big_float = BigFloat_FromF64((f64)lhs.uint64);
-                        }
-                        
-                        else if (t0 == Type_UntypedInt  && t1 == Type_UntypedChar ||
-                                 t0 == Type_UntypedChar && t1 == Type_UntypedInt)
-                        {
-                            common_type = Type_UntypedChar;
-                            
-                            Big_Int i;
-                            
-                            if (t0 == Type_UntypedInt)
-                            {
-                                i          = lhs.big_int;
-                                lhs.uint64 = BigInt_ToU64(lhs.big_int);
-                            }
-                            
-                            else
-                            {
-                                i          = rhs.big_int;
-                                rhs.uint64 = BigInt_ToU64(rhs.big_int);
-                            }
-                            
-                            if (BigInt_IsLess(i, BigInt_0))
-                            {
-                                //// ERROR: Cannot coerce negative untyped integer to untyped char
-                                info.result = Check_Error;
-                            }
-                            
-                            else if (BigInt_IsGreater(i, BigInt_FromU64(U32_MAX)))
-                            {
-                                //// ERROR: untyped integer is too large too fit into untyped char
-                                info.result = Check_Error;
-                            }
-                        }
-                        
-                        else if (t0 == Type_UntypedInt && t1 == Type_UntypedBool ||
-                                 t1 == Type_UntypedInt && t0 == Type_UntypedBool)
-                        {
-                            if (t0 == Type_UntypedInt) lhs.boolean = !BigInt_IsEqual(lhs.big_int, BigInt_0);
-                            else                       rhs.boolean = !BigInt_IsEqual(rhs.big_int, BigInt_0);
-                        }
-                        
-                        else if (t0 == Type_UntypedChar && t1 == Type_UntypedBool ||
-                                 t1 == Type_UntypedChar && t0 == Type_UntypedBool)
-                        {
-                            if (t0 == Type_UntypedChar) lhs.boolean = (lhs.uint64 != 0);
-                            else                        rhs.boolean = (rhs.uint64 != 0);
-                        }
-                    }
-                    
-                    if (common_type == Type_NoType)
+                    else if (common_type == Type_NoType)
                     {
                         //// ERROR: No common type between left and right hand side of binary operator
                         info.result = Check_Error;
@@ -596,8 +506,28 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                                 }
                             } break;
                             
-                            case AST_BitwiseOr:
                             case AST_BitwiseXor:
+                            {
+                                if (!Type_IsBoolean(common_type) && (!Type_IsTyped(common_type) || !Type_IsIntegral(common_type)))
+                                {
+                                    //// ERROR: operator requires common boolean or typed integral type
+                                    info.result = Check_Error;
+                                }
+                                
+                                else
+                                {
+                                    info = (Check_Info){
+                                        .result   = Check_Complete,
+                                        .type     = common_type,
+                                        .is_const = (lhs_info.is_const && rhs_info.is_const),
+                                    };
+                                    
+                                    if (Type_IsBoolean(common_type)) info.const_val.boolean = lhs.boolean ^ rhs.boolean;
+                                    else                             info.const_val.uint64  = lhs.uint64  ^ rhs.uint64;
+                                }
+                            } break;
+                            
+                            case AST_BitwiseOr:
                             case AST_BitwiseAnd:
                             case AST_ArithRightShift:
                             case AST_RightShift:
@@ -622,7 +552,6 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                                     switch (expression->kind)
                                     {
                                         case AST_BitwiseOr:  info.const_val.uint64 = lhs.uint64 | rhs.uint64; break;
-                                        case AST_BitwiseXor: info.const_val.uint64 = lhs.uint64 ^ rhs.uint64; break;
                                         case AST_BitwiseAnd: info.const_val.uint64 = lhs.uint64 & rhs.uint64; break;
                                         
                                         case AST_ArithRightShift:
@@ -659,8 +588,8 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                             case AST_IsEqual:
                             case AST_IsNotEqual:
                             {
-                                if (!Type_IsNumeric(common_type) || Type_IsBoolean(common_type) ||
-                                    common_type != Type_Typeid   || common_type == Type_Byte    ||
+                                if (!Type_IsNumeric(common_type) && Type_IsBoolean(common_type) &&
+                                    common_type != Type_Typeid   && common_type != Type_Byte    &&
                                     (common_type_info == 0 || common_type_info->kind != TypeInfo_Pointer))
                                 {
                                     //// ERROR: operator requires common numeric, boolean, typeid, byte or pointer type
@@ -878,12 +807,28 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                     
                     case AST_Reference:
                     {
+                        // TODO: l-value vs r-value
                         NOT_IMPLEMENTED;
                     } break;
                     
                     case AST_Dereference:
                     {
-                        NOT_IMPLEMENTED;
+                        Type_Info* operand_type_info = MM_TypeInfoOf(operand_info.type);
+                        if (operand_type_info == 0 || operand_type_info->kind != TypeInfo_Pointer)
+                        {
+                            //// ERROR: operand to dereference operator must be of pointer type
+                            info.result = Check_Error;
+                        }
+                        
+                        else
+                        {
+                            // TODO: constval pointers
+                            info = (Check_Info){
+                                .result   = Check_Complete,
+                                .type     = operand_type_info->ptr_type,
+                                .is_const = false,
+                            };
+                        }
                     } break;
                     
                     case AST_Negation:
@@ -968,10 +913,43 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                         }
                     } break;
                     
-                    /// Const len array or slice
                     case AST_Spread:
                     {
-                        NOT_IMPLEMENTED;
+                        Type_Info* operand_type_info = MM_TypeInfoOf(operand_info.type);
+                        
+                        if (operand_info.type != Type_Typeid && (operand_type_info == 0 || operand_type_info->kind != TypeInfo_Array))
+                        {
+                            //// ERROR: operator requires array or typeid type
+                            info.result = Check_Error;
+                        }
+                        
+                        else if (!operand_info.is_const)
+                        {
+                            //// ERROR: operator requires constant
+                            info.result = Check_Error;
+                        }
+                        
+                        else
+                        {
+                            if (operand_info.type == Type_Typeid)
+                            {
+                                info = (Check_Info){
+                                    .result   = Check_Complete,
+                                    .type     = Type_Typeid,
+                                    .is_const = true,
+                                    .const_val.uint64 = Type_VarArgSliceOf((Type_ID)operand_info.const_val.uint64)
+                                };
+                            }
+                            
+                            else
+                            {
+                                // TODO: This is easy to handle from the caller, but it would be nice to handle it
+                                //       without some context hack. Either way, it would be required that this, and
+                                //       multiple return values, do not ruin every other type check by introducing
+                                //       multiple values with one CheckExpression call.
+                                NOT_IMPLEMENTED;
+                            }
+                        }
                     } break;
                     
                     INVALID_DEFAULT_CASE;
@@ -1102,6 +1080,73 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_Conditional:
                 {
+                    Check_Info condition_info = CheckExpression(state, expression->conditional_expr.condition);
+                    
+                    if (condition_info.result != Check_Complete) info.result = condition_info.result;
+                    else
+                    {
+                        Check_Info true_info = CheckExpression(state, expression->conditional_expr.true_clause);
+                        
+                        if (true_info.result != Check_Complete) info.result = true_info.result;
+                        else
+                        {
+                            Check_Info false_info = CheckExpression(state, expression->conditional_expr.false_clause);
+                            
+                            if (false_info.result != Check_Complete) info.result = false_info.result;
+                            else
+                            {
+                                if (Type_IsBoolean(condition_info.type))
+                                {
+                                    //// ERROR: coindition of conditional operator is required to be of boolean type
+                                    info.result = Check_Error;
+                                }
+                                
+                                else
+                                {
+                                    Type_ID common_type;
+                                    Const_Val true_val;
+                                    Const_Val false_val;
+                                    
+                                    ASSERT(Type_IsTyped(true_info.type) || true_info.is_const);
+                                    ASSERT(Type_IsTyped(false_info.type) || false_info.is_const);
+                                    if (!ConstVal_ConvertToCommonType(true_info.type, true_info.const_val, false_info.type, false_info.const_val, &common_type, &true_val, &false_val))
+                                    {
+                                        //// ERROR
+                                        info.result = Check_Error;
+                                    }
+                                    
+                                    else if (common_type == Type_NoType)
+                                    {
+                                        //// ERROR: No common type between true and false clause of conditional operator
+                                        info.result = Check_Error;
+                                    }
+                                    
+                                    else
+                                    {
+                                        info = (Check_Info){
+                                            .result = Check_Complete,
+                                            .type   = common_type,
+                                        };
+                                        
+                                        if (condition_info.is_const)
+                                        {
+                                            if (condition_info.const_val.boolean)
+                                            {
+                                                info.is_const  = true_info.is_const;
+                                                info.const_val = true_info.const_val;
+                                            }
+                                            
+                                            else
+                                            {
+                                                info.is_const  = false_info.is_const;
+                                                info.const_val = false_info.const_val;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     NOT_IMPLEMENTED;
                 } break;
                 
@@ -1112,6 +1157,34 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 } break;
             }
         }
+    }
+    
+    // TODO: Figure out how this should work generally
+    // NOTE: Constant value folding
+    if (info.result == Check_Complete && info.is_const)
+    {
+        if (info.type == Type_UntypedBool)
+        {
+            ZeroStruct(expression);
+            expression->kind    = AST_Boolean;
+            expression->boolean = info.const_val.boolean;
+        }
+        
+        else if (info.type == Type_UntypedInt)
+        {
+            ZeroStruct(expression);
+            expression->kind    = AST_Int;
+            expression->integer = info.const_val.big_int;
+        }
+        
+        else if (info.type == Type_UntypedFloat)
+        {
+            ZeroStruct(expression);
+            expression->kind     = AST_Float;
+            expression->floating = info.const_val.big_float;
+        }
+        
+        else NOT_IMPLEMENTED;
     }
     
     return info;
@@ -1195,22 +1268,7 @@ CheckStatement(Checker_State* state, AST_Node* statement)
                     result = Check_Error;
                 }
                 
-                else
-                {
-                    // TODO: constant expression collapsing
-#if 0
-                    bool condition_val = ConstVal_ToBool(ConstVal_CastTo(condition_info.const_val, Type_Bool));
-                    // NOTE: overwrite previous condition expression with the computed result
-                    //       the original expression is not needed anymore, since the when statement
-                    //       is disolved when the condition value has been computed
-                    AST_Node* condition_node = statement->when_statement.condition;
-                    ZeroStruct(condition_node);
-                    condition_node->kind    = AST_Boolean;
-                    condition_node->boolean = condition_val;
-#endif
-                    
-                    result = Check_Complete;
-                }
+                else result = Check_Complete;
             }
         } break;
         

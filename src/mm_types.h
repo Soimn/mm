@@ -56,6 +56,7 @@ enum TYPE_INFO_KIND
     TypeInfo_Pointer,
     TypeInfo_DynArray,
     TypeInfo_Slice,
+    TypeInfo_VarArgSlice,
     
     TypeInfo_Struct,
     TypeInfo_Union,
@@ -377,6 +378,16 @@ Type_SliceOf(Type_ID type)
 
 internal inline Type_ID
 Type_DynArrayOf(Type_ID type)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal inline Type_ID
+Type_VarArgSliceOf(Type_ID type)
 {
     Type_ID result = Type_NoType;
     
