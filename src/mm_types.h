@@ -324,3 +324,63 @@ Type_IsCastableTo(Type_ID src, Type_ID dst)
     
     return result;
 }
+
+internal inline Type_ID
+Type_ClosedRangeOf(Type_ID type)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal inline Type_ID
+Type_HalfOpenRangeOf(Type_ID type)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal inline Type_ID
+Type_ArrayOf(Type_ID elem_type, u64 size)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal inline Type_ID
+Type_PointerTo(Type_ID type)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal inline Type_ID
+Type_SliceOf(Type_ID type)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal inline Type_ID
+Type_DynArrayOf(Type_ID type)
+{
+    Type_ID result = Type_NoType;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}

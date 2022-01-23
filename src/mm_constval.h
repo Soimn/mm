@@ -1,3 +1,9 @@
+typedef struct Range
+{
+    Big_Int start;
+    Big_Int end;
+} Range;
+
 typedef union Const_Val
 {
     Big_Int big_int;
@@ -8,6 +14,7 @@ typedef union Const_Val
     f32 float32;
     bool boolean;
     Interned_String string;
+    Range range;
 } Const_Val;
 
 internal bool
