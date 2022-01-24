@@ -1018,11 +1018,13 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_StructLiteral:
                 {
+                    // TODO: How should .{} be handled?
                     NOT_IMPLEMENTED;
                 } break;
                 
                 case AST_ArrayLiteral:
                 {
+                    // TODO: How should .[] be handled?
                     NOT_IMPLEMENTED;
                 } break;
                 
@@ -1050,7 +1052,76 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_Subscript:
                 {
-                    NOT_IMPLEMENTED;
+                    Check_Info array_info = CheckExpression(expression->subscript_expr.array);
+                    
+                    if (array_info.result != Check_Complete) info.result = array_info.result;
+                    else
+                    {
+                        Check_Info index_info = CheckExpression(expression->subscript_expr.index);
+                        
+                        if (index_info.result != Check_Complete) info.result = index_info.result;
+                        else
+                        {
+                            Type_Info* array_type_info = MM_TypeInfoOf(array_info.type);
+                            
+                            if (array_type_info == 0 || (array_type_info->kind != TypeInfo_Array    &&
+                                                         array_type_info->kind != TypeInfo_Slice    &&
+                                                         array_type_info->kind != TypeInfo_DynArray &&
+                                                         array_type_info->kind != TypeInfo_VarArgSlice))
+                            {
+                                //// ERROR: operator requires array like type
+                                info.result = Check_Error;
+                            }
+                            
+                            else if (!Type_IsIntegral(index_info.type))
+                            {
+                                //// ERROR: index must be of integral type
+                                info.result = Check_Error;
+                            }
+                            
+                            else
+                            {
+                                Type_ID elem_type;
+                                if (array_type_info->kind != TypeInfo_Array) elem_type = array_type_info->array.elem_type;
+                                else                                         elem_type = array_type_info->elem_type;
+                                
+                                info = (Check_Info){
+                                    .result = Check_Complete,
+                                    .type   = elem_type,
+                                    .is_const = (array_info.is_const && index_info.is_const),
+                                };
+                                
+                                if (index_info.is_const)
+                                {
+                                    bool oob = false;
+                                    if (index_info.type == Type_UntypedInt)
+                                    {
+                                        oob = (BigInt_IsLess(index_info.const_val.big_int, BigInt_0) ||
+                                               !BigInt_IsLess(index_info.const_val.big_int, BigInt_FromU64(array_type_info->array.size)));
+                                    }
+                                    
+                                    else if (Type_IsSignedInteger(index_info.type))
+                                    {
+                                        oob = (index_info.const_val.int64 < 0 || index_info.const_val.int64 >= array_type_info->array.size));
+                                    }
+                                    
+                                    else oob = (index_info.const_val.uint64 >= array_type_info->array.size);
+                                    
+                                    if (oob)
+                                    {
+                                        //// ERROR: index out of bounds
+                                        info.result = Check_Error;
+                                    }
+                                    
+                                    else if (info.is_const)
+                                    {
+                                        // TODO: perform const val subscript
+                                        NOT_IMPLEMENTED;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } break;
                 
                 case AST_Slice:
@@ -1285,7 +1356,7 @@ CheckStatement(Checker_State* state, AST_Node* statement)
         
         case AST_If:
         {
-            NOT_IMPLEMENTED;
+            NOT_IMPLEMENTED; // TODO: Check init statement
             
             Check_Info condition_info = CheckExpression(state, statement->if_statement.condition);
             if (condition_info.result != Check_Complete) result = condition_info.result;

@@ -52,8 +52,8 @@ enum TYPE_INFO_KIND
 {
     TypeInfo_Primitive = 0,
     
-    TypeInfo_Array,
     TypeInfo_Pointer,
+    TypeInfo_Array,
     TypeInfo_DynArray,
     TypeInfo_Slice,
     TypeInfo_VarArgSlice,
