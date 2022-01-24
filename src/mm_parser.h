@@ -631,75 +631,93 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         }
     }
     
-    else if (EatTokenOfKind(state, Token_Period))
+    else if (EatTokenOfKind(state, Token_OpenPeriodBrace))
     {
-        if (EatTokenOfKind(state, Token_OpenBrace))
-        {
-            AST_Node* params = 0;
-            
-            if (EatTokenOfKind(state, Token_CloseBrace)); // NOTE: allow name.{}
-            else
-            {
-                if (!ParseNamedValueList(state, &params)) encountered_errors = true;
-                else
-                {
-                    if (EatTokenOfKind(state, Token_CloseBrace))
-                    {
-                        //// ERROR: Missing matching closing brace
-                        encountered_errors = true;
-                    }
-                }
-            }
-            
-            if (!encountered_errors)
-            {
-                *expression = PushNode(state, AST_StructLiteral);
-                (*expression)->struct_literal.type   = 0;
-                (*expression)->struct_literal.params = params;
-            }
-        }
+        AST_Node* params = 0;
         
-        else if (EatTokenOfKind(state, Token_OpenBracket))
-        {
-            AST_Node* params = 0;
-            
-            if (EatTokenOfKind(state, Token_CloseBracket)); // NOTE: allow name.[]
-            else
-            {
-                if (!ParseNamedValueList(state, &params)) encountered_errors = true;
-                else
-                {
-                    token = GetToken(state);
-                    
-                    if (!EatTokenOfKind(state, Token_CloseBracket))
-                    {
-                        //// ERROR: Missing matching closing bracket
-                        encountered_errors = true;
-                    }
-                }
-            }
-            
-            if (!encountered_errors)
-            {
-                *expression = PushNode(state, AST_ArrayLiteral);
-                (*expression)->struct_literal.type   = 0;
-                (*expression)->struct_literal.params = params;
-            }
-        }
-        
+        if (EatTokenOfKind(state, Token_CloseBrace)); // NOTE: allow name.{}
         else
         {
-            AST_Node* right = 0;
-            
-            if (!ParseTypeLevelExpression(state, &right)) encountered_errors = true;
+            if (!ParseNamedValueList(state, &params)) encountered_errors = true;
             else
             {
-                *expression = PushNode(state, AST_ElementOf);
-                (*expression)->binary_expr.left  = 0;
-                (*expression)->binary_expr.right = right;
+                if (EatTokenOfKind(state, Token_CloseBrace))
+                {
+                    //// ERROR: Missing matching closing brace
+                    encountered_errors = true;
+                }
             }
         }
         
+        if (!encountered_errors)
+        {
+            *expression = PushNode(state, AST_StructLiteral);
+            (*expression)->struct_literal.type   = 0;
+            (*expression)->struct_literal.params = params;
+        }
+    }
+    
+    else if (EatTokenOfKind(state, Token_OpenPeriodBracket))
+    {
+        AST_Node* params = 0;
+        
+        if (EatTokenOfKind(state, Token_CloseBracket)); // NOTE: allow name.[]
+        else
+        {
+            if (!ParseNamedValueList(state, &params)) encountered_errors = true;
+            else
+            {
+                token = GetToken(state);
+                
+                if (!EatTokenOfKind(state, Token_CloseBracket))
+                {
+                    //// ERROR: Missing matching closing bracket
+                    encountered_errors = true;
+                }
+            }
+        }
+        
+        if (!encountered_errors)
+        {
+            *expression = PushNode(state, AST_ArrayLiteral);
+            (*expression)->array_literal.type   = 0;
+            (*expression)->array_literal.params = params;
+        }
+    }
+    
+    else if (EatTokenOfKind(state, Token_OpenPeriodParen))
+    {
+        AST_Node* operand = 0;
+        
+        if (!ParseExpression(state, &operand)) encountered_errors = true;
+        else
+        {
+            if (!EatTokenOfKind(state, Token_CloseParen))
+            {
+                //// ERROR: Missing matching closing paren
+                encountered_errors = true;
+            }
+            
+            else
+            {
+                *expression = PushNode(state, AST_Cast);
+                (*expression)->cast_expr.type    = 0;
+                (*expression)->cast_expr.operand = operand;
+            }
+        }
+    }
+    
+    else if (EatTokenOfKind(state, Token_Period))
+    {
+        AST_Node* right = 0;
+        
+        if (!ParseTypeLevelExpression(state, &right)) encountered_errors = true;
+        else
+        {
+            *expression = PushNode(state, AST_ElementOf);
+            (*expression)->binary_expr.left  = 0;
+            (*expression)->binary_expr.right = right;
+        }
     }
     
     else if (EatTokenOfKind(state, Token_OpenParen))
@@ -956,77 +974,97 @@ ParsePostfixExpression(Parser_State* state, AST_Node** expression)
                 }
             }
             
-            else if (EatTokenOfKind(state, Token_Period))
+            else if (EatTokenOfKind(state, Token_OpenPeriodBrace))
             {
-                if (EatTokenOfKind(state, Token_OpenBrace))
-                {
-                    AST_Node* type   = *expression;
-                    AST_Node* params = 0;
-                    
-                    if (EatTokenOfKind(state, Token_CloseBrace)); // NOTE: allow name.{}
-                    else
-                    {
-                        if (!ParseNamedValueList(state, &params)) encountered_errors = true;
-                        else
-                        {
-                            if (EatTokenOfKind(state, Token_CloseBrace))
-                            {
-                                //// ERROR: Missing matching closing brace
-                                encountered_errors = true;
-                            }
-                        }
-                    }
-                    
-                    if (!encountered_errors)
-                    {
-                        *expression = PushNode(state, AST_StructLiteral);
-                        (*expression)->struct_literal.type   = type;
-                        (*expression)->struct_literal.params = params;
-                    }
-                }
+                AST_Node* type   = *expression;
+                AST_Node* params = 0;
                 
-                else if (EatTokenOfKind(state, Token_OpenBracket))
-                {
-                    AST_Node* type   = *expression;
-                    AST_Node* params = 0;
-                    
-                    
-                    if (EatTokenOfKind(state, Token_CloseBracket)); // NOTE: allow name.[]
-                    else
-                    {
-                        if (!ParseNamedValueList(state, &params)) encountered_errors = true;
-                        else
-                        {
-                            Token token = GetToken(state);
-                            
-                            if (!EatTokenOfKind(state, Token_CloseBracket))
-                            {
-                                //// ERROR: Missing matching closing bracket
-                                encountered_errors = true;
-                            }
-                        }
-                    }
-                    
-                    if (!encountered_errors)
-                    {
-                        *expression = PushNode(state, AST_ArrayLiteral);
-                        (*expression)->struct_literal.type   = type;
-                        (*expression)->struct_literal.params = params;
-                    }
-                }
-                
+                if (EatTokenOfKind(state, Token_CloseBrace)); // NOTE: allow name.{}
                 else
                 {
-                    AST_Node* left  = *expression;
-                    AST_Node* right = 0;
-                    
-                    if (!ParseTypeLevelExpression(state, &right)) encountered_errors = true;
+                    if (!ParseNamedValueList(state, &params)) encountered_errors = true;
                     else
                     {
-                        *expression = PushNode(state, AST_ElementOf);
-                        (*expression)->binary_expr.left  = left;
-                        (*expression)->binary_expr.right = right;
+                        if (EatTokenOfKind(state, Token_CloseBrace))
+                        {
+                            //// ERROR: Missing matching closing brace
+                            encountered_errors = true;
+                        }
                     }
+                }
+                
+                if (!encountered_errors)
+                {
+                    *expression = PushNode(state, AST_StructLiteral);
+                    (*expression)->struct_literal.type   = type;
+                    (*expression)->struct_literal.params = params;
+                }
+            }
+            
+            else if (EatTokenOfKind(state, Token_OpenPeriodBracket))
+            {
+                AST_Node* type   = *expression;
+                AST_Node* params = 0;
+                
+                
+                if (EatTokenOfKind(state, Token_CloseBracket)); // NOTE: allow name.[]
+                else
+                {
+                    if (!ParseNamedValueList(state, &params)) encountered_errors = true;
+                    else
+                    {
+                        Token token = GetToken(state);
+                        
+                        if (!EatTokenOfKind(state, Token_CloseBracket))
+                        {
+                            //// ERROR: Missing matching closing bracket
+                            encountered_errors = true;
+                        }
+                    }
+                }
+                
+                if (!encountered_errors)
+                {
+                    *expression = PushNode(state, AST_ArrayLiteral);
+                    (*expression)->array_literal.type   = type;
+                    (*expression)->array_literal.params = params;
+                }
+            }
+            
+            else if (EatTokenOfKind(state, Token_OpenPeriodParen))
+            {
+                AST_Node* type    = *expression;
+                AST_Node* operand = 0;
+                
+                if (!ParseExpression(state, &operand)) encountered_errors = true;
+                else
+                {
+                    if (!EatTokenOfKind(state, Token_CloseParen))
+                    {
+                        //// ERROR: Missing matching closing paren
+                        encountered_errors = true;
+                    }
+                    
+                    else
+                    {
+                        *expression = PushNode(state, AST_Cast);
+                        (*expression)->cast_expr.type    = type;
+                        (*expression)->cast_expr.operand = operand;
+                    }
+                }
+            }
+            
+            else if (EatTokenOfKind(state, Token_Period))
+            {
+                AST_Node* left  = *expression;
+                AST_Node* right = 0;
+                
+                if (!ParseTypeLevelExpression(state, &right)) encountered_errors = true;
+                else
+                {
+                    *expression = PushNode(state, AST_ElementOf);
+                    (*expression)->binary_expr.left  = left;
+                    (*expression)->binary_expr.right = right;
                 }
             }
             

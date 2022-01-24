@@ -434,3 +434,13 @@ ConstVal_ConvertToCommonType(Type_ID t0, Const_Val v0, Type_ID t1, Const_Val v1,
     
     return !encountered_errors;
 }
+
+internal Const_Val
+ConstVal_CastTo(Const_Val val, Type_ID type)
+{
+    Const_Val result = {0};
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}

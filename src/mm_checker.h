@@ -1052,12 +1052,12 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_Subscript:
                 {
-                    Check_Info array_info = CheckExpression(expression->subscript_expr.array);
+                    Check_Info array_info = CheckExpression(state, expression->subscript_expr.array);
                     
                     if (array_info.result != Check_Complete) info.result = array_info.result;
                     else
                     {
-                        Check_Info index_info = CheckExpression(expression->subscript_expr.index);
+                        Check_Info index_info = CheckExpression(state, expression->subscript_expr.index);
                         
                         if (index_info.result != Check_Complete) info.result = index_info.result;
                         else
@@ -1091,34 +1091,8 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                                     .is_const = (array_info.is_const && index_info.is_const),
                                 };
                                 
-                                if (index_info.is_const)
-                                {
-                                    bool oob = false;
-                                    if (index_info.type == Type_UntypedInt)
-                                    {
-                                        oob = (BigInt_IsLess(index_info.const_val.big_int, BigInt_0) ||
-                                               !BigInt_IsLess(index_info.const_val.big_int, BigInt_FromU64(array_type_info->array.size)));
-                                    }
-                                    
-                                    else if (Type_IsSignedInteger(index_info.type))
-                                    {
-                                        oob = (index_info.const_val.int64 < 0 || index_info.const_val.int64 >= array_type_info->array.size));
-                                    }
-                                    
-                                    else oob = (index_info.const_val.uint64 >= array_type_info->array.size);
-                                    
-                                    if (oob)
-                                    {
-                                        //// ERROR: index out of bounds
-                                        info.result = Check_Error;
-                                    }
-                                    
-                                    else if (info.is_const)
-                                    {
-                                        // TODO: perform const val subscript
-                                        NOT_IMPLEMENTED;
-                                    }
-                                }
+                                // TODO: perform bounds checking & const val subscript
+                                NOT_IMPLEMENTED;
                             }
                         }
                     }
@@ -1126,7 +1100,65 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_Slice:
                 {
-                    NOT_IMPLEMENTED;
+                    Check_Info array_info = CheckExpression(state, expression->slice_expr.array);
+                    
+                    if (array_info.result != Check_Complete) info.result = array_info.result;
+                    else
+                    {
+                        Check_Info start_info = {0};
+                        Check_Info end_info   = {0};
+                        
+                        if (expression->slice_expr.start != 0) start_info = CheckExpression(state, expression->slice_expr.start);
+                        
+                        if (expression->slice_expr.start != 0 && start_info.result != Check_Complete) info.result = start_info.result;
+                        else
+                        {
+                            if (expression->slice_expr.one_after_end != 0) end_info = CheckExpression(state, expression->slice_expr.one_after_end);
+                            
+                            if (expression->slice_expr.one_after_end != 0 && end_info.result != Check_Complete) info.result = end_info.result;
+                            else
+                            {
+                                Type_Info* array_type_info = MM_TypeInfoOf(array_info.type);
+                                
+                                if (array_type_info == 0 || (array_type_info->kind != TypeInfo_Array    &&
+                                                             array_type_info->kind != TypeInfo_Slice    &&
+                                                             array_type_info->kind != TypeInfo_DynArray &&
+                                                             array_type_info->kind != TypeInfo_VarArgSlice))
+                                {
+                                    //// ERROR: operator requires array like type
+                                    info.result = Check_Error;
+                                }
+                                
+                                else if (expression->slice_expr.start != 0 && !Type_IsIntegral(start_info.type))
+                                {
+                                    //// ERROR: start index must be of integral type
+                                    info.result = Check_Error;
+                                }
+                                
+                                else if (expression->slice_expr.one_after_end != 0 && !Type_IsIntegral(end_info.type))
+                                {
+                                    //// ERROR: past end index must be of integral type
+                                    info.result = Check_Error;
+                                }
+                                
+                                else
+                                {
+                                    Type_ID elem_type;
+                                    if (array_type_info->kind != TypeInfo_Array) elem_type = array_type_info->array.elem_type;
+                                    else                                         elem_type = array_type_info->elem_type;
+                                    
+                                    info = (Check_Info){
+                                        .result = Check_Complete,
+                                        .type   = elem_type,
+                                        .is_const = (array_info.is_const && start_info.is_const && end_info.is_const),
+                                    };
+                                    
+                                    // TODO: perform bounds checking & const val slice
+                                    NOT_IMPLEMENTED;
+                                }
+                            }
+                        }
+                    }
                 } break;
                 
                 case AST_Call:
@@ -1136,7 +1168,47 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_Cast:
                 {
-                    NOT_IMPLEMENTED;
+                    Check_Info operand_info = CheckExpression(state, expression->cast_expr.operand);
+                    
+                    if (operand_info.result != Check_Complete) info.result = operand_info.result;
+                    else
+                    {
+                        Check_Info type_info = CheckExpression(state, expression->cast_expr.type);
+                        
+                        if (type_info.result != Check_Complete) info.result = type_info.result;
+                        else
+                        {
+                            if (type_info.type != Type_Typeid)
+                            {
+                                //// ERROR: target type of cast expression must be of type typeid
+                                info.result = Check_Error;
+                            }
+                            
+                            else if (!type_info.is_const)
+                            {
+                                //// ERROR: target type of cast expression must be constant
+                                info.result = Check_Error;
+                            }
+                            
+                            else if (!Type_IsCastableTo(operand_info.type, (Type_ID)type_info.const_val.uint64))
+                            {
+                                //// ERROR: operand is not castable to target type
+                                info.result = Check_Error;
+                            }
+                            
+                            else
+                            {
+                                Type_ID dst_type = (Type_ID)type_info.const_val.uint64;
+                                
+                                info = (Check_Info){
+                                    .result    = Check_Complete,
+                                    .type      = dst_type,
+                                    .is_const  = operand_info.is_const,
+                                    .const_val = ConstVal_CastTo(operand_info.const_val, dst_type)
+                                };
+                            }
+                        }
+                    }
                 } break;
                 
                 case AST_ElementOf:

@@ -34,6 +34,7 @@ enum AST_NODE_KIND
     AST_Call,
     AST_ElementOf,
     AST_UfcsOf,
+    AST_Cast,
     AST_LastPostfixLevel = AST_UfcsOf,
     
     // precedence 3: 60 - 79
@@ -44,7 +45,6 @@ enum AST_NODE_KIND
     AST_Reference,
     AST_Dereference,
     AST_Spread,
-    AST_Cast,
     AST_LastPrefixLevel = AST_Spread,
     
     // precedence 4: 80 - 99
@@ -212,6 +212,12 @@ typedef struct AST_Node
             struct AST_Node* func;
             struct AST_Node* params;
         } call_expr;
+        
+        struct
+        {
+            struct AST_Node* type;
+            struct AST_Node* operand;
+        } cast_expr;
         
         struct
         {

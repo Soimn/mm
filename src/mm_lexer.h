@@ -39,6 +39,10 @@ enum TOKEN_KIND
     Token_OrOrEquals,                           // ||=
     Token_LastAssignment = Token_LeftShiftEquals,
     
+    Token_OpenPeriodParen,                      // .(
+    Token_OpenPeriodBracket,                    // .[
+    Token_OpenPeriodBrace,                      // .{
+    
     Token_FirstRangeLevel = 80,
     Token_Elipsis = Token_FirstRangeLevel,      // ..
     Token_ElipsisLess,                          // ..<
@@ -432,6 +436,24 @@ Lexer_Advance(Lexer* lexer)
             {
                 lexer->cursor += 1;
                 token.kind = Token_ElipsisLess;
+            }
+            
+            else if (*lexer->cursor == '(')
+            {
+                lexer->cursor += 1;
+                token.kind = Token_OpenPeriodParen;
+            }
+            
+            else if (*lexer->cursor == '[')
+            {
+                lexer->cursor += 1;
+                token.kind = Token_OpenPeriodBracket;
+            }
+            
+            else if (*lexer->cursor == '{')
+            {
+                lexer->cursor += 1;
+                token.kind = Token_OpenPeriodBrace;
             }
         } break;
         
