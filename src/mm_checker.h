@@ -24,6 +24,7 @@ typedef struct Checker_State
 {
     Scope_Chain* chain;
     bool in_error_sweep;
+    Scope_Index scope_index;
 } Checker_State;
 
 internal bool MM_AddFile(String path, File_ID includer_id, u32 includer_offset, File_ID* id);
@@ -1042,7 +1043,31 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                 
                 case AST_Enum:
                 {
-                    NOT_IMPLEMENTED;
+                    Check_Info elem_type_info = {0};
+                    if (expression->enum_type.elem_type != 0) elem_type_info = CheckExpression(state, expression->enum_type.elem_type);
+                    
+                    if (expression->enum_type.elem_type != 0 && elem_type_info.result != Check_Complete) info.result = elem_type_info.result;
+                    else
+                    {
+                        if (expression->enum_type.elem_type != 0 && elem_type_info.type != Type_Typeid)
+                        {
+                            //// ERROR: enum member type designator must be of typeid type
+                            info.result = Check_Error;
+                        }
+                        
+                        else if (expression->enum_type.elem_type != 0 && !elem_type_info.is_const)
+                        {
+                            //// ERROR: enum member type designator must be constant
+                            info.result = Check_Error;
+                        }
+                        
+                        else
+                        {
+                            //Type_ID elem_type = (expression->enum_type.elem_type != 0 ? (Type_ID)elem_type_info.const_val.uint64 : Type_Int);
+                            
+                            NOT_IMPLEMENTED;
+                        }
+                    }
                 } break;
                 
                 case AST_Directive:
@@ -1290,7 +1315,6 @@ CheckExpression(Checker_State* state, AST_Node* expression)
                             }
                         }
                     }
-                    NOT_IMPLEMENTED;
                 } break;
                 
                 default:
@@ -1320,6 +1344,13 @@ CheckExpression(Checker_State* state, AST_Node* expression)
             expression->integer = info.const_val.big_int;
         }
         
+        else if (info.type == Type_UntypedChar)
+        {
+            ZeroStruct(expression);
+            expression->kind      = AST_Char;
+            expression->character = (Character)info.const_val.uint64;
+        }
+        
         else if (info.type == Type_UntypedFloat)
         {
             ZeroStruct(expression);
@@ -1327,7 +1358,14 @@ CheckExpression(Checker_State* state, AST_Node* expression)
             expression->floating = info.const_val.big_float;
         }
         
-        else NOT_IMPLEMENTED;
+        else if (info.type == Type_UntypedString)
+        {
+            ZeroStruct(expression);
+            expression->kind   = AST_String;
+            expression->string = info.const_val.string;
+        }
+        
+        else; // TODO: more folding
     }
     
     return info;
@@ -1352,11 +1390,16 @@ CheckScope(Checker_State* state, AST_Node* scope_node)
     AST_Node** next_link;
     AST_Node* next_decl;
     
+    Scope_Index scope_index = SCOPE_INDEX_FIRST_ORDERED;
+    
     for (; decl != 0 && result == Check_Complete;
          link = next_link, decl = next_decl)
     {
         next_link = &decl->next;
         next_decl = decl->next;
+        
+        new_state.scope_index = scope_index;
+        scope_index          += 1;
         
         result = CheckStatement(&new_state, decl);
         
@@ -1451,7 +1494,31 @@ CheckStatement(Checker_State* state, AST_Node* statement)
         
         case AST_Defer:
         {
-            NOT_IMPLEMENTED;
+            if (statement->defer_statement == 0)
+            {
+                //// ERROR: missing deferred statement
+                result = Check_Error;
+            }
+            
+            else if (statement->defer_statement->kind == AST_Break        ||
+                     statement->defer_statement->kind == AST_Continue     ||
+                     statement->defer_statement->kind == AST_Return       ||
+                     statement->defer_statement->kind == AST_Defer        ||
+                     statement->defer_statement->kind == AST_Using        ||
+                     statement->defer_statement->kind == AST_VariableDecl ||
+                     statement->defer_statement->kind == AST_ConstantDecl ||
+                     statement->defer_statement->kind == AST_IncludeDecl)
+            {
+                //// ERROR: illegal deferred statement
+                result = Check_Error;
+            }
+            
+            else
+            {
+                // TODO: disallow loop control and return inside the immediate scope and subscopes
+                NOT_IMPLEMENTED;
+                result = CheckStatement(state, statement->defer_statement);
+            }
         } break;
         
         case AST_Return:
@@ -1497,6 +1564,7 @@ MM_ResolveNextDecl(AST_Node** resolved_decl)
     Checker_State state = {
         .chain          = 0,
         .in_error_sweep = false,
+        .scope_index    = -1
     };
     
     if (MM.ast != 0)

@@ -16,8 +16,6 @@ enum TOKEN_KIND
     Token_Comma,                                // ,
     Token_Colon,                                // :
     Token_Semicolon,                            // ;
-    Token_Cash,                                 // $
-    Token_At,                                   // @
     Token_Underscore,                           // _
     Token_QuestionMark,                         // ?
     Token_Pound,                                // #
@@ -209,8 +207,6 @@ Lexer_Advance(Lexer* lexer)
         case ',': token.kind = Token_Comma;        break;
         case ':': token.kind = Token_Colon;        break;
         case ';': token.kind = Token_Semicolon;    break;
-        case '$': token.kind = Token_Cash;         break;
-        case '@': token.kind = Token_At;           break;
         case '?': token.kind = Token_QuestionMark; break;
         
         case '+':

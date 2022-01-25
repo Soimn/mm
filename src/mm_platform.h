@@ -223,8 +223,9 @@ typedef struct Symbol* _Symbol_Table;
 typedef _Symbol_Table Symbol_Table;
 
 struct Memory_Arena;
-internal void System_InitArena(struct Memory_Arena* arena);
-internal void System_GrowArena(struct Memory_Arena* arena, umm overflow);
+internal void* System_ReserveMemory(umm size);
+internal bool System_CommitMemory(void* base_pointer, umm size);
+internal void System_Exit();
 internal bool System_ReadFile(struct Memory_Arena* arena, Path path, String* contents);
 internal bool System_ResolvePath(struct Memory_Arena* arena, Path wd, Path path, Path* resolved_dir, Path* resolved_path);
 internal bool System_PathsRefSameFile(Path p0, Path p1);
@@ -441,7 +442,7 @@ MM_Init(String main_file_path, Path_Label* path_labels, u32 path_label_count)
     /// Init memory
     for (umm i = 0; i < ARRAY_SIZE(MM.arena_bank); ++i)
     {
-        System_InitArena(MM.arena_bank + i);
+        MM.arena_bank[i] = Arena_Init(GB(10));
     }
     
     /// Init keyword lookup table
