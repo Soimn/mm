@@ -19,7 +19,7 @@ IsAlphaNumericOrUnderscore(u8 c)
 
 typedef enum TOKEN_KIND
 {
-    Token_Invalid = 0,
+    Token_Error = 0,
     Token_EndOfStream,
     
     Token_TripleMinus,                                   // ---
@@ -43,7 +43,7 @@ typedef enum TOKEN_KIND
     Token_FirstAssignment,
     Token_Equals = Token_FirstAssignment,                // =
     
-    Token_FirstMulLevelAssignment = 5*16,
+    Token_FirstMulLevelAssignment = 2*16,
     Token_StarEquals = Token_FirstMulLevelAssignment,    // *=
     Token_SlashEquals,                                   // /=
     Token_RemEquals,                                     // %=
@@ -52,35 +52,35 @@ typedef enum TOKEN_KIND
     Token_RightShiftEquals,                              // >>=
     Token_SplatLeftShiftEquals,                          // <<<=
     Token_LeftShiftEquals,                               // <<=
-    Token_LastMulLevelAssignment = 6*16 - 1,
+    Token_LastMulLevelAssignment = 3*16 - 1,
     
-    Token_FirstAddLevelAssignment = 6*16,
+    Token_FirstAddLevelAssignment = 3*16,
     Token_PlusEquals = Token_FirstAddLevelAssignment,    // +=
     Token_MinusEquals,                                   // -=
     Token_OrEquals,                                      // |=
     Token_HatEquals,                                     // ^=
-    Token_LastAddLevelAssignment = 7*16 - 1,
+    Token_LastAddLevelAssignment = 4*16 - 1,
     
-    Token_AndAndEquals = 7*16,                           // &&=
+    Token_AndAndEquals = 4*16,                           // &&=
     
-    Token_OrOrEquals = 8*16,                             // ||=
+    Token_OrOrEquals = 5*16,                             // ||=
     
-    Token_LastAssignment = 9*16 - 1,
+    Token_LastAssignment = 6*16 - 1,
     
     
-    Token_FirstPostfixLevel = 9*16,
-    Token_OpenBracket,                                   // [
+    Token_FirstPostfixLevel = 6*16,
     Token_OpenParen,                                     // (
     Token_Period,                                        // .
     Token_OpenPeriodBrace,                               // .{
     Token_OpenPeriodBracket,                             // .[
     Token_OpenPeriodParen,                               // .(
-    Token_LastPostfixLevel = 10*16 - 1,
+    Token_OpenBracket,                                   // [
+    Token_LastPostfixLevel = 7*16 - 1,
     
-    Token_Not = 10*16,                                   // !
+    Token_Not = 7*16,                                    // !
     Token_Complement,                                    // ~
     
-    Token_FirstMulLevel = 11*16,
+    Token_FirstMulLevel = 8*16,
     Token_Star = Token_FirstMulLevel,                    // *
     Token_Slash,                                         // /
     Token_Rem,                                           // %
@@ -89,27 +89,27 @@ typedef enum TOKEN_KIND
     Token_RightShift,                                    // >>
     Token_SplatLeftShift,                                // <<<
     Token_LeftShift,                                     // <<
-    Token_LastMulLevel = 12*16 - 1,
+    Token_LastMulLevel = 9*16 - 1,
     
-    Token_FirstAddLevel = 12*16,
+    Token_FirstAddLevel = 9*16,
     Token_Plus = Token_FirstAddLevel,                    // +
     Token_Minus,                                         // -
     Token_Or,                                            // |
     Token_Hat,                                           // ^
-    Token_LastAddLevel = 13*16 - 1,
+    Token_LastAddLevel = 10*16 - 1,
     
-    Token_FirstComparative = 13*16,
+    Token_FirstComparative = 10*16,
     Token_EqualEquals = Token_FirstComparative,          // ==
     Token_NotEquals,                                     // !=
     Token_Less,                                          // <
     Token_Greater,                                       // >
     Token_LessEquals,                                    // <=
     Token_GreaterEquals,                                 // >=
-    Token_LastComparative = 14*16 - 1,
+    Token_LastComparative = 11*16 - 1,
     
-    Token_AndAnd = 14*16,                                // &&
+    Token_AndAnd = 11*16,                                // &&
     
-    Token_OrOr = 15*16,                                  // ||
+    Token_OrOr = 12*16,                                  // ||
 } TOKEN_KIND;
 
 typedef struct Token
@@ -122,10 +122,10 @@ typedef struct Token
     
     union
     {
-        String string;
         u8 character;
         u64 integer;
         f64 floating;
+        Interned_String string;
         Interned_String identifier;
     };
 } Token;
@@ -149,10 +149,10 @@ Lexer_Init(u8* string)
     };
 }
 
-bool
-Lexer_NextToken(Lexer* lexer, Token* token)
+Token
+Lexer_NextToken(Lexer* lexer)
 {
-    bool encountered_errors = false;
+    Token token = { .kind = Token_Error };
     
     /// Skip comments and whitespace
     while (lexer->offset < lexer->string.size)
@@ -209,15 +209,13 @@ Lexer_NextToken(Lexer* lexer, Token* token)
                 }
             }
         }
-        
         else break;
     }
-    
     /// 
     
-    token->offset = lexer->offset;
-    token->line   = lexer->line;
-    token->column = lexer->column;
+    token.offset = lexer->offset;
+    token.line   = lexer->line;
+    token.column = lexer->column;
     
     u8 c[3] = {
         lexer->offset + 0 < lexer->string.size ? lexer->string.data[lexer->offset + 0] : 0,
@@ -225,32 +223,32 @@ Lexer_NextToken(Lexer* lexer, Token* token)
         lexer->offset + 2 < lexer->string.size ? lexer->string.data[lexer->offset + 2] : 0,
     };
     
-    if (c[0] == 0) token->kind = Token_EndOfStream;
+    if (c[0] == 0) token.kind = Token_EndOfStream;
     else
     {
         lexer->offset += 1;
         
         switch (c[0])
         {
-            case '(': token->kind = Token_OpenParen;    break;
-            case ')': token->kind = Token_CloseParen;   break;
-            case '[': token->kind = Token_OpenBracket;  break;
-            case ']': token->kind = Token_CloseBracket; break;
-            case '{': token->kind = Token_OpenBrace;    break;
-            case '}': token->kind = Token_CloseBrace;   break;
-            case ':': token->kind = Token_Colon;        break;
-            case ',': token->kind = Token_Comma;        break;
-            case ';': token->kind = Token_Semicolon;    break;
-            case '?': token->kind = Token_QuestionMark; break;
-            case '~': token->kind = Token_Complement;   break;
+            case '(': token.kind = Token_OpenParen;    break;
+            case ')': token.kind = Token_CloseParen;   break;
+            case '[': token.kind = Token_OpenBracket;  break;
+            case ']': token.kind = Token_CloseBracket; break;
+            case '{': token.kind = Token_OpenBrace;    break;
+            case '}': token.kind = Token_CloseBrace;   break;
+            case ':': token.kind = Token_Colon;        break;
+            case ',': token.kind = Token_Comma;        break;
+            case ';': token.kind = Token_Semicolon;    break;
+            case '?': token.kind = Token_QuestionMark; break;
+            case '~': token.kind = Token_Complement;   break;
             
 #define SINGLE_OR_EQ(single_c, single, eq) \
 case single_c:                         \
 {                                      \
-token->kind = single;              \
+token.kind = single;              \
 if (c[1] == '=')                   \
 {                                  \
-token->kind = eq;              \
+token.kind = eq;              \
 lexer->offset += 1;                   \
 }                                  \
 } break
@@ -267,22 +265,22 @@ lexer->offset += 1;                   \
             
             case '|':
             {
-                token->kind = Token_Or;
+                token.kind = Token_Or;
                 
                 if (c[1] == '=')
                 {
-                    token->kind = Token_OrEquals;
+                    token.kind = Token_OrEquals;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '|')
                 {
-                    token->kind = Token_OrOr;
+                    token.kind = Token_OrOr;
                     lexer->offset     += 1;
                     
                     if (c[2] == '=')
                     {
-                        token->kind = Token_OrOrEquals;
+                        token.kind = Token_OrOrEquals;
                         lexer->offset     += 1;
                     }
                 }
@@ -290,22 +288,22 @@ lexer->offset += 1;                   \
             
             case '&':
             {
-                token->kind = Token_And;
+                token.kind = Token_And;
                 
                 if (c[1] == '=')
                 {
-                    token->kind = Token_AndEquals;
+                    token.kind = Token_AndEquals;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '&')
                 {
-                    token->kind = Token_AndAnd;
+                    token.kind = Token_AndAnd;
                     lexer->offset     += 1;
                     
                     if (c[2] == '=')
                     {
-                        token->kind = Token_AndAndEquals;
+                        token.kind = Token_AndAndEquals;
                         lexer->offset     += 1;
                     }
                 }
@@ -313,33 +311,33 @@ lexer->offset += 1;                   \
             
             case '<':
             {
-                token->kind = Token_Less;
+                token.kind = Token_Less;
                 
                 if (c[1] == '=')
                 {
-                    token->kind = Token_LessEquals;
+                    token.kind = Token_LessEquals;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '<')
                 {
-                    token->kind = Token_LeftShift;
+                    token.kind = Token_LeftShift;
                     lexer->offset     += 1;
                     
                     if (c[2] == '=')
                     {
-                        token->kind = Token_LeftShiftEquals;
+                        token.kind = Token_LeftShiftEquals;
                         lexer->offset     += 1;
                     }
                     
                     if (c[2] == '<')
                     {
-                        token->kind = Token_SplatLeftShift;
+                        token.kind = Token_SplatLeftShift;
                         lexer->offset     += 1;
                         
                         if (c[3] == '=')
                         {
-                            token->kind = Token_SplatLeftShiftEquals;
+                            token.kind = Token_SplatLeftShiftEquals;
                             lexer->offset     += 1;
                         }
                     }
@@ -348,33 +346,33 @@ lexer->offset += 1;                   \
             
             case '>':
             {
-                token->kind = Token_Greater;
+                token.kind = Token_Greater;
                 
                 if (c[1] == '=')
                 {
-                    token->kind = Token_GreaterEquals;
+                    token.kind = Token_GreaterEquals;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '>')
                 {
-                    token->kind = Token_RightShift;
+                    token.kind = Token_RightShift;
                     lexer->offset     += 1;
                     
                     if (c[2] == '=')
                     {
-                        token->kind = Token_RightShiftEquals;
+                        token.kind = Token_RightShiftEquals;
                         lexer->offset     += 1;
                     }
                     
                     if (c[2] == '>')
                     {
-                        token->kind = Token_ArithmeticRightShift;
+                        token.kind = Token_ArithmeticRightShift;
                         lexer->offset     += 1;
                         
                         if (c[3] == '=')
                         {
-                            token->kind = Token_ArithmeticRightShiftEquals;
+                            token.kind = Token_ArithmeticRightShiftEquals;
                             lexer->offset     += 1;
                         }
                     }
@@ -383,46 +381,46 @@ lexer->offset += 1;                   \
             
             case '.':
             {
-                token->kind = Token_Period;
+                token.kind = Token_Period;
                 
                 if (c[1] == '{')
                 {
-                    token->kind = Token_OpenPeriodBrace;
+                    token.kind = Token_OpenPeriodBrace;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '[')
                 {
-                    token->kind = Token_OpenPeriodBracket;
+                    token.kind = Token_OpenPeriodBracket;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '(')
                 {
-                    token->kind = Token_OpenPeriodParen;
+                    token.kind = Token_OpenPeriodParen;
                     lexer->offset     += 1;
                 }
             } break;
             
             case '-':
             {
-                token->kind = Token_Minus;
+                token.kind = Token_Minus;
                 
                 if (c[1] == '=')
                 {
-                    token->kind = Token_MinusEquals;
+                    token.kind = Token_MinusEquals;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '>')
                 {
-                    token->kind = Token_Arrow;
+                    token.kind = Token_Arrow;
                     lexer->offset     += 1;
                 }
                 
                 if (c[1] == '-' && c[2] == '-')
                 {
-                    token->kind = Token_TripleMinus;
+                    token.kind = Token_TripleMinus;
                     lexer->offset     += 2;
                 }
             } break;
@@ -431,7 +429,7 @@ lexer->offset += 1;                   \
             {
                 if (c[0] == '_' && !IsAlphaNumericOrUnderscore(c[1]))
                 {
-                    token->kind = Token_Underscore;
+                    token.kind = Token_Underscore;
                 }
                 
                 else if (c[0] == '_' || IsAlpha(c[0]))
@@ -447,11 +445,13 @@ lexer->offset += 1;                   \
                         lexer->offset          += 1;
                     }
                     
-                    token->identifier = MM_InternString(identifier);
+                    token.identifier = MM_InternString(identifier);
                 }
                 
                 else if (IsNumeric(c[0]))
                 {
+                    bool encountered_errors = false;
+                    
                     umm base      = 10;
                     bool is_float = false;
                     
@@ -465,7 +465,8 @@ lexer->offset += 1;                   \
                     
                     if (c[0] == '0')
                     {
-                        if      (c[1] == 'x') base = 16;
+                        if      (c[1] == 'y') base = 32;
+                        else if (c[1] == 'x') base = 16;
                         else if (c[1] == 'h') base = 16, is_float = true;
                         else if (c[1] == 'b') base = 2;
                     }
@@ -479,8 +480,8 @@ lexer->offset += 1;                   \
                         
                         u8 ch = lexer->string.data[lexer->offset];
                         if      (ch >= '0' && ch <= '9') digit = ch - '0';
-                        else if (ch >= 'a' && ch <= 'f') digit = (ch - 'a') + 10;
-                        else if (ch >= 'A' && ch <= 'F') digit = (ch - 'A') + 10;
+                        else if (ch >= 'a' && ch <= 'v') digit = (ch - 'a') + 10;
+                        else if (ch >= 'A' && ch <= 'V') digit = (ch - 'A') + 10;
                         else if (ch == '_') continue;
                         else                break;
                         
@@ -631,16 +632,16 @@ lexer->offset += 1;                   \
                                 f32 f;
                                 Copy((u32*)&integer, &f, sizeof(u32));
                                 
-                                token->kind     = Token_Float;
-                                token->floating = (f64)f;
+                                token.kind     = Token_Float;
+                                token.floating = (f64)f;
                             }
                             else if (integer_digit_count == 16)
                             {
                                 f64 f;
                                 Copy(&integer, &f, sizeof(u64));
                                 
-                                token->kind     = Token_Float;
-                                token->floating = f;
+                                token.kind     = Token_Float;
+                                token.floating = f;
                             }
                             else
                             {
@@ -650,13 +651,13 @@ lexer->offset += 1;                   \
                         }
                         else if (is_float)
                         {
-                            token->kind = Token_Float;
+                            token.kind = Token_Float;
                             NOT_IMPLEMENTED;
                         }
                         else
                         {
-                            token->kind    = Token_Int;
-                            token->integer = integer;
+                            token.kind    = Token_Int;
+                            token.integer = integer;
                         }
                     }
                 }
@@ -674,22 +675,25 @@ lexer->offset += 1;                   \
                     if (lexer->offset == lexer->string.size)
                     {
                         //// ERROR: Unterminated lexer->string literal
-                        encountered_errors = true;
                     }
                     else
                     {
                         lexer->offset += 1;
                         
-                        token->kind = Token_String;
-                        token->string = (String){
+                        String string = {
                             .data = lexer->string.data + start,
                             .size = lexer->offset - start,
                         };
+                        
+                        (void)string;
+                        NOT_IMPLEMENTED;
                     }
                 }
                 
                 else if (c[0] == '\'')
                 {
+                    bool encountered_errors = false;
+                    
                     u8 character = c[1];
                     
                     umm terminator_index = 2;
@@ -700,15 +704,15 @@ lexer->offset += 1;                   \
                         {
                             case 'a':  character = 0x07; break;
                             case 'b':  character = 0x08; break;
-                            case 'e':  character = 0x1B; break;
-                            case 'f':  character = 0x0C; break;
-                            case 'n':  character = 0x0A; break;
-                            case 'r':  character = 0x0D; break;
                             case 't':  character = 0x09; break;
+                            case 'n':  character = 0x0A; break;
                             case 'v':  character = 0x0B; break;
+                            case 'f':  character = 0x0C; break;
+                            case 'r':  character = 0x0D; break;
+                            case 'e':  character = 0x1B; break;
                             case '"':  character = 0x22; break;
-                            case '\\': character = 0x5C; break;
                             case '\'': character = 0x27; break;
+                            case '\\': character = 0x5C; break;
                             
                             default:
                             {
@@ -728,24 +732,22 @@ lexer->offset += 1;                   \
                     if (c[terminator_index] != '\'')
                     {
                         //// ERROR: Missing terminating ' character in character litteral
-                        encountered_errors = true;
                     }
                     else
                     {
-                        token->kind      = Token_Character;
-                        token->character = character;
+                        token.kind      = Token_Character;
+                        token.character = character;
                     }
                 }
                 else
                 {
                     //// ERROR: Unknown symbol
-                    encountered_errors = true;
                 }
             } break;
         }
         
-        if (!encountered_errors) token->size = lexer->offset - token->offset;
+        token.size = lexer->offset - token.offset;
     }
     
-    return !encountered_errors;
+    return token;
 }

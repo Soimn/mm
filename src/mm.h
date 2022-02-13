@@ -100,10 +100,12 @@ enum KEYWORD_KIND
     Keyword_Defer,
     Keyword_Return,
     
+    KEYWORD_KIND_MAX = Keyword_Return,
     KEYWORD_KIND_COUNT,
 };
 
-typedef String* Interned_String;
+typedef u64 Interned_String;
+#define BLANK_IDENTIFIER U64_MAX
 
 internal inline void* System_ReserveMemory(umm size);
 internal inline bool System_CommitMemory(void* ptr, umm size);
@@ -121,3 +123,5 @@ MM_InternString(String string)
 
 #include "mm_memory.h"
 #include "mm_lexer.h"
+#include "mm_ast.h"
+#include "mm_parser.h"
