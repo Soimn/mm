@@ -442,7 +442,29 @@ lexer->offset += 1;                   \
                         lexer->offset          += 1;
                     }
                     
-                    token.identifier = MM_InternString(identifier);
+                    NOT_IMPLEMENTED;
+                    
+                    u32 hash = String_HashOf(identifier);
+                    
+                    Interned_String_Entry** slot = &string_table[hash % ARRAY_SIZE(string_table)];
+                    
+                    for (; *slot != 0; slot = &(*slot)->next)
+                    {
+                        if ((*slot)->hash == hash && String_Match((*slot)->string, identifier))
+                        {
+                            break;
+                        }
+                    }
+                    
+                    if (*slot != 0) token.identifier = INTERNED_STRING_FROM_POINTER(*slot);
+                    else
+                    {
+                        Add entry
+                            copy string
+                            set slot
+                            
+                            NOT_IMPLEMENTED;
+                    }
                 }
                 
                 else if (IsNumeric(c[0]))
@@ -671,7 +693,7 @@ lexer->offset += 1;                   \
                     
                     if (lexer->offset == lexer->string.size)
                     {
-                        //// ERROR: Unterminated lexer->string literal
+                        //// ERROR: Unterminated string literal
                     }
                     else
                     {
@@ -682,7 +704,6 @@ lexer->offset += 1;                   \
                             .size = lexer->offset - start,
                         };
                         
-                        (void)string;
                         NOT_IMPLEMENTED;
                     }
                 }

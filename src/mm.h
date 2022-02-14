@@ -107,19 +107,22 @@ enum KEYWORD_KIND
 typedef u64 Interned_String;
 #define BLANK_IDENTIFIER U64_MAX
 
+typedef struct Interned_String_Entry
+{
+    struct Interned_String_Entry* next;
+    u32 hash;
+    u32 size;
+} Interned_String_Entry;
+
 internal inline void* System_ReserveMemory(umm size);
 internal inline bool System_CommitMemory(void* ptr, umm size);
 internal inline void System_FreeMemory(void* ptr, umm size);
 
-internal Interned_String
-MM_InternString(String string)
+typedef struct MM_State
 {
-    Interned_String result = {0};
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
+    Arena string_arena;
+    Interned_String_Entry* string_table[512];
+} MM_State;
 
 #include "mm_memory.h"
 #include "mm_lexer.h"

@@ -68,6 +68,8 @@ typedef struct Arena
     u64 size;
 } Arena;
 
+typedef u64 Arena_Marker;
+
 internal void*
 Arena_PushSize(Arena* arena, umm size, u8 alignment)
 {
@@ -107,4 +109,17 @@ Arena_Free(Arena* arena)
 {
     System_FreeMemory(arena->base, ARENA_RESERVATION_SIZE);
     ZeroStruct(arena);
+}
+
+internal inline Arena_Marker
+Arena_BeginTemp(Arena* arena)
+{
+    return (Arena_Marker)arena->offset;
+}
+
+internal inline void
+Arena_EndTemp(Arena* arena, Arena_Marker marker)
+{
+    ASSERT(arena->offset >= marker);
+    arena->offset = marker;
 }
