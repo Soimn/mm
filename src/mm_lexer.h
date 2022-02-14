@@ -38,7 +38,17 @@ typedef enum TOKEN_KIND
     Token_Character,
     Token_Int,
     Token_Float,
+    Token_Not,                                           // !
+    Token_Complement,                                    // ~
     
+    Token_FirstPostfixLevel,
+    Token_OpenParen,                                     // (
+    Token_Period,                                        // .
+    Token_OpenPeriodBrace,                               // .{
+    Token_OpenPeriodBracket,                             // .[
+    Token_OpenPeriodParen,                               // .(
+    Token_OpenBracket,                                   // [
+    Token_LastPostfixLevel,
     
     Token_FirstAssignment,
     Token_Equals = Token_FirstAssignment,                // =
@@ -61,24 +71,11 @@ typedef enum TOKEN_KIND
     Token_HatEquals,                                     // ^=
     Token_LastAddLevelAssignment = 4*16 - 1,
     
-    Token_AndAndEquals = 4*16,                           // &&=
+    Token_AndAndEquals = 5*16,                           // &&=
     
-    Token_OrOrEquals = 5*16,                             // ||=
+    Token_OrOrEquals = 6*16,                             // ||=
     
-    Token_LastAssignment = 6*16 - 1,
-    
-    
-    Token_FirstPostfixLevel = 6*16,
-    Token_OpenParen,                                     // (
-    Token_Period,                                        // .
-    Token_OpenPeriodBrace,                               // .{
-    Token_OpenPeriodBracket,                             // .[
-    Token_OpenPeriodParen,                               // .(
-    Token_OpenBracket,                                   // [
-    Token_LastPostfixLevel = 7*16 - 1,
-    
-    Token_Not = 7*16,                                    // !
-    Token_Complement,                                    // ~
+    Token_LastAssignment = 7*16 - 1,
     
     Token_FirstMulLevel = 8*16,
     Token_Star = Token_FirstMulLevel,                    // *

@@ -78,7 +78,7 @@ typedef enum AST_NODE_KIND
     AST_LastExpression = AST_LastBinary,
     
     AST_FirstStatement = 13*16,
-    AST_Scope,
+    AST_Block,
     AST_If,
     AST_When,
     AST_While,
@@ -216,11 +216,11 @@ typedef struct AST_Node
         
         struct
         {
-            Interned_String label;
             struct AST_Node* init;
             struct AST_Node* condition;
             struct AST_Node* true_body;
             struct AST_Node* false_body;
+            Interned_String label;
         } if_statement;
         
         struct
@@ -236,12 +236,13 @@ typedef struct AST_Node
             struct AST_Node* condition;
             struct AST_Node* step;
             struct AST_Node* body;
+            Interned_String label;
         } while_statement;
         
         struct
         {
             Interned_String label;
-        } break_statement, continue_statement;
+        } jmp_statement;
         
         struct AST_Node* defer_statement;
         
