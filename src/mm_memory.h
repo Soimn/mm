@@ -61,6 +61,7 @@ Move(void* src, void* dst, umm size)
 }
 
 #define ARENA_RESERVATION_SIZE GB(1)
+#define ARENA_PAGE_SIZE KB(16)
 typedef struct Arena
 {
     u8* base;
@@ -70,17 +71,37 @@ typedef struct Arena
 
 typedef u64 Arena_Marker;
 
+internal Arena*
+Arena_Init()
+{
+    Arena* arena = 0;
+    
+    void* memory = System_ReserveMemory(ARENA_RESERVATION_SIZE);
+    
+    if (memory == 0 || !System_CommitMemory(memory, ARENA_PAGE_SIZE))
+    {
+        //// ERROR: Out of Memory
+        ASSERT(!"OUT OF MEMORY");
+    }
+    else
+    {
+        arena = memory;
+        *arena = (Arena){
+            arena->base = (u8*)(arena + 1),
+            arena->offset = 0,
+            arena->size   = ARENA_PAGE_SIZE,
+        };
+    }
+    
+    return arena;
+}
+
 internal void*
 Arena_PushSize(Arena* arena, umm size, u8 alignment)
 {
     if (arena->offset + size + AlignOffset(arena->base + arena->offset, alignment) > arena->size)
     {
-        if (arena->base == 0)
-        {
-            arena->base = System_ReserveMemory(ARENA_RESERVATION_SIZE);
-        }
-        
-        if (arena->base == 0 || !System_CommitMemory(arena->base + arena->size, KB(64)))
+        if (arena->base == 0 || !System_CommitMemory(arena->base + arena->size, ARENA_PAGE_SIZE))
         {
             //// ERROR: Out of Memory
             ASSERT(!"OUT OF MEMORY");
@@ -122,4 +143,10 @@ Arena_EndTemp(Arena* arena, Arena_Marker marker)
 {
     ASSERT(arena->offset >= marker);
     arena->offset = marker;
+}
+
+internal inline void
+Arena_ReifyTemp(Arena* arena, Arena_Marker marker)
+{
+    ASSERT(arena->offset >= marker);
 }

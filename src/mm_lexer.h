@@ -136,7 +136,7 @@ typedef struct Lexer
 } Lexer;
 
 Lexer
-Lexer_Init(u8* string)
+Lexer_Init(String string)
 {
     return (Lexer){
         .string = string,
@@ -431,6 +431,8 @@ lexer->offset += 1;                   \
                 
                 else if (c[0] == '_' || IsAlpha(c[0]))
                 {
+                    token.kind = Token_Identifier;
+                    
                     String identifier = {
                         .data = lexer->string.data + lexer->offset - 1,
                         .size = 1,
@@ -442,28 +444,38 @@ lexer->offset += 1;                   \
                         lexer->offset          += 1;
                     }
                     
-                    NOT_IMPLEMENTED;
+                    u32 hash;
+                    Interned_String_Entry** slot = MM_GetInternedStringSlot(identifier, &hash);
                     
-                    u32 hash = String_HashOf(identifier);
-                    
-                    Interned_String_Entry** slot = &string_table[hash % ARRAY_SIZE(string_table)];
-                    
-                    for (; *slot != 0; slot = &(*slot)->next)
+                    if (*slot == 0)
                     {
-                        if ((*slot)->hash == hash && String_Match((*slot)->string, identifier))
-                        {
-                            break;
-                        }
+                        *slot = Arena_PushSize(MM.string_arena,
+                                               sizeof(Interned_String_Entry) + identifier.size,
+                                               ALIGNOF(Interned_String_Entry));
+                        
+                        **slot = (Interned_String_Entry){
+                            .next = 0,
+                            .hash = hash,
+                            .size = (u32)identifier.size,
+                        };
+                        
+                        Copy(identifier.data, *slot + 1, identifier.size);
+                        
+                        token.identifier = (u64)*slot;
                     }
-                    
-                    if (*slot != 0) token.identifier = INTERNED_STRING_FROM_POINTER(*slot);
                     else
                     {
-                        Add entry
-                            copy string
-                            set slot
-                            
-                            NOT_IMPLEMENTED;
+                        umm i = 0;
+                        for (; i < KEYWORD_KIND_MAX; ++i)
+                        {
+                            if (MM.keyword_table[i] == *slot)
+                            {
+                                token.identifier = i;
+                                break;
+                            }
+                        }
+                        
+                        if (i == KEYWORD_KIND_MAX) token.identifier = (u64)*slot;
                     }
                 }
                 
@@ -671,7 +683,21 @@ lexer->offset += 1;                   \
                         else if (is_float)
                         {
                             token.kind = Token_Float;
-                            NOT_IMPLEMENTED;
+                            
+                            // HACK
+                            token.floating = (f64)integer;
+                            
+                            f64 adj = 1;
+                            for (umm i = 0; i < fraction_digit_count; ++i) adj *= 10;
+                            
+                            token.floating += fraction / adj;
+                            
+                            adj = 1;
+                            if (exponent < 0) for (umm i = 0; i < (umm)-exponent; ++i) adj /= 10;
+                            else              for (umm i = 0; i < (umm) exponent; ++i) adj *= 10;
+                            
+                            token.floating *= adj;
+                            //
                         }
                         else
                         {
@@ -697,14 +723,190 @@ lexer->offset += 1;                   \
                     }
                     else
                     {
+                        bool encountered_errors = false;
+                        
                         lexer->offset += 1;
                         
-                        String string = {
+                        String raw_string = {
                             .data = lexer->string.data + start,
                             .size = lexer->offset - start,
                         };
                         
-                        NOT_IMPLEMENTED;
+                        Arena_Marker marker = Arena_BeginTemp(MM.string_arena);
+                        Interned_String_Entry* entry = Arena_PushSize(MM.string_arena,
+                                                                      sizeof(Interned_String_Entry) + raw_string.size,
+                                                                      ALIGNOF(Interned_String_Entry));
+                        
+                        String string = {
+                            .data = (u8*)(entry + 1),
+                            .size = 0
+                        };
+                        
+                        for (umm i = 0; !encountered_errors;)
+                        {
+                            for (; i < raw_string.size && raw_string.data[i] != '\\'; ++i, ++string.size)
+                            {
+                                string.data[string.size] = raw_string.data[i];
+                            }
+                            
+                            if (i < raw_string.size)
+                            {
+                                ++i;
+                                ASSERT(i < raw_string.size);
+                                
+                                u8 esc = raw_string.data[i];
+                                
+                                if (esc == 'U')
+                                {
+                                    ++i;
+                                    
+                                    if (i + 5 >= raw_string.size)
+                                    {
+                                        //// ERROR: Missing digits in codepoint escape sequence
+                                        encountered_errors = true;
+                                    }
+                                    else
+                                    {
+                                        u32 codepoint = 0;
+                                        
+                                        for (umm j = i; j < i + 2 && !encountered_errors; ++j)
+                                        {
+                                            u8 d = raw_string.data[j];
+                                            u8 n = 0;
+                                            
+                                            if      (IsNumeric(d))          n = d - '0';
+                                            else if (d >= 'a' && d <= 'z') n = (d - 'a') + 10;
+                                            else if (d >= 'A' && d <= 'Z') n = (d - 'a') + 10;
+                                            else
+                                            {
+                                                //// ERROR: Invalid digit in byte value escape sequence
+                                                encountered_errors = true;
+                                            }
+                                            
+                                            codepoint = codepoint << 4 | n;
+                                        }
+                                        
+                                        if (!encountered_errors)
+                                        {
+                                            if (codepoint <= 0x7F)
+                                            {
+                                                string.data[string.size++] = (u8)codepoint;
+                                            }
+                                            else if (codepoint <= 0x7FF)
+                                            {
+                                                string.data[string.size++] = (u8)(0xC0 | (codepoint & 0x7C0) >> 6);
+                                                string.data[string.size++] = (u8)(0x80 | (codepoint & 0x03F) >> 0);
+                                            }
+                                            else if (codepoint <= 0xFFFF)
+                                            {
+                                                string.data[string.size++] = (u8)(0xE0 | (codepoint & 0xF000) >> 12);
+                                                string.data[string.size++] = (u8)(0x80 | (codepoint & 0x0FC0) >> 6);
+                                                string.data[string.size++] = (u8)(0x80 | (codepoint & 0x003F) >> 0);
+                                            }
+                                            else if (codepoint <= 0x10FFFF)
+                                            {
+                                                string.data[string.size++] = (u8)(0xF0 | (codepoint & 0x1C0000) >> 18);
+                                                string.data[string.size++] = (u8)(0x80 | (codepoint & 0x03F000) >> 12);
+                                                string.data[string.size++] = (u8)(0x80 | (codepoint & 0x000FC0) >> 6);
+                                                string.data[string.size++] = (u8)(0x80 | (codepoint & 0x00003F) >> 0);
+                                            }
+                                            else
+                                            {
+                                                //// ERROR: Codepoint is out of UTF-8 range
+                                                encountered_errors = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                else if (esc == 'x')
+                                {
+                                    ++i;
+                                    
+                                    if (i + 1 >= raw_string.size)
+                                    {
+                                        //// ERROR: Missing digits in byte value escape sequence
+                                        encountered_errors = true;
+                                    }
+                                    else
+                                    {
+                                        u8 val = 0;
+                                        for (umm j = i; j < i + 2 && !encountered_errors; ++j)
+                                        {
+                                            u8 d = raw_string.data[j];
+                                            u8 n = 0;
+                                            
+                                            if      (IsNumeric(d))          n = d - '0';
+                                            else if (d >= 'a' && d <= 'z') n = (d - 'a') + 10;
+                                            else if (d >= 'A' && d <= 'Z') n = (d - 'a') + 10;
+                                            else
+                                            {
+                                                //// ERROR: Invalid digit in byte value escape sequence
+                                                encountered_errors = true;
+                                            }
+                                            
+                                            val = val << 4 | d;
+                                        }
+                                        
+                                        if (!encountered_errors)
+                                        {
+                                            string.data[string.size++] = val;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    switch (esc)
+                                    {
+                                        case 'a':  string.data[string.size++] = 0x07; break;
+                                        case 'b':  string.data[string.size++] = 0x08; break;
+                                        case 't':  string.data[string.size++] = 0x09; break;
+                                        case 'n':  string.data[string.size++] = 0x0A; break;
+                                        case 'v':  string.data[string.size++] = 0x0B; break;
+                                        case 'f':  string.data[string.size++] = 0x0C; break;
+                                        case 'r':  string.data[string.size++] = 0x0D; break;
+                                        case 'e':  string.data[string.size++] = 0x1B; break;
+                                        case '"':  string.data[string.size++] = 0x22; break;
+                                        case '\'': string.data[string.size++] = 0x27; break;
+                                        case '\\': string.data[string.size++] = 0x5C; break;
+                                        
+                                        default:
+                                        {
+                                            //// ERROR: Invalid character escape sequence
+                                            encountered_errors = true;
+                                        } break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (!encountered_errors)
+                        {
+                            token.kind = Token_String;
+                            
+                            u32 hash;
+                            Interned_String_Entry** slot = MM_GetInternedStringSlot(string, &hash);
+                            
+                            if (*slot != 0)
+                            {
+                                token.string = (u64)*slot;
+                                Arena_EndTemp(MM.string_arena, marker);
+                            }
+                            else
+                            {
+                                Arena_ReifyTemp(MM.string_arena, marker);
+                                *slot = entry;
+                                
+                                *entry = (Interned_String_Entry){
+                                    .next = 0,
+                                    .hash = hash,
+                                    .size = (u32)string.size,
+                                };
+                                
+                                Copy(string.data, entry + 1, string.size);
+                                
+                                token.string = (u64)*slot;
+                            }
+                        }
                     }
                 }
                 

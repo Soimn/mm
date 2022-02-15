@@ -1,5 +1,6 @@
 typedef struct Parser_State
 {
+    Arena* ast_arena;
     Lexer lexer;
     Token token;
 } Parser_State;
@@ -13,6 +14,8 @@ GetToken(Parser_State* state)
 internal inline Token
 NextToken(Parser_State* state)
 {
+    ASSERT(state->token.kind != Token_Error && state->token.kind != Token_EndOfStream);
+    
     state->token = Lexer_NextToken(&state->lexer);
     return state->token;
 }
@@ -34,8 +37,7 @@ EatTokenOfKind(Parser_State* state, TOKEN_KIND kind)
 internal inline AST_Node*
 PushNode(Parser_State* state, AST_NODE_KIND kind)
 {
-    AST_Node* node = 0;
-    NOT_IMPLEMENTED;
+    AST_Node* node = Arena_PushSize(state->ast_arena, sizeof(AST_Node), ALIGNOF(AST_Node));
     ZeroStruct(node);
     
     node->kind = kind;
@@ -1086,9 +1088,9 @@ ParseStatement(Parser_State* state, AST_Node** statement)
         {
             NextToken(state);
             
-            AST_Node* init = 0;
-            AST_Node* condition;
-            AST_Node* true_body;
+            AST_Node* init       = 0;
+            AST_Node* condition  = 0;
+            AST_Node* true_body  = 0;
             AST_Node* false_body = 0;
             
             if (!EatTokenOfKind(state, Token_OpenParen))
@@ -1187,8 +1189,8 @@ ParseStatement(Parser_State* state, AST_Node** statement)
         {
             NextToken(state);
             
-            AST_Node* condition;
-            AST_Node* true_body;
+            AST_Node* condition  = 0;
+            AST_Node* true_body  = 0;
             AST_Node* false_body = 0;
             
             if (!EatTokenOfKind(state, Token_OpenParen))
@@ -1495,6 +1497,43 @@ ParseScope(Parser_State* state, AST_Node** scope)
         (*scope)->block_statement.body      = body;
         (*scope)->block_statement.label     = BLANK_IDENTIFIER;
         (*scope)->block_statement.is_braced = is_braced;
+    }
+    
+    return !encountered_errors;
+}
+
+internal bool
+ParseString(String contents, AST_Node** result, Arena* ast_arena)
+{
+    bool encountered_errors = false;
+    
+    Parser_State state = {0};
+    state.ast_arena = ast_arena;
+    state.lexer     = Lexer_Init(contents);
+    state.token     = Lexer_NextToken(&state.lexer);
+    
+    AST_Node** next_decl = result;
+    while (!encountered_errors)
+    {
+        Token token = GetToken(&state);
+        
+        if (token.kind == Token_EndOfStream) break;
+        else
+        {
+            if (!ParseStatement(&state, next_decl)) encountered_errors = true;
+            else
+            {
+                if (*next_decl == 0)
+                {
+                    //// ERROR: Illegal use of statement in global scope
+                    encountered_errors = true;
+                }
+                else
+                {
+                    next_decl = &(*next_decl)->next;
+                }
+            }
+        }
     }
     
     return !encountered_errors;

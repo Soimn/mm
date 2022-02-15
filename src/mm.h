@@ -120,11 +120,89 @@ internal inline void System_FreeMemory(void* ptr, umm size);
 
 typedef struct MM_State
 {
-    Arena string_arena;
+    struct Arena* ast_arena;
+    struct Arena* string_arena;
     Interned_String_Entry* string_table[512];
+    Interned_String_Entry* keyword_table[KEYWORD_KIND_COUNT];
 } MM_State;
 
+MM_State MM = {0};
+
 #include "mm_memory.h"
+#include "mm_string.h"
+
+internal inline Interned_String_Entry**
+MM_GetInternedStringSlot(String string, u32* hash)
+{
+    *hash = String_HashOf(string) & ~(u32)0;
+    
+    Interned_String_Entry** slot = &MM.string_table[*hash % ARRAY_SIZE(MM.string_table)];
+    
+    for (; *slot != 0; slot = &(*slot)->next)
+    {
+        if ((*slot)->hash == *hash && String_Match((String){(u8*)(*slot + 1), (*slot)->size}, string))
+        {
+            break;
+        }
+    }
+    
+    return slot;
+}
+
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
+
+internal bool
+MM_Init()
+{
+    bool encountered_errors = false;
+    
+    MM.ast_arena    = Arena_Init();
+    MM.string_arena = Arena_Init();
+    
+    String keywords[KEYWORD_KIND_COUNT] = {
+        [Keyword_Proc]     = STRING("proc"),
+        [Keyword_Struct]   = STRING("struct"),
+        [Keyword_Union]    = STRING("union"),
+        [Keyword_Enum]     = STRING("enum"),
+        [Keyword_True]     = STRING("true"),
+        [Keyword_False]    = STRING("false"),
+        [Keyword_As]       = STRING("as"),
+        [Keyword_If]       = STRING("if"),
+        [Keyword_Else]     = STRING("else"),
+        [Keyword_When]     = STRING("when"),
+        [Keyword_While]    = STRING("while"),
+        [Keyword_Break]    = STRING("break"),
+        [Keyword_Continue] = STRING("continue"),
+        [Keyword_Using]    = STRING("using"),
+        [Keyword_Defer]    = STRING("defer"),
+        [Keyword_Return]   = STRING("return"),
+    };
+    
+    for (umm i = 0; i < KEYWORD_KIND_COUNT; ++i)
+    {
+        u32 hash;
+        Interned_String_Entry** slot = MM_GetInternedStringSlot(keywords[i], &hash);
+        
+        if (*slot == 0)
+        {
+            *slot = Arena_PushSize(MM.string_arena,
+                                   sizeof(Interned_String_Entry) + keywords[i].size,
+                                   ALIGNOF(Interned_String_Entry));
+            
+            **slot = (Interned_String_Entry){
+                .next = 0,
+                .hash = hash,
+                .size = (u32)keywords[i].size,
+            };
+            
+            Copy(keywords[i].data, *slot + 1, keywords[i].size);
+            
+        }
+        
+        MM.keyword_table[i] = *slot;
+    }
+    
+    return !encountered_errors;
+}

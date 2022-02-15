@@ -69,5 +69,10 @@ System_FreeMemory(void* ptr, umm size)
 void __stdcall
 WinMainCRTStartup()
 {
+    MM_Init();
+    
+    AST_Node* ast = 0;
+    ParseString(STRING("A :: 0;"), &ast, MM.ast_arena);
+    
     ExitProcess(0);
 }
