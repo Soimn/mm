@@ -444,39 +444,7 @@ lexer->offset += 1;                   \
                         lexer->offset          += 1;
                     }
                     
-                    u32 hash;
-                    Interned_String_Entry** slot = MM_GetInternedStringSlot(identifier, &hash);
-                    
-                    if (*slot == 0)
-                    {
-                        *slot = Arena_PushSize(MM.string_arena,
-                                               sizeof(Interned_String_Entry) + identifier.size,
-                                               ALIGNOF(Interned_String_Entry));
-                        
-                        **slot = (Interned_String_Entry){
-                            .next = 0,
-                            .hash = hash,
-                            .size = (u32)identifier.size,
-                        };
-                        
-                        Copy(identifier.data, *slot + 1, identifier.size);
-                        
-                        token.identifier = (u64)*slot;
-                    }
-                    else
-                    {
-                        umm i = 0;
-                        for (; i < KEYWORD_KIND_MAX; ++i)
-                        {
-                            if (MM.keyword_table[i] == *slot)
-                            {
-                                token.identifier = i;
-                                break;
-                            }
-                        }
-                        
-                        if (i == KEYWORD_KIND_MAX) token.identifier = (u64)*slot;
-                    }
+                    token.identifier = MM_InternString(identifier);
                 }
                 
                 else if (IsNumeric(c[0]))

@@ -256,11 +256,16 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 }
             }
             
-            if (EatTokenOfKind(state, Token_Arrow))
+            if (!encountered_errors && EatTokenOfKind(state, Token_Arrow))
             {
-                bool is_list = EatTokenOfKind(state, Token_OpenParen);
-                
-                if (!is_list || is_list && !EatTokenOfKind(state, Token_CloseParen))
+                if (!EatTokenOfKind(state, Token_OpenParen))
+                {
+                    if (!ParseExpression(state, &return_values))
+                    {
+                        encountered_errors = true;
+                    }
+                }
+                else
                 {
                     AST_Node** next_value = &return_values;
                     
@@ -271,12 +276,12 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                         {
                             next_value = &(*next_value)->next;
                             
-                            if (is_list && EatTokenOfKind(state, Token_Comma)) continue;
+                            if (EatTokenOfKind(state, Token_Comma)) continue;
                             else break;
                         }
                     }
                     
-                    if (is_list && !EatTokenOfKind(state, Token_CloseParen))
+                    if (!EatTokenOfKind(state, Token_CloseParen))
                     {
                         //// ERROR: Missing closing paren
                         encountered_errors = true;
@@ -284,31 +289,34 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                 }
             }
             
-            token = GetToken(state);
-            if (token.kind != Token_OpenBrace && token.kind != Token_TripleMinus)
+            if (!encountered_errors)
             {
-                *expression = PushNode(state, AST_Proc);
-                (*expression)->proc_type.params        = params;
-                (*expression)->proc_type.return_values = return_values;
-            }
-            else
-            {
-                AST_Node* body = 0;
-                
-                if (!EatTokenOfKind(state, Token_TripleMinus))
+                token = GetToken(state);
+                if (token.kind != Token_OpenBrace && token.kind != Token_TripleMinus)
                 {
-                    if (!ParseScope(state, &body))
-                    {
-                        encountered_errors = true;
-                    }
+                    *expression = PushNode(state, AST_Proc);
+                    (*expression)->proc_type.params        = params;
+                    (*expression)->proc_type.return_values = return_values;
                 }
-                
-                if (!encountered_errors)
+                else
                 {
-                    *expression = PushNode(state, AST_ProcLiteral);
-                    (*expression)->proc_literal.params        = params;
-                    (*expression)->proc_literal.return_values = return_values;
-                    (*expression)->proc_literal.body          = body;
+                    AST_Node* body = 0;
+                    
+                    if (!EatTokenOfKind(state, Token_TripleMinus))
+                    {
+                        if (!ParseScope(state, &body))
+                        {
+                            encountered_errors = true;
+                        }
+                    }
+                    
+                    if (!encountered_errors)
+                    {
+                        *expression = PushNode(state, AST_ProcLiteral);
+                        (*expression)->proc_literal.params        = params;
+                        (*expression)->proc_literal.return_values = return_values;
+                        (*expression)->proc_literal.body          = body;
+                    }
                 }
             }
         }
@@ -1158,7 +1166,7 @@ ParseStatement(Parser_State* state, AST_Node** statement)
                     token = GetToken(state);
                     if (token.kind == Token_Identifier && token.identifier == Keyword_Else)
                     {
-                        token = GetToken(state);
+                        token = NextToken(state);
                         
                         if (token.kind == Token_Identifier && token.identifier == Keyword_If)
                         {
@@ -1219,7 +1227,7 @@ ParseStatement(Parser_State* state, AST_Node** statement)
                     token = GetToken(state);
                     if (token.kind == Token_Identifier && token.identifier == Keyword_Else)
                     {
-                        token = GetToken(state);
+                        token = NextToken(state);
                         
                         if (token.kind == Token_Identifier && token.identifier == Keyword_When)
                         {
@@ -1428,6 +1436,31 @@ ParseStatement(Parser_State* state, AST_Node** statement)
                 }
             }
         }
+        else if (token.kind == Token_Identifier && token.identifier == Keyword_Include)
+        {
+            token = NextToken(state);
+            
+            if (token.kind != Token_String)
+            {
+                //// ERROR: Missing path after include keyword
+                encountered_errors = true;
+            }
+            else
+            {
+                NextToken(state);
+                
+                if (!EatTokenOfKind(state, Token_Semicolon))
+                {
+                    //// ERROR: Missing terminating semicolon
+                    encountered_errors = true;
+                }
+                else
+                {
+                    *statement = PushNode(state, AST_Include);
+                    (*statement)->include_decl.path = token.string;
+                }
+            }
+        }
         else
         {
             if (!ParseUsingExpressionVariableOrConstant(state, statement)) encountered_errors = true;
@@ -1445,9 +1478,9 @@ ParseStatement(Parser_State* state, AST_Node** statement)
                     if (stmnt->kind == AST_Constant         &&
                         stmnt->const_decl.names->next == 0  &&
                         stmnt->const_decl.values->next == 0 &&
-                        (stmnt->const_decl.values->kind == AST_Proc   || 
-                         stmnt->const_decl.values->kind == AST_Struct || 
-                         stmnt->const_decl.values->kind == AST_Union  || 
+                        (stmnt->const_decl.values->kind == AST_ProcLiteral || 
+                         stmnt->const_decl.values->kind == AST_Struct      || 
+                         stmnt->const_decl.values->kind == AST_Union       || 
                          stmnt->const_decl.values->kind == AST_Enum));
                     else
                     {

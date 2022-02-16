@@ -72,7 +72,11 @@ WinMainCRTStartup()
     MM_Init();
     
     AST_Node* ast = 0;
-    ParseString(STRING("A :: 0;"), &ast, MM.ast_arena);
+    String string = STRING("fib :: proc(n: int) -> int\n{\n\tif (n <= 1) return n;\n\telse        return fib(n - 1) + fib(n - 2);\n}\n");
+    bool succeeded = ParseString(string, &ast, MM.ast_arena);
+    
+    OutputDebugStringA((LPCSTR)string.data);
+    OutputDebugStringA(succeeded ? "\n\nsucceeded\n" : "\n\nfailed\n");
     
     ExitProcess(0);
 }

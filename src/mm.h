@@ -83,6 +83,7 @@ typedef struct String
 
 enum KEYWORD_KIND
 {
+    Keyword_Include,
     Keyword_Proc,
     Keyword_Struct,
     Keyword_Union,
@@ -120,8 +121,11 @@ internal inline void System_FreeMemory(void* ptr, umm size);
 
 typedef struct MM_State
 {
+    struct Arena* misc_arena;
     struct Arena* ast_arena;
     struct Arena* string_arena;
+    u64 keyword_threshold;
+    
     Interned_String_Entry* string_table[512];
     Interned_String_Entry* keyword_table[KEYWORD_KIND_COUNT];
 } MM_State;
@@ -149,6 +153,32 @@ MM_GetInternedStringSlot(String string, u32* hash)
     return slot;
 }
 
+internal Interned_String
+MM_InternString(String string)
+{
+    u32 hash;
+    Interned_String_Entry** slot = MM_GetInternedStringSlot(string, &hash);
+    
+    if (*slot == 0)
+    {
+        *slot = Arena_PushSize(MM.string_arena, sizeof(Interned_String_Entry) + string.size, ALIGNOF(Interned_String_Entry));
+        
+        **slot = (Interned_String_Entry){
+            .next = 0,
+            .hash = hash,
+            .size = (u32)string.size,
+        };
+        
+        Copy(string.data, *slot + 1, string.size);
+    }
+    
+    Interned_String result;
+    if ((u64)*slot < MM.keyword_threshold) result = *((u8*)(*slot + 1) + (*slot)->size);
+    else                                   result = (u64)*slot;
+    
+    return result;
+}
+
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
@@ -162,6 +192,7 @@ MM_Init()
     MM.string_arena = Arena_Init();
     
     String keywords[KEYWORD_KIND_COUNT] = {
+        [Keyword_Include]  = STRING("include"),
         [Keyword_Proc]     = STRING("proc"),
         [Keyword_Struct]   = STRING("struct"),
         [Keyword_Union]    = STRING("union"),
@@ -185,24 +216,61 @@ MM_Init()
         u32 hash;
         Interned_String_Entry** slot = MM_GetInternedStringSlot(keywords[i], &hash);
         
-        if (*slot == 0)
-        {
-            *slot = Arena_PushSize(MM.string_arena,
-                                   sizeof(Interned_String_Entry) + keywords[i].size,
-                                   ALIGNOF(Interned_String_Entry));
-            
-            **slot = (Interned_String_Entry){
-                .next = 0,
-                .hash = hash,
-                .size = (u32)keywords[i].size,
-            };
-            
-            Copy(keywords[i].data, *slot + 1, keywords[i].size);
-            
-        }
+        ASSERT(*slot == 0);
+        
+        *slot = Arena_PushSize(MM.string_arena,
+                               sizeof(Interned_String_Entry) + keywords[i].size + 1,
+                               ALIGNOF(Interned_String_Entry));
+        
+        **slot = (Interned_String_Entry){
+            .next = 0,
+            .hash = hash,
+            .size = (u32)keywords[i].size,
+        };
+        
+        Copy(keywords[i].data, *slot + 1, keywords[i].size);
+        
+        // NOTE: Keywords stor their keyword index right after the character data
+        *((u8*)(*slot + 1) + keywords[i].size) = (u8)i;
+        
         
         MM.keyword_table[i] = *slot;
     }
     
+    MM.keyword_threshold = (u64)(MM.string_arena->base + MM.string_arena->offset);
+    
     return !encountered_errors;
+}
+
+internal String
+MM_ResolvePath(String path, Arena* arena)
+{
+    for (umm i = 0; i < path.size; ++i)
+    {
+        if (path.data[i] == ':')
+        {
+            label.data = path.data;
+            label.size = i;
+            
+            path.data += i + 1;
+            path.size -= i + 1;
+            
+            break;
+        }
+    }
+    
+    String resolved_path = {0};
+    if (label.data == 0)
+    {
+        resolved_path.size = path.size;
+        resolved_path.data = Arena_PushSize(MM.string_arena, resolved_path.size, ALIGNOF(u8));
+        
+        Copy(path.data, resolved_path.data, reolved_path.size);
+    }
+    else
+    {
+        NOT_IMPLEMENTED;
+    }
+    
+    return resolved_path;
 }

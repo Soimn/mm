@@ -93,6 +93,7 @@ typedef enum AST_NODE_KIND
     AST_FirstDeclaration,
     AST_Variable = AST_FirstDeclaration,
     AST_Constant,
+    AST_Include,
     AST_LastDeclaration = AST_Constant,
     
     AST_NODE_KIND_MAX = 256,
@@ -280,5 +281,10 @@ typedef struct AST_Node
             struct AST_Node* values;
             bool is_using;
         } const_decl;
+        
+        struct
+        {
+            Interned_String path;
+        } include_decl;
     };
 } AST_Node;
