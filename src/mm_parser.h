@@ -1536,7 +1536,7 @@ ParseScope(Parser_State* state, AST_Node** scope)
 }
 
 internal bool
-ParseString(String contents, AST_Node** result, Arena* ast_arena)
+ParseString(String contents, Arena* ast_arena, AST_Node** result)
 {
     bool encountered_errors = false;
     

@@ -1,3 +1,4 @@
+#define UNICODE
 #define NOMINMAX            1
 #define WIN32_LEAN_AND_MEAN 1
 #define WIN32_MEAN_AND_LEAN 1
@@ -48,6 +49,8 @@ int _fltused;
 
 #include "mm.h"
 
+global Arena* Win32_Arena = 0;
+
 internal inline void*
 System_ReserveMemory(umm size)
 {
@@ -66,16 +69,92 @@ System_FreeMemory(void* ptr, umm size)
     VirtualFree(ptr, size, MEM_RELEASE);
 }
 
+internal bool
+System_OpenFile(String path, File_Handle* handle)
+{
+    bool succeeded = false;
+    
+    Arena_Marker marker = Arena_BeginTemp(Win32_Arena);
+    
+    int required_size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (LPCSTR)path.data, (DWORD)path.size, 0, 0);
+    
+    if (required_size != 0)
+    {
+        LPWSTR wide_path = Arena_PushSize(Win32_Arena, required_size*sizeof(WCHAR), ALIGNOF(u8));
+        
+        required_size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (LPCSTR)path.data, (DWORD)path.size, wide_path, required_size);
+        
+        if (required_size != 0)
+        {
+            HANDLE h = CreateFileW(wide_path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+            
+            if (h != INVALID_HANDLE_VALUE)
+            {
+                *handle = (File_Handle)h;
+                succeeded = true;
+            }
+        }
+    }
+    
+    Arena_EndTemp(Win32_Arena, marker);
+    
+    return succeeded;
+}
+
+internal bool
+System_ReadFile(File_Handle handle, Arena* arena, String* string)
+{
+    bool succeeded = false;
+    
+    DWORD high_file_size = 0;
+    DWORD file_size = GetFileSize((HANDLE)handle, &high_file_size);
+    
+    if (high_file_size == 0 && file_size != INVALID_FILE_SIZE)
+    {
+        Arena_Marker marker = Arena_BeginTemp(arena);
+        
+        string->size = file_size;
+        string->data = Arena_PushSize(arena, file_size, ALIGNOF(u8));
+        
+        DWORD bytes_read = 0;
+        if (ReadFile((HANDLE)handle, string->data, file_size, &bytes_read, 0) != 0 && bytes_read == file_size)
+        {
+            Arena_ReifyTemp(arena, marker);
+            succeeded = true;
+        }
+        else
+        {
+            Arena_EndTemp(arena, marker);
+            ZeroStruct(string);
+        }
+    }
+    
+    return succeeded;
+}
+
+internal bool
+System_FileHandlesAreEqual(File_Handle a, File_Handle b)
+{
+    //return (CompareObjectHandles((HANDLE)a, (HANDLE)b) == TRUE);
+    NOT_IMPLEMENTED;
+    return false;
+}
+
+internal void
+System_CloseFile(File_Handle handle)
+{
+    CloseHandle((HANDLE)handle);
+}
+
 void __stdcall
 WinMainCRTStartup()
 {
+    Win32_Arena = Arena_Init();
+    
     MM_Init();
     
-    AST_Node* ast = 0;
-    String string = STRING("fib :: proc(n: int) -> int\n{\n\tif (n <= 1) return n;\n\telse        return fib(n - 1) + fib(n - 2);\n}\n");
-    bool succeeded = ParseString(string, &ast, MM.ast_arena);
+    bool succeeded = MM_IncludeFile(STRING("test.m"));
     
-    OutputDebugStringA((LPCSTR)string.data);
     OutputDebugStringA(succeeded ? "\n\nsucceeded\n" : "\n\nfailed\n");
     
     ExitProcess(0);

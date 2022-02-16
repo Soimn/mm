@@ -115,15 +115,35 @@ typedef struct Interned_String_Entry
     u32 size;
 } Interned_String_Entry;
 
+typedef u64 File_Handle;
+
+struct Arena;
 internal inline void* System_ReserveMemory(umm size);
 internal inline bool System_CommitMemory(void* ptr, umm size);
 internal inline void System_FreeMemory(void* ptr, umm size);
+internal bool System_OpenFile(String path, File_Handle* handle);
+internal bool System_ReadFile(File_Handle handle, struct Arena* arena, String* string);
+internal bool System_FileHandlesAreEqual(File_Handle a, File_Handle b);
+internal void System_CloseFile(File_Handle handle);
+
+typedef u32 File_ID;
+
+typedef struct File
+{
+    struct File* next;
+    File_Handle handle;
+} File;
 
 typedef struct MM_State
 {
+    struct Arena* file_arena;
     struct Arena* misc_arena;
     struct Arena* ast_arena;
     struct Arena* string_arena;
+    File* first_file;
+    File** next_file;
+    struct AST_Node* first_parsed_ast;
+    struct AST_Node** next_parsed_ast;
     u64 keyword_threshold;
     
     Interned_String_Entry* string_table[512];
@@ -188,6 +208,8 @@ MM_Init()
 {
     bool encountered_errors = false;
     
+    MM.file_arena   = Arena_Init();
+    MM.misc_arena   = Arena_Init();
     MM.ast_arena    = Arena_Init();
     MM.string_arena = Arena_Init();
     
@@ -239,38 +261,64 @@ MM_Init()
     
     MM.keyword_threshold = (u64)(MM.string_arena->base + MM.string_arena->offset);
     
+    // NOTE: Initializing singly linked lists
+    MM.next_file       = &MM.first_file;
+    MM.next_parsed_ast = &MM.first_parsed_ast;
+    
     return !encountered_errors;
 }
 
-internal String
-MM_ResolvePath(String path, Arena* arena)
+internal bool
+MM_IncludeFile(String path)
 {
-    for (umm i = 0; i < path.size; ++i)
-    {
-        if (path.data[i] == ':')
-        {
-            label.data = path.data;
-            label.size = i;
-            
-            path.data += i + 1;
-            path.size -= i + 1;
-            
-            break;
-        }
-    }
+    bool encountered_errors = false;
     
-    String resolved_path = {0};
-    if (label.data == 0)
+    File_Handle handle;
+    if (!System_OpenFile(path, &handle))
     {
-        resolved_path.size = path.size;
-        resolved_path.data = Arena_PushSize(MM.string_arena, resolved_path.size, ALIGNOF(u8));
-        
-        Copy(path.data, resolved_path.data, reolved_path.size);
+        //// ERROR: Failed to open file
+        encountered_errors = true;
     }
     else
     {
-        NOT_IMPLEMENTED;
+        File* file = MM.first_file;
+        for (; file != 0; file = file->next)
+        {
+            if (System_FileHandlesAreEqual(handle, file->handle))
+            {
+                break;
+            }
+        }
+        
+        if (file != 0) System_CloseFile(handle); // NOTE: files that are stored are not closed
+        else
+        {
+            *MM.next_file = Arena_PushSize(MM.file_arena, sizeof(File), ALIGNOF(File));
+            
+            **MM.next_file = (File){
+                .next   = 0,
+                .handle = handle,
+            };
+            
+            Arena_Marker marker = Arena_BeginTemp(MM.file_arena);
+            
+            String file_contents;
+            if (!System_ReadFile(handle, MM.file_arena, &file_contents))
+            {
+                //// ERROR: Failed to read file
+                encountered_errors = true;
+            }
+            else
+            {
+                if (!ParseString(file_contents, MM.ast_arena, MM.next_parsed_ast))
+                {
+                    encountered_errors = true;
+                }
+            }
+            
+            Arena_EndTemp(MM.file_arena, marker);
+        }
     }
     
-    return resolved_path;
+    return !encountered_errors;
 }

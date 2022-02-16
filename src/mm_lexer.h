@@ -492,6 +492,8 @@ lexer->offset += 1;                   \
                         }
                         else
                         {
+                            lexer->offset += 1;
+                            
                             u64 old_integer = integer;
                             integer = integer*10 + digit;
                             
@@ -534,6 +536,8 @@ lexer->offset += 1;                   \
                                         if      (ch >= '0' && ch <= '9') digit = ch - '0';
                                         else if (ch == '_') continue;
                                         else                break;
+                                        
+                                        lexer->offset += 1;
                                         
                                         u64 old_fraction = fraction;
                                         
@@ -584,6 +588,8 @@ lexer->offset += 1;                   \
                                                     if      (ch >= '0' && ch <= '9') digit = ch - '0';
                                                     else if (ch == '_') continue;
                                                     else                break;
+                                                    
+                                                    lexer->offset += 1;
                                                     
                                                     i64 old_exponent = exponent;
                                                     
