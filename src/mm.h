@@ -81,6 +81,9 @@ typedef struct String
 // NOTE: This is just a hack to work around a parsing bug in 4coder
 #define TYPEDEF_FUNC(return_val, name, ...) typedef return_val (*name)(__VA_ARGS__)
 
+typedef u32 Type_ID;
+typedef u32 File_ID;
+
 enum KEYWORD_KIND
 {
     Keyword_Include,
@@ -125,8 +128,6 @@ internal bool System_OpenFile(String path, File_Handle* handle);
 internal bool System_ReadFile(File_Handle handle, struct Arena* arena, String* string);
 internal bool System_FileHandlesAreEqual(File_Handle a, File_Handle b);
 internal void System_CloseFile(File_Handle handle);
-
-typedef u32 File_ID;
 
 typedef struct File
 {
@@ -199,9 +200,14 @@ MM_InternString(String string)
     return result;
 }
 
+#include "mm_bignum.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
+#include "mm_const_val.h"
+#include "mm_symbols.h"
+#include "mm_types.h"
+#include "mm_checker.h"
 
 internal bool
 MM_Init()

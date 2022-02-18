@@ -195,8 +195,8 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     }
     else if (token.kind == Token_Character)
     {
-        *expression = PushNode(state, AST_Char);
-        (*expression)->character = token.character;
+        *expression = PushNode(state, AST_Int);
+        (*expression)->integer = BigInt_FromU64(token.character);
         
         NextToken(state);
     }

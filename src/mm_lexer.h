@@ -120,8 +120,8 @@ typedef struct Token
     union
     {
         u8 character;
-        u64 integer;
-        f64 floating;
+        Big_Int integer;
+        Big_Float floating;
         Interned_String string;
         Interned_String identifier;
     };
@@ -267,18 +267,18 @@ lexer->offset += 1;                   \
                 if (c[1] == '=')
                 {
                     token.kind = Token_OrEquals;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '|')
                 {
                     token.kind = Token_OrOr;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                     
                     if (c[2] == '=')
                     {
                         token.kind = Token_OrOrEquals;
-                        lexer->offset     += 1;
+                        lexer->offset += 1;
                     }
                 }
             } break;
@@ -290,18 +290,18 @@ lexer->offset += 1;                   \
                 if (c[1] == '=')
                 {
                     token.kind = Token_AndEquals;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '&')
                 {
                     token.kind = Token_AndAnd;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                     
                     if (c[2] == '=')
                     {
                         token.kind = Token_AndAndEquals;
-                        lexer->offset     += 1;
+                        lexer->offset += 1;
                     }
                 }
             } break;
@@ -313,29 +313,29 @@ lexer->offset += 1;                   \
                 if (c[1] == '=')
                 {
                     token.kind = Token_LessEquals;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '<')
                 {
                     token.kind = Token_LeftShift;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                     
                     if (c[2] == '=')
                     {
                         token.kind = Token_LeftShiftEquals;
-                        lexer->offset     += 1;
+                        lexer->offset += 1;
                     }
                     
                     if (c[2] == '<')
                     {
                         token.kind = Token_SplatLeftShift;
-                        lexer->offset     += 1;
+                        lexer->offset += 1;
                         
                         if (c[3] == '=')
                         {
                             token.kind = Token_SplatLeftShiftEquals;
-                            lexer->offset     += 1;
+                            lexer->offset += 1;
                         }
                     }
                 }
@@ -348,29 +348,29 @@ lexer->offset += 1;                   \
                 if (c[1] == '=')
                 {
                     token.kind = Token_GreaterEquals;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '>')
                 {
                     token.kind = Token_RightShift;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                     
                     if (c[2] == '=')
                     {
                         token.kind = Token_RightShiftEquals;
-                        lexer->offset     += 1;
+                        lexer->offset += 1;
                     }
                     
                     if (c[2] == '>')
                     {
                         token.kind = Token_ArithmeticRightShift;
-                        lexer->offset     += 1;
+                        lexer->offset += 1;
                         
                         if (c[3] == '=')
                         {
                             token.kind = Token_ArithmeticRightShiftEquals;
-                            lexer->offset     += 1;
+                            lexer->offset += 1;
                         }
                     }
                 }
@@ -383,19 +383,19 @@ lexer->offset += 1;                   \
                 if (c[1] == '{')
                 {
                     token.kind = Token_OpenPeriodBrace;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '[')
                 {
                     token.kind = Token_OpenPeriodBracket;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '(')
                 {
                     token.kind = Token_OpenPeriodParen;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
             } break;
             
@@ -406,19 +406,19 @@ lexer->offset += 1;                   \
                 if (c[1] == '=')
                 {
                     token.kind = Token_MinusEquals;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '>')
                 {
                     token.kind = Token_Arrow;
-                    lexer->offset     += 1;
+                    lexer->offset += 1;
                 }
                 
                 if (c[1] == '-' && c[2] == '-')
                 {
                     token.kind = Token_TripleMinus;
-                    lexer->offset     += 2;
+                    lexer->offset += 2;
                 }
             } break;
             
@@ -441,7 +441,7 @@ lexer->offset += 1;                   \
                     while (lexer->offset < lexer->string.size && IsAlphaNumericOrUnderscore(lexer->string.data[lexer->offset]))
                     {
                         identifier.size += 1;
-                        lexer->offset          += 1;
+                        lexer->offset   += 1;
                     }
                     
                     token.identifier = MM_InternString(identifier);
@@ -638,7 +638,7 @@ lexer->offset += 1;                   \
                                 Copy((u32*)&integer, &f, sizeof(u32));
                                 
                                 token.kind     = Token_Float;
-                                token.floating = (f64)f;
+                                token.floating = BigFloat_FromF64(f);
                             }
                             else if (integer_digit_count == 16)
                             {
@@ -646,7 +646,7 @@ lexer->offset += 1;                   \
                                 Copy(&integer, &f, sizeof(u64));
                                 
                                 token.kind     = Token_Float;
-                                token.floating = f;
+                                token.floating = BigFloat_FromF64(f);
                             }
                             else
                             {
@@ -659,24 +659,26 @@ lexer->offset += 1;                   \
                             token.kind = Token_Float;
                             
                             // HACK
-                            token.floating = (f64)integer;
+                            f64 f = (f64)integer;
                             
                             f64 adj = 1;
                             for (umm i = 0; i < fraction_digit_count; ++i) adj *= 10;
                             
-                            token.floating += fraction / adj;
+                            f += fraction / adj;
                             
                             adj = 1;
                             if (exponent < 0) for (umm i = 0; i < (umm)-exponent; ++i) adj /= 10;
                             else              for (umm i = 0; i < (umm) exponent; ++i) adj *= 10;
                             
-                            token.floating *= adj;
+                            f *= adj;
+                            
+                            token.floating = BigFloat_FromF64(f);
                             //
                         }
                         else
                         {
                             token.kind    = Token_Int;
-                            token.integer = integer;
+                            token.integer = BigInt_FromU64(integer);
                         }
                     }
                 }

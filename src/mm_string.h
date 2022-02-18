@@ -38,3 +38,15 @@ String_Match(String s0, String s1)
     
     return result;
 }
+
+internal String
+String_FromInternedString(Interned_String string)
+{
+    Interned_String_Entry* slot = (Interned_String_Entry*)string;
+    if (string <= KEYWORD_KIND_MAX)
+    {
+        slot = MM.keyword_table[string];
+    }
+    
+    return (String){ .data = (u8*)(slot + 1), .size = slot->size };
+}

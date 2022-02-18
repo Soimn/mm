@@ -7,7 +7,6 @@ typedef enum AST_NODE_KIND
     AST_FirstExpression,
     AST_Identifier = AST_FirstExpression,
     AST_String,
-    AST_Char,
     AST_Int,
     AST_Float,
     AST_Boolean,
@@ -114,9 +113,8 @@ typedef struct AST_Node
         
         Interned_String identifier;
         Interned_String string;
-        u8 character;
-        u64 integer;
-        f64 floating;
+        Big_Int integer;
+        Big_Float floating;
         bool boolean;
         
         struct
