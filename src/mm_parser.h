@@ -1556,12 +1556,7 @@ ParseString(String contents, Arena* ast_arena, AST_Node** result)
             if (!ParseStatement(&state, next_decl)) encountered_errors = true;
             else
             {
-                if (*next_decl == 0)
-                {
-                    //// ERROR: Illegal use of statement in global scope
-                    encountered_errors = true;
-                }
-                else
+                if (*next_decl != 0)
                 {
                     next_decl = &(*next_decl)->next;
                 }

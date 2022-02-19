@@ -35,7 +35,6 @@ typedef enum TYPE_KIND
     Type_F64,
     Type_LastFloat = Type_F64,
     
-    Type_SoftString,
     Type_String,
     
     Type_Bool,
@@ -168,13 +167,31 @@ Type_IsSoft(Type_ID type)
 internal inline Type_ID
 Type_Harden(Type_ID type)
 {
-    Type_ID result;
+    Type_ID result = Type_None;
     if      (type == Type_SoftInt)    result = Type_Int;
     else if (type == Type_SoftFloat)  result = Type_Float;
     else if (type == Type_SoftString) result = Type_String;
-    else                              result = type;
+    else INVALID_CODE_PATH;
     
     return result;
+}
+
+internal Type_ID
+Type_HardenTo(Type_ID src, Type_ID dst, Const_Val val)
+{
+    if (type == Type_SoftInt)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (type == Type_SoftFloat)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (type == Type_SoftString)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else INVALID_CODE_PATH;
 }
 
 internal inline Type_Info*
@@ -200,3 +217,52 @@ Type_IsPrimitive(Type_ID type)
 {
     return (type <= Type_LastPrimitive);
 }
+
+internal inline umm
+Type_SizeOf(Type_ID type)
+{
+    umm size;
+    if (Type_IsComposite(type)) size = Type_InfoOf(type)->size;
+    else
+    {
+        ASSERT(!Type_IsSoft(type));
+        
+        switch (type)
+        {
+            
+            case Type_Byte:
+            case Type_I8:
+            case Type_U8:
+            case Type_Bool:
+            size = 1;
+            break;
+            
+            case Type_I16:
+            case Type_U16:
+            size = 2;
+            break;
+            
+            case Type_I32:
+            case Type_U32:
+            case Type_F32:
+            case Type_Typeid:
+            size = 4;
+            break;
+            
+            case Type_Int:
+            case Type_I64:
+            case Type_Uint:
+            case Type_U64:
+            case Type_Float:
+            case Type_F64:
+            size = 8;
+            break;
+            
+            case Type_Any:
+            case Type_String:
+            size = 16;
+            break;
+        }
+        
+        return size;
+    }

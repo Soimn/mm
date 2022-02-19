@@ -81,7 +81,6 @@ typedef enum AST_NODE_KIND
     AST_FirstStatement = 13*16,
     AST_Block,
     AST_If,
-    AST_When,
     AST_While,
     AST_Break,
     AST_Continue,
@@ -95,7 +94,8 @@ typedef enum AST_NODE_KIND
     AST_Variable = AST_FirstDeclaration,
     AST_Constant,
     AST_Include,
-    AST_LastDeclaration = AST_Constant,
+    AST_When,
+    AST_LastDeclaration = AST_When,
     
     AST_NODE_KIND_MAX = 256,
 } AST_NODE_KIND;

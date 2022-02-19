@@ -27,7 +27,7 @@ typedef struct Check_Info
 } Check_Info;
 
 internal CHECK_RESULT CheckScope(Check_Context* context, AST_Node* scope);
-internal CHECK_RESULT CheckDeclaration(Check_Context* context, AST_Node* decl);
+internal CHECK_RESULT CheckStatement(Check_Context* context, AST_Node* statement);
 
 internal void
 FoldConstant(AST_Node* expression, Check_Info info)
@@ -113,11 +113,14 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
             else
             {
                 Type_ID common_type = Type_None;
+                Const_Val lhs = left_info.const_val;
+                Const_Val rhs = right_info.const_val;
                 
                 if (left_info.type == right_info.type)
                 {
                     if (expression->kind >= AST_BitAnd && expression->kind <= AST_BitShl ||
-                        expression->kind >= AST_BitOr  && expression->kind <= AST_BitXor)
+                        expression->kind >= AST_BitOr  && expression->kind <= AST_BitXor &&
+                        left_info.type == Type_SoftInt)
                     {
                         common_type = Type_Harden(left_info.type);
                     }
@@ -125,11 +128,52 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 }
                 else if (Type_IsSoft(left_info.type) && Type_IsSoft(right_info.type))
                 {
-                    NOT_IMPLEMENTED;
+                    if (target_type == Type_None)
+                    {
+                        //// ERROR: Not enough context to harden types
+                        info.result = Check_Error;
+                    }
+                    else
+                    {
+                        if (!Type_HardenTo(left_info.type, target_type, &lhs))
+                        {
+                            //// ERROR: Cannot harden type x to y
+                            info.result = Check_Error;
+                        }
+                        else if (!Type_HardenTo(left_info.type, target_type, &lhs))
+                        {
+                            //// ERROR: Cannot harden type x to y
+                            info.result = Check_Error;
+                        }
+                        else common_type = target_type;
+                    }
                 }
                 else if (Type_IsSoft(left_info.type) ^ Type_IsSoft(right_info.type))
                 {
-                    NOT_IMPLEMENTED;
+                    Type_ID t0;
+                    Type_ID t1;
+                    Const_Val v1;
+                    
+                    if (Type_IsSoft(left_info.type))
+                    {
+                        t0 = right_info.type;
+                        t1 = left_info.type;
+                        v1 = lhs;
+                    }
+                    else
+                    {
+                        t0 = left_info.type;
+                        t1 = right_info.type;
+                        v1 = rhs;
+                    }
+                    
+                    if (Type_HardenTo(t1, t0, &v1))
+                    {
+                        common_type = t0;
+                    }
+                    
+                    if (Type_IsSoft(left_info.type)) lhs = v1;
+                    else                             rhs = v1;
                 }
                 else
                 {
@@ -139,28 +183,210 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 
                 if (common_type != Type_None)
                 {
+                    if (expression->kind == AST_Mul || expression->kind == AST_Div)
+                    {
+                        if (!Type_IsNumeric(common_type))
+                        {
+                            //// ERROR: operator requires common numeric type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result = Check_Complete,
+                                .type   = common_type,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
+                            
+                            if (info.value_kind == Value_Constant)
+                            {
+                                if (expression->kind == AST_Mul)
+                                {
+                                    if (common_type == Type_SoftInt)
+                                    {
+                                        info.const_value.soft_int = BigInt_Mul(lhs.soft_int, rhs.soft_int);
+                                    }
+                                    else if (Type_IsUnsignedInteger(common_type))
+                                    {
+                                        info.const_value.uint64 = ChopUint(lhs.uint64 * rhs.uint64, Type_SizeOf(common_type));
+                                    }
+                                    else if (Type_IsSignedInteger(common_type))
+                                    {
+                                        umm size = Type_SizeOf(common_type);
+                                        info.const_value.int64 = SignExtend(ChopInt(lhs.int64 * rhs.int64, size), size);
+                                    }
+                                    else if (common_type == Type_SoftFloat)
+                                    {
+                                        info.const_value.soft_float = BigFloat_Mul(lhs.soft_float, rhs.soft_float);
+                                    }
+                                    else if (common_type == Type_F64)
+                                    {
+                                        info.const_value.float64 = lhs.float64 * rhs.float64;
+                                    }
+                                    else
+                                    {
+                                        ASSERT(common_type == Type_F32);
+                                        
+                                        info.const_value.float32 = lhs.float32 * rhs.float32;
+                                    }
+                                }
+                                else
+                                {
+                                    bool is_zero = false;
+                                    
+                                    if (common_type == Type_SoftInt)
+                                    {
+                                        if (BigInt_IsEqual(rhs.soft_int, BigInt_0)) is_zero = true;
+                                        else
+                                        {
+                                            info.const_value.soft_int = BigInt_Div(lhs.soft_int, rhs.soft_int);
+                                        }
+                                    }
+                                    else if (Type_IsUnsignedInteger(common_type))
+                                    {
+                                        if (rhs.uint64 == 0) is_zero = true;
+                                        else
+                                        {
+                                            info.const_value.uint64 = ChopUint(lhs.uint64 / rhs.uint64,
+                                                                               Type_SizeOf(common_type));
+                                        }
+                                    }
+                                    else if (Type_IsSignedInteger(common_type))
+                                    {
+                                        if (rhs.int64 == 0) is_zero = true;
+                                        else
+                                        {
+                                            umm size = Type_SizeOf(common_type);
+                                            info.const_value.int64 = SignExtend(ChopInt(lhs.int64 / rhs.int64, size), size);
+                                        }
+                                    }
+                                    else if (common_type == Type_SoftFloat)
+                                    {
+                                        if (BigFloat_IsEqual(rhs.soft_float, BigFloat_0) ||
+                                            BigFloat_IsEqual(rhs.soft_float, BigFloat_Neg0)) is_zero = true;
+                                        else
+                                        {
+                                            info.const_value.soft_float = BigFloat_Div(lhs.soft_float, rhs.soft_float);
+                                        }
+                                    }
+                                    else if (common_type == Type_F64)
+                                    {
+                                        if (AbsF64(rhs.float64) == 0) is_zero = true;
+                                        else
+                                        {
+                                            info.const_value.float64 = lhs.float64 / rhs.float64;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ASSERT(common_type == Type_F32);
+                                        
+                                        if (AbsF32(rhs.float32) == 0) is_zero = true;
+                                        else
+                                        {
+                                            info.const_value.float32 = lhs.float32 / rhs.float32;
+                                        }
+                                    }
+                                    
+                                    if (is_zero)
+                                    {
+                                        //// ERROR: Divide by zero
+                                        info.result = Check_Error;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (expression->kind == AST_Rem)
+                    {
+                        if (!Type_IsInteger(common_type))
+                        {
+                            //// ERROR: operator requires common integer type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = common_type,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
+                            
+                            if (info.value_kind == Value_Constant)
+                            {
+                                bool is_zero = false;
+                                
+                                if (common_type == Type_SoftInt)
+                                {
+                                    if (BigInt_IsEqual(rhs.soft_int, BigInt_0)) is_zero = true;
+                                    else
+                                    {
+                                        info.const_value.soft_int = BigInt_Rem(lhs.soft_int, rhs.soft_int);
+                                    }
+                                }
+                                else if (Type_IsUnsignedInteger(common_type))
+                                {
+                                    if (rhs.uint64 == 0) is_zero = true;
+                                    else
+                                    {
+                                        info.const_value.uint64 = lhs.uint64 % rhs.uint64;
+                                    }
+                                }
+                                else
+                                {
+                                    ASSERT(Type_IsSignedInteger(common_type));
+                                    
+                                    if (rhs.int64 == 0) is_zero = true;
+                                    else
+                                    {
+                                        info.const_value.int64 = lhs.int64 % rhs.int64;
+                                    }
+                                }
+                                
+                                if (is_zero)
+                                {
+                                    //// ERROR: Divide by zero
+                                    info.result = Check_Error;
+                                }
+                            }
+                        }
+                    }
+                    else if (expression->kind == AST_Add || expression->kind == AST_Sub)
+                    {
+                        Type_Info* type_info = Type_InfoOf(common_type);
+                        
+                        if (!Type_IsNumeric(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
+                        {
+                            //// ERROR: operator requires common numeric or pointer type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = common_type,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
+                            
+                            if (info.value_kind == Value_Constant)
+                            {
+                                NOT_IMPLEMENTED;
+                            }
+                        }
+                    }
                     /*
-                            // numeric
-                            AST_Mul,
-                            AST_Div,
-                            
-                            // integer
-                            AST_Rem,
-                            
-                            // numeric, pointer
-                            AST_Add,
-                            AST_Sub,
-                            
                             // numeric, pointer, boolean?
                             AST_IsLess,
                             AST_IsGreater,
                             AST_IsLessEqual,
                             AST_IsGreaterEqual,
                             
-                            // typed integer
-                            AST_BitOr,
+// typed integer and boolean
+AST_BitOr,
                             AST_BitXor,
                             AST_BitAnd,
+
+                            // typed integer
                             AST_BitSar,
                             AST_BitShr,
                             AST_BitSplatShl,
@@ -723,11 +949,63 @@ CheckScope(Check_Context* context, AST_Node* scope)
 }
 
 internal CHECK_RESULT
-CheckDeclaration(Check_Context* context, AST_Node* decl)
+CheckStatement(Check_Context* context, AST_Node* statement)
 {
     CHECK_RESULT result = Check_Error;
     
-    NOT_IMPLEMENTED;
+    if (statement->kind == AST_Block)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_If)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_While)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Break)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Continue)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Defer)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Return)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Using)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Assignment)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Variable)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Constant)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (statement->kind == AST_Include)
+    {
+        NOT_IMPLEMENTED;
+    }
+    else
+    {
+        ASSERT(statement->kind == AST_When);
+        NOT_IMPLEMENTED;
+    }
     
     return result;
 }
