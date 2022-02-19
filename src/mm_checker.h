@@ -8,7 +8,7 @@ typedef enum CHECK_RESULT
 
 typedef struct Check_Context
 {
-    bool _;
+    Symbol_Table* table;
 } Check_Context;
 
 typedef enum VALUE_KIND
@@ -77,6 +77,12 @@ FoldConstant(AST_Node* expression, Check_Info info)
             expression->kind = AST_String;
             expression->string = info.const_value.string;
         }
+        else if (info.type == Type_Typeid)
+        {
+            ZeroStruct(expression);
+            expression->kind = AST_Typeid;
+            expression->type_id = info.const_value.type_id;
+        }
     }
 }
 
@@ -88,6 +94,7 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     if (expression == 0)
     {
         //// ERROR: Missing expression
+        info.result = Check_Error;
     }
     else if (expression->kind == AST_Compound)
     {
@@ -105,44 +112,70 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
             if (right_info.result != Check_Complete) info.result = right_info.result;
             else
             {
-                // TODO: Coercion
-                NOT_IMPLEMENTED;
+                Type_ID common_type = Type_None;
                 
-                /*
-                        // numeric
-                        AST_Mul,
-                        AST_Div,
-                        
-                        // integer
-                        AST_Rem,
-                        
-                        // numeric, pointer
-                        AST_Add,
-                        AST_Sub,
-                        
-                        // numeric, pointer, boolean?
-                        AST_IsLess,
-                        AST_IsGreater,
-                        AST_IsLessEqual,
-                        AST_IsGreaterEqual,
-                        
-                        // typed integer
-                        AST_BitOr,
-                        AST_BitXor,
-                        AST_BitAnd,
-                        AST_BitSar,
-                        AST_BitShr,
-                        AST_BitSplatShl,
-                        AST_BitShl,
-                        
-                        // same
-                        AST_IsEqual,
-                        AST_IsNotEqual,
-                        
-                        // boolean, integer?
-                        AST_And,
-                        AST_Or,
-                        */
+                if (left_info.type == right_info.type)
+                {
+                    if (expression->kind >= AST_BitAnd && expression->kind <= AST_BitShl ||
+                        expression->kind >= AST_BitOr  && expression->kind <= AST_BitXor)
+                    {
+                        common_type = Type_Harden(left_info.type);
+                    }
+                    else common_type = left_info.type;
+                }
+                else if (Type_IsSoft(left_info.type) && Type_IsSoft(right_info.type))
+                {
+                    NOT_IMPLEMENTED;
+                }
+                else if (Type_IsSoft(left_info.type) ^ Type_IsSoft(right_info.type))
+                {
+                    NOT_IMPLEMENTED;
+                }
+                else
+                {
+                    //// ERROR: Incompatible types
+                    info.result = Check_Error;
+                }
+                
+                if (common_type != Type_None)
+                {
+                    /*
+                            // numeric
+                            AST_Mul,
+                            AST_Div,
+                            
+                            // integer
+                            AST_Rem,
+                            
+                            // numeric, pointer
+                            AST_Add,
+                            AST_Sub,
+                            
+                            // numeric, pointer, boolean?
+                            AST_IsLess,
+                            AST_IsGreater,
+                            AST_IsLessEqual,
+                            AST_IsGreaterEqual,
+                            
+                            // typed integer
+                            AST_BitOr,
+                            AST_BitXor,
+                            AST_BitAnd,
+                            AST_BitSar,
+                            AST_BitShr,
+                            AST_BitSplatShl,
+                            AST_BitShl,
+                            
+                            // same
+                            AST_IsEqual,
+                            AST_IsNotEqual,
+                            
+                            // boolean, integer?
+                            AST_And,
+                            AST_Or,
+                                    */
+                    NOT_IMPLEMENTED;
+                }
             }
         }
     }
@@ -375,7 +408,38 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     }
     else if (expression->kind == AST_Identifier)
     {
-        NOT_IMPLEMENTED;
+        Symbol* symbol = SymbolTable_GetSymbol(context->table, expression->identifier);
+        
+        if (symbol == 0) info.result = Check_Incomplete;
+        else
+        {
+            if (symbol->kind == Symbol_Var)
+            {
+                info = (Check_Info){
+                    .result     = Check_Complete,
+                    .type       = symbol->variable.type,
+                    .value_kind = Value_Memory,
+                };
+            }
+            else if (symbol->kind == Symbol_Parameter)
+            {
+                info = (Check_Info){
+                    .result     = Check_Complete,
+                    .type       = symbol->parameter.type,
+                    .value_kind = Value_Register,
+                };
+            }
+            else if (symbol->kind == Symbol_Const)
+            {
+                info = (Check_Info){
+                    .result      = Check_Complete,
+                    .type        = symbol->constant.type,
+                    .value_kind  = Value_Constant,
+                    .const_value = symbol->constant.value,
+                };
+            }
+            else INVALID_CODE_PATH;
+        }
     }
     else if (expression->kind == AST_String)
     {
@@ -413,6 +477,15 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
             .const_value.boolean = expression->boolean,
         };
     }
+    else if (expression->kind == AST_Typeid)
+    {
+        info = (Check_Info){
+            .result              = Check_Complete,
+            .type                = Type_Typeid,
+            .value_kind          = Value_Constant,
+            .const_value.type_id = expression->type_id,
+        };
+    }
     else if (expression->kind == AST_Proc)
     {
         NOT_IMPLEMENTED;
@@ -447,80 +520,113 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     }
     else if (expression->kind == AST_ElementOf)
     {
-        if (expression->element_of.structure == 0)
+        Check_Info struct_info = {0};
+        if (expression->element_of.structure != 0)
         {
-            if (target_type == Type_None)
+            struct_info = CheckExpression(context, expression->element_of.structure);
+        }
+        
+        if (expression->element_of.structure != 0 && struct_info.result != Check_Complete) info.result = struct_info.result;
+        else
+        {
+            Type_Info* type_info = 0;
+            if (expression->element_of.structure != 0)
             {
-                //// ERROR: Cannot determine type of implicit selector expression
+                type_info = Type_InfoOf(struct_info.type);
+            }
+            
+            if (type_info == 0)
+            {
+                Type_ID type = Type_None;
+                
+                if (expression->element_of.structure != 0)
+                {
+                    if (struct_info.type != Type_Typeid                   ||
+                        struct_info.value_kind != Value_Constant          ||
+                        Type_IsPrimitive(struct_info.const_value.type_id) ||
+                        Type_InfoOf(struct_info.const_value.type_id)->kind != Type_Enum)
+                    {
+                        //// ERROR: Illegal use of element of operator
+                        info.result = Check_Error;
+                    }
+                    else
+                    {
+                        type      = struct_info.const_value.type_id;
+                        type_info = Type_InfoOf(type);
+                    }
+                }
+                else
+                {
+                    if (target_type == Type_None)
+                    {
+                        //// ERROR: Cannot determine type of implicit selector expression
+                        info.result = Check_Error;
+                    }
+                    else
+                    {
+                        type_info = Type_InfoOf(target_type);
+                        
+                        if (type_info == 0 || type_info->kind != Type_Enum)
+                        {
+                            //// ERROR: Selector expressions can only be used on enumerations
+                            info.result = Check_Error;
+                        }
+                        else type = target_type;
+                    }
+                }
+                
+                if (type != Type_None)
+                {
+                    Symbol* symbol = SymbolTable_GetSymbol(&type_info->enumeration.members, expression->element_of.element);
+                    
+                    if (symbol == 0)
+                    {
+                        //// ERROR: No enum member with the name x
+                        info.result = Check_Error;
+                    }
+                    else
+                    {
+                        info = (Check_Info){
+                            .result     = Check_Complete,
+                            .type       = type,
+                            .value_kind = Value_Constant,
+                        };
+                        
+                        Type_ID base_type = type_info->enumeration.backing_type;
+                        if (base_type == Type_SoftInt) info.const_value.soft_int = symbol->enum_member.value.soft_int;
+                        else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64 = symbol->enum_member.value.uint64;
+                        else                                        info.const_value.int64  = symbol->enum_member.value.int64;
+                    }
+                }
+            }
+            else if (type_info->kind != Type_Struct && type_info->kind != Type_Union)
+            {
+                //// ERROR: Illegal use of element of operator
                 info.result = Check_Error;
             }
             else
             {
-                Type_Info* type_info = Type_InfoOf(target_type);
+                // TODO: Incomplete elements (e.g. circular pointers)
+                Symbol* symbol = SymbolTable_GetSymbol(&type_info->structure.members, expression->element_of.element);
                 
-                if (type_info == 0 || type_info->kind != Type_Enum)
+                if (symbol == 0)
                 {
-                    //// ERROR: Selector expressions can only be used on enumerations
+                    //// ERROR: Struct/union has no element named x
                     info.result = Check_Error;
                 }
                 else
                 {
-                    NOT_IMPLEMENTED;
-                }
-            }
-        }
-        else
-        {
-            Check_Info struct_info = CheckExpression(context, expression->element_of.structure);
-            
-            if (struct_info.result != Check_Complete) info.result = struct_info.result;
-            else
-            {
-                Type_Info* type_info = Type_InfoOf(struct_info.type);
-                
-                if (type_info == 0 || 
-                    (type_info->kind != Type_Struct && type_info->kind != Type_Union &&
-                     type_info->kind != Type_Enum   && (type_info->kind != Type_Array || type_info->array.size > 4)))
-                {
-                    //// ERROR: Illegal use of element of operator
-                    info.result = Check_Error;
-                }
-                else
-                {
-                    Type_ID element_type = Type_None;
-                    Interned_String element_name = expression->element_of.element;
+                    ASSERT(symbol->kind == Symbol_Var);
                     
-                    if (type_info->kind == Type_Array)
-                    {
-                        String string = String_FromInternedString(element_name);
-                        
-                        if (string.size == 1 && (*string.data >= 'x' && *string.data <= 'w'))
-                        {
-                            element_type = type_info->array.elem_type;
-                        }
-                        else
-                        {
-                            //// ERROR: array has no element named x
-                            info.result = Check_Error;
-                        }
-                    }
-                    else
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = symbol->variable.type,
+                        .value_kind = struct_info.value_kind,
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
                     {
                         NOT_IMPLEMENTED;
-                    }
-                    
-                    if (element_type != Type_None)
-                    {
-                        info = (Check_Info){
-                            .result     = Check_Complete,
-                            .type       = element_type,
-                            .value_kind = l value and constant?,
-                        };
-                        
-                        if (info.value_kind == Value_Constant)
-                        {
-                            NOT_IMPLEMENTED;
-                        }
                     }
                 }
             }

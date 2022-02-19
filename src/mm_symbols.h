@@ -1,10 +1,11 @@
 typedef enum SYMBOL_KIND
 {
     Symbol_Var,
-    Symbol_Const,
-    Symbol_UsingLink,
     Symbol_Parameter,
-    Symbol_Member,
+    Symbol_Const,
+    Symbol_EnumMember,
+    
+    Symbol_UsingLink,
 } SYMBOL_KIND;
 
 typedef struct Symbol
@@ -43,8 +44,8 @@ typedef struct Symbol
         struct
         {
             Interned_String name;
-            Type_ID type;
-        } member;
+            Const_Val value;
+        } enum_member;
     };
 } Symbol;
 
@@ -53,3 +54,16 @@ typedef struct Symbol_Table
 {
     bool _;
 } Symbol_Table;
+
+internal Symbol*
+SymbolTable_GetSymbol(Symbol_Table* table, Interned_String name)
+{
+    Symbol* result = 0;
+    
+    if (name != BLANK_IDENTIFIER)
+    {
+        NOT_IMPLEMENTED;
+    }
+    
+    return result;
+}

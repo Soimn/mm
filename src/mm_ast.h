@@ -2,7 +2,9 @@ typedef enum AST_NODE_KIND
 {
     AST_Invalid = 0,
     
+    // NOTE: Special nodes
     AST_NamedValue,
+    AST_Typeid,
     
     AST_FirstExpression,
     AST_Identifier = AST_FirstExpression,
@@ -116,6 +118,7 @@ typedef struct AST_Node
         Big_Int integer;
         Big_Float floating;
         bool boolean;
+        Type_ID type_id;
         
         struct
         {

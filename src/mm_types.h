@@ -87,6 +87,7 @@ typedef struct Type_Info
         
         struct
         {
+            Type_ID backing_type;
             Symbol_Table members;
         } enumeration;
     };
@@ -164,6 +165,18 @@ Type_IsSoft(Type_ID type)
     return (type == Type_SoftInt || type == Type_SoftFloat || type == Type_SoftString);
 }
 
+internal inline Type_ID
+Type_Harden(Type_ID type)
+{
+    Type_ID result;
+    if      (type == Type_SoftInt)    result = Type_Int;
+    else if (type == Type_SoftFloat)  result = Type_Float;
+    else if (type == Type_SoftString) result = Type_String;
+    else                              result = type;
+    
+    return result;
+}
+
 internal inline Type_Info*
 Type_InfoOf(Type_ID type)
 {
@@ -172,4 +185,18 @@ Type_InfoOf(Type_ID type)
     NOT_IMPLEMENTED;
     
     return result;
+}
+
+internal inline bool
+Type_IsComposite(Type_ID type)
+{
+    return (type > Type_LastPrimitive);
+}
+
+// NOTE: Type_None is ignored, asking if something, that is
+//       not a type, is a primitive type makes no sense
+internal inline bool
+Type_IsPrimitive(Type_ID type)
+{
+    return (type <= Type_LastPrimitive);
 }
