@@ -153,15 +153,9 @@ Type_IsNumeric(Type_ID type)
 }
 
 internal inline bool
-Type_IsString(Type_ID type)
-{
-    return (type == Type_SoftString || type == Type_String);
-}
-
-internal inline bool
 Type_IsSoft(Type_ID type)
 {
-    return (type == Type_SoftInt || type == Type_SoftFloat || type == Type_SoftString);
+    return (type == Type_SoftInt || type == Type_SoftFloat);
 }
 
 internal inline Type_ID
@@ -170,24 +164,19 @@ Type_Harden(Type_ID type)
     Type_ID result = Type_None;
     if      (type == Type_SoftInt)    result = Type_Int;
     else if (type == Type_SoftFloat)  result = Type_Float;
-    else if (type == Type_SoftString) result = Type_String;
     else INVALID_CODE_PATH;
     
     return result;
 }
 
 internal Type_ID
-Type_HardenTo(Type_ID src, Type_ID dst, Const_Val val)
+Type_HardenTo(Type_ID src, Type_ID dst, Const_Val* val)
 {
-    if (type == Type_SoftInt)
+    if (src == Type_SoftInt)
     {
         NOT_IMPLEMENTED;
     }
-    else if (type == Type_SoftFloat)
-    {
-        NOT_IMPLEMENTED;
-    }
-    else if (type == Type_SoftString)
+    else if (src == Type_SoftFloat)
     {
         NOT_IMPLEMENTED;
     }
@@ -263,6 +252,7 @@ Type_SizeOf(Type_ID type)
             size = 16;
             break;
         }
-        
-        return size;
     }
+    
+    return size;
+}

@@ -4,4 +4,9 @@
 
 * call conv notation, inline type or decl?
 
-* hoist out msvc specific intrinsics
+ *** half complete types ***
+
+vtable for metaprogramming?
+
+experiment with simd
+add sign extend + n bit masks

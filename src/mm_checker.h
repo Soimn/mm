@@ -113,8 +113,8 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
             else
             {
                 Type_ID common_type = Type_None;
-                Const_Val lhs = left_info.const_val;
-                Const_Val rhs = right_info.const_val;
+                Const_Val lhs = left_info.const_value;
+                Const_Val rhs = right_info.const_value;
                 
                 if (left_info.type == right_info.type)
                 {
@@ -370,37 +370,295 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                             
                             if (info.value_kind == Value_Constant)
                             {
-                                NOT_IMPLEMENTED;
+                                if (expression->kind == AST_Add)
+                                {
+                                    if (common_type == Type_SoftInt)
+                                    {
+                                        info.const_value.soft_int = BigInt_Add(lhs.soft_int, rhs.soft_int);
+                                    }
+                                    else if (common_type == Type_SoftFloat)
+                                    {
+                                        info.const_value.soft_float = BigFloat_Add(lhs.soft_float, rhs.soft_float);
+                                    }
+                                    else if (Type_IsInteger(common_type))
+                                    {
+                                        // NOTE: Wraps on overflow
+                                        info.const_value.uint64 = ChopUint(lhs.uint64 + rhs.uint64, Type_SizeOf(common_type));
+                                    }
+                                    else if (common_type == Type_F32)     
+                                    {
+                                        info.const_value.float32 = lhs.float32 + rhs.float32;
+                                    }
+                                    else if (Type_IsFloat(common_type))   
+                                    {
+                                        info.const_value.float64 = lhs.float64 + rhs.float64;
+                                    }
+                                    else
+                                    {
+                                        ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                                        info.const_value.pointer = lhs.pointer + rhs.pointer;
+                                    }
+                                }
+                                else
+                                {
+                                    if (common_type == Type_SoftInt)
+                                    {
+                                        info.const_value.soft_int = BigInt_Sub(lhs.soft_int, rhs.soft_int);
+                                    }
+                                    else if (common_type == Type_SoftFloat)
+                                    {
+                                        info.const_value.soft_float = BigFloat_Sub(lhs.soft_float, rhs.soft_float);
+                                    }
+                                    else if (Type_IsInteger(common_type))
+                                    {
+                                        // NOTE: Wraps on overflow
+                                        info.const_value.uint64 = ChopUint(lhs.uint64 + ~rhs.uint64 + 1,
+                                                                           Type_SizeOf(common_type));
+                                    }
+                                    else if (common_type == Type_F32)
+                                    {
+                                        info.const_value.float32 = lhs.float32 - rhs.float32;
+                                    }
+                                    else if (Type_IsFloat(common_type))
+                                    {
+                                        info.const_value.float64 = lhs.float64 - rhs.float64;
+                                    }
+                                    else
+                                    {
+                                        ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                                        info.const_value.pointer = lhs.pointer - rhs.pointer;
+                                    }
+                                }
                             }
                         }
                     }
-                    /*
-                            // numeric, pointer, boolean?
-                            AST_IsLess,
-                            AST_IsGreater,
-                            AST_IsLessEqual,
-                            AST_IsGreaterEqual,
+                    else if (expression->kind >= AST_IsLess && expression->kind <= AST_IsGreaterEqual)
+                    {
+                        Type_Info* type_info = Type_InfoOf(common_type);
+                        
+                        if (!Type_IsNumeric(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
+                        {
+                            //// ERROR: operator requires common numeric or pointer type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = Type_Bool,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
                             
-// typed integer and boolean
-AST_BitOr,
-                            AST_BitXor,
-                            AST_BitAnd,
-
-                            // typed integer
-                            AST_BitSar,
-                            AST_BitShr,
-                            AST_BitSplatShl,
-                            AST_BitShl,
+                            if (info.value_kind == Value_Constant)
+                            {
+                                bool is_less, is_greater;
+                                
+                                if (common_type == Type_SoftInt)
+                                {
+                                    is_less    = BigInt_IsLess(lhs.soft_int, rhs.soft_int);
+                                    is_greater = BigInt_IsGreater(lhs.soft_int, rhs.soft_int);
+                                }
+                                else if (common_type == Type_SoftFloat)
+                                {
+                                    is_less    = BigFloat_IsLess(lhs.soft_float, rhs.soft_float);
+                                    is_greater = BigFloat_IsGreater(lhs.soft_float, rhs.soft_float);
+                                }
+                                else if (Type_IsUnsignedInteger(common_type))
+                                {
+                                    is_less    = (lhs.uint64 < rhs.uint64);
+                                    is_greater = (lhs.uint64 > rhs.uint64);
+                                }
+                                else if (Type_IsSignedInteger(common_type))
+                                {
+                                    is_less    = (lhs.int64 < rhs.int64);
+                                    is_greater = (lhs.int64 > rhs.int64);
+                                }
+                                else if (common_type == Type_F32)
+                                {
+                                    is_less    = (lhs.float32 < rhs.float32);
+                                    is_greater = (lhs.float32 > rhs.float32);
+                                }
+                                else if (Type_IsFloat(common_type))
+                                {
+                                    is_less    = (lhs.float64 < rhs.float64);
+                                    is_greater = (lhs.float64 > rhs.float64);
+                                }
+                                else
+                                {
+                                    ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                                    is_less    = (lhs.pointer < rhs.pointer);
+                                    is_greater = (lhs.pointer > rhs.pointer);
+                                }
+                                
+                                switch (expression->kind)
+                                {
+                                    case AST_IsLess:         info.const_value.boolean = is_less;     break;
+                                    case AST_IsGreater:      info.const_value.boolean = is_greater;  break;
+                                    case AST_IsLessEqual:    info.const_value.boolean = !is_greater; break;
+                                    case AST_IsGreaterEqual: info.const_value.boolean = !is_less;    break;
+                                    INVALID_DEFAULT_CASE;
+                                }
+                            }
+                        }
+                    }
+                    else if (expression->kind == AST_BitAnd ||
+                             expression->kind >= AST_BitOr && expression->kind <= AST_BitXor)
+                    {
+                        if (!Type_IsInteger(common_type) && common_type != Type_Bool)
+                        {
+                            //// ERROR: operator requires common hard integer or boolean type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            // NOTE: This is guarded against when choosing the common type
+                            ASSERT(!Type_IsSoft(common_type));
                             
-                            // same
-                            AST_IsEqual,
-                            AST_IsNotEqual,
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = common_type,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
                             
-                            // boolean, integer?
-                            AST_And,
-                            AST_Or,
-                                    */
-                    NOT_IMPLEMENTED;
+                            if (info.value_kind == Value_Constant)
+                            {
+                                if (common_type == Type_Bool)
+                                {
+                                    bool l = lhs.boolean;
+                                    bool r = rhs.boolean;
+                                    
+                                    if      (expression->kind == AST_BitOr)  info.const_value.boolean = l | r;
+                                    else if (expression->kind == AST_BitXor) info.const_value.boolean = l ^ r;
+                                    else                                     info.const_value.boolean = l & r;
+                                }
+                                else
+                                {
+                                    u64 l = lhs.uint64;
+                                    u64 r = rhs.uint64;
+                                    
+                                    if      (expression->kind == AST_BitOr)  info.const_value.uint64 = l | r;
+                                    else if (expression->kind == AST_BitXor) info.const_value.uint64 = l ^ r;
+                                    else                                     info.const_value.uint64 = l & r;
+                                }
+                            }
+                        }
+                    }
+                    else if (expression->kind >= AST_BitSar && expression->kind <= AST_BitShl)
+                    {
+                        if (!Type_IsInteger(common_type))
+                        {
+                            //// ERROR: operator requires common hard integer type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = common_type,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
+                            
+                            if (info.value_kind == Value_Constant)
+                            {
+                                u64 l = lhs.uint64;
+                                u64 r = rhs.uint64;
+                                
+                                umm size = Type_SizeOf(common_type);
+                                ASSERT(size >= 1 && size <= 8);
+                                
+                                u64 masks[] = {
+                                    0x07,
+                                    0x0F,
+                                    0x1F,
+                                    0x3F,
+                                };
+                                
+                                l  = SignExtend(l, size);
+                                r &= masks[size - 1];
+                                
+                                u64 result;
+                                if      (expression->kind == AST_BitSar) result = (u64)((i64)l >> r);
+                                else if (expression->kind == AST_BitShr) result = l >> r;
+                                else if (expression->kind == AST_BitShl) result = l << r;
+                                else
+                                {
+                                    result = l << r | (((l & 1) << r) - 1);
+                                }
+                                
+                                info.const_value.uint64 = ChopInt(result, size);
+                            }
+                        }
+                    }
+                    else if (expression->kind == AST_IsEqual || expression->kind == AST_IsNotEqual)
+                    {
+                        Type_Info* type_info = Type_InfoOf(common_type);
+                        
+                        if (common_type == Type_Any ||
+                            !Type_IsPrimitive(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
+                        {
+                            //// ERROR: operator requires common non any primitive or pointer type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = Type_Bool,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
+                            
+                            if (info.value_kind == Value_Constant)
+                            {
+                                if (common_type == Type_SoftInt)
+                                {
+                                    info.const_value.boolean = BigInt_IsEqual(lhs.soft_int, rhs.soft_int);
+                                }
+                                else if (common_type == Type_SoftFloat)
+                                {
+                                    info.const_value.boolean = BigFloat_IsEqual(lhs.soft_float, rhs.soft_float);
+                                }
+                                else if (common_type == Type_Byte)    info.const_value.boolean = (lhs.byte    == rhs.byte);
+                                else if (common_type == Type_Typeid)  info.const_value.boolean = (lhs.type_id == rhs.type_id);
+                                else if (Type_IsInteger(common_type)) info.const_value.boolean = (lhs.uint64  == rhs.uint64);
+                                else if (common_type == Type_F32)     info.const_value.boolean = (lhs.float32 == rhs.float32);
+                                else if (Type_IsFloat(common_type))   info.const_value.boolean = (lhs.float64 == rhs.float64);
+                                else if (common_type == Type_String)  info.const_value.boolean = (lhs.string  == rhs.string);
+                                else if (common_type == Type_Bool)    info.const_value.boolean = (lhs.boolean == rhs.boolean);
+                                else
+                                {
+                                    ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                                    info.const_value.boolean = (lhs.pointer == rhs.pointer);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ASSERT(expression->kind == AST_And || expression->kind == AST_Or);
+                        
+                        if (common_type != Type_Bool)
+                        {
+                            //// ERROR: operator requires common boolean type
+                            info.result = Check_Error;
+                        }
+                        else
+                        {
+                            info = (Check_Info){
+                                .result     = Check_Complete,
+                                .type       = Type_Bool,
+                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                            };
+                            
+                            if (info.value_kind == Value_Constant)
+                            {
+                                bool l = lhs.boolean;
+                                bool r = rhs.boolean;
+                                
+                                if (expression->kind == AST_And) info.const_value.boolean = l && r;
+                                else                             info.const_value.boolean = l || r;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -414,6 +672,7 @@ AST_BitOr,
         {
             if (expression->kind == AST_Reference)
             {
+                // TODO: Is This correct?
                 if (operand_info.value_kind != Value_Memory)
                 {
                     //// ERROR: operand to reference operator must be an l value
@@ -421,8 +680,11 @@ AST_BitOr,
                 }
                 else
                 {
-                    // TODO: restrict parameter, constant, etc.
-                    NOT_IMPLEMENTED;
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = Type_PointerTo(operand_info.type),
+                        .value_kind = Value_Memory,
+                    };
                 }
             }
             else if (expression->kind == AST_Dereference)
@@ -590,10 +852,10 @@ AST_BitOr,
                         if (size_info.type == Type_SoftInt) size = BigInt_ToU64(size_info.const_value.soft_int);
                         
                         info = (Check_Info){
-                            .result      = Check_Complete,
-                            .type        = Type_Typeid,
-                            .value_kind  = Value_Constant,
-                            .const_value = Type_ArrayOf(operand_info.type, size),
+                            .result              = Check_Complete,
+                            .type                = Type_Typeid,
+                            .value_kind          = Value_Constant,
+                            .const_value.type_id = Type_ArrayOf(operand_info.type, size),
                         };
                     }
                 }
@@ -671,7 +933,7 @@ AST_BitOr,
     {
         info = (Check_Info){
             .result             = Check_Complete,
-            .type               = Type_SoftString,
+            .type               = Type_String,
             .value_kind         = Value_Constant,
             .const_value.string = expression->string,
         };

@@ -43,6 +43,28 @@ BigInt_Neg(Big_Int val)
 }
 
 internal inline Big_Int
+BigInt_Add(Big_Int a, Big_Int b)
+{
+    u64 result = (a.sign == 1 ? a.value : ~a.value + 1) + (b.sign == 1 ? b.value : ~b.value + 1);
+    
+    return (Big_Int){
+        .sign  = ((result & ((u64)1 << 63)) != 0 ? -1 : 1),
+        .value = result,
+    };
+}
+
+internal inline Big_Int
+BigInt_Sub(Big_Int a, Big_Int b)
+{
+    u64 result = (a.sign == 1 ? a.value : ~a.value + 1) + ~(b.sign == 1 ? b.value : ~b.value + 1) + 1;
+    
+    return (Big_Int){
+        .sign  = ((result & ((u64)1 << 63)) != 0 ? -1 : 1),
+        .value = result,
+    };
+}
+
+internal inline Big_Int
 BigInt_Mul(Big_Int a, Big_Int b)
 {
     return (Big_Int){
@@ -58,6 +80,13 @@ BigInt_Div(Big_Int a, Big_Int b)
         .sign  = a.sign  * b.sign,
         .value = a.value / b.value,
     };
+}
+
+internal inline Big_Int
+BigInt_Rem(Big_Int a, Big_Int b)
+{
+    NOT_IMPLEMENTED;
+    return (Big_Int){0};
 }
 
 internal inline bool
@@ -147,6 +176,22 @@ BigFloat_Neg(Big_Float val)
 }
 
 internal inline Big_Float
+BigFloat_Add(Big_Float a, Big_Float b)
+{
+    return (Big_Float){
+        .value = a.value + b.value,
+    };
+}
+
+internal inline Big_Float
+BigFloat_Sub(Big_Float a, Big_Float b)
+{
+    return (Big_Float){
+        .value = a.value - b.value,
+    };
+}
+
+internal inline Big_Float
 BigFloat_Mul(Big_Float a, Big_Float b)
 {
     return (Big_Float){
@@ -160,6 +205,18 @@ BigFloat_Div(Big_Float a, Big_Float b)
     return (Big_Float){
         .value = a.value / b.value,
     };
+}
+
+internal inline bool
+BigFloat_IsGreater(Big_Float a, Big_Float b)
+{
+    return (a.value > b.value);
+}
+
+internal inline bool
+BigFloat_IsLess(Big_Float a, Big_Float b)
+{
+    return (a.value < b.value);
 }
 
 internal inline bool

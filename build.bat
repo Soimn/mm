@@ -21,7 +21,7 @@ set "compile_options= %nocrt_options% %diag_options% /O2 /Zo /Zf /Z7"
 
 set "link_options= /INCREMENTAL:NO /opt:ref %nocrt_link%"
 
-cl %compile_options% ..\src\mm.c /link %link_options% /PDB:mmc.pdb /ENTRY:WinMainCRTStartup Kernel32.lib /out:mmc.exe
+cl %compile_options% ..\src\mm.c /link %link_options% /PDB:mm.pdb /ENTRY:WinMainCRTStartup Kernel32.lib /out:mm.exe
 
 del mm.obj
 
