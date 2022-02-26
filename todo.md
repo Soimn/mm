@@ -10,3 +10,6 @@ vtable for metaprogramming?
 
 experiment with simd
 add sign extend + n bit masks
+
+
+reconsider "single return policy"

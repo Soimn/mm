@@ -4,7 +4,6 @@ typedef enum AST_NODE_KIND
     
     // NOTE: Special nodes
     AST_NamedValue,
-    AST_Typeid,
     
     AST_FirstExpression,
     AST_Identifier = AST_FirstExpression,

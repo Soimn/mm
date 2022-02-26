@@ -29,63 +29,6 @@ typedef struct Check_Info
 internal CHECK_RESULT CheckScope(Check_Context* context, AST_Node* scope);
 internal CHECK_RESULT CheckStatement(Check_Context* context, AST_Node* statement);
 
-internal void
-FoldConstant(AST_Node* expression, Check_Info info)
-{
-    // TODO: Better constant folding
-    if (info.result == Check_Complete && info.value_kind == Value_Constant)
-    {
-        if (info.type == Type_SoftInt)
-        {
-            ZeroStruct(expression);
-            expression->kind    = AST_Int;
-            expression->integer = info.const_value.soft_int;
-        }
-        else if (Type_IsSignedInteger(info.type))
-        {
-            ZeroStruct(expression);
-            expression->kind    = AST_Int;
-            expression->integer = BigInt_FromI64(info.const_value.int64);
-        }
-        else if (Type_IsUnsignedInteger(info.type))
-        {
-            ZeroStruct(expression);
-            expression->kind    = AST_Int;
-            expression->integer = BigInt_FromU64(info.const_value.uint64);
-        }
-        else if (info.type == Type_SoftFloat)
-        {
-            ZeroStruct(expression);
-            expression->kind     = AST_Float;
-            expression->floating = info.const_value.soft_float;
-        }
-        else if (Type_IsFloat(info.type))
-        {
-            ZeroStruct(expression);
-            expression->kind     = AST_Float;
-            expression->floating = BigFloat_FromF64(info.const_value.float64);
-        }
-        else if (info.type == Type_Bool)
-        {
-            ZeroStruct(expression);
-            expression->kind = AST_Boolean;
-            expression->boolean = info.const_value.boolean;
-        }
-        else if (info.type == Type_String)
-        {
-            ZeroStruct(expression);
-            expression->kind = AST_String;
-            expression->string = info.const_value.string;
-        }
-        else if (info.type == Type_Typeid)
-        {
-            ZeroStruct(expression);
-            expression->kind = AST_Typeid;
-            expression->type_id = info.const_value.type_id;
-        }
-    }
-}
-
 internal Check_Info
 CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_type)
 {
@@ -965,15 +908,6 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
             .const_value.boolean = expression->boolean,
         };
     }
-    else if (expression->kind == AST_Typeid)
-    {
-        info = (Check_Info){
-            .result              = Check_Complete,
-            .type                = Type_Typeid,
-            .value_kind          = Value_Constant,
-            .const_value.type_id = expression->type_id,
-        };
-    }
     else if (expression->kind == AST_Proc)
     {
         NOT_IMPLEMENTED;
@@ -1000,34 +934,126 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     }
     else if (expression->kind == AST_StructLiteral)
     {
-        NOT_IMPLEMENTED;
+        Type_ID type = Type_None;
+        
+        if (expression->struct_literal.type == 0)
+        {
+            if (target_type == Type_None)
+            {
+                //// ERROR: no guiding type for array literal without type specifier
+                info.result = Check_Error;
+            }
+            else type = target_type;
+        }
+        else
+        {
+            Check_Info array_info = CheckExpression(context, expression->array_literal.type);
+            
+            if (array_info.result != Check_Complete) info.result = array_info.result;
+            else
+            {
+                if (array_info.type != Type_Typeid)
+                {
+                    //// ERROR: type specifier of array literal must be of type typeid
+                    info.result = Check_Error;
+                }
+                else if (array_info.value_kind != Value_Constant)
+                {
+                    //// ERROR: type specifier of array literal must be constant
+                    info.result = Check_Error;
+                }
+                else type = array_info.const_value.type_id;
+            }
+        }
+        
+        if (type != Type_None)
+        {
+            Type_Info* type_info = Type_InfoOf(target_type);
+            
+            if (type_info->kind != Type_Struct)
+            {
+                //// ERROR: struct literals can only construct structs
+                info.result = Check_Error;
+            }
+            else
+            {
+                NOT_IMPLEMENTED;
+            }
+        }
     }
     else if (expression->kind == AST_ArrayLiteral)
     {
-        NOT_IMPLEMENTED;
+        Type_ID type = Type_None;
+        
+        if (expression->array_literal.type == 0)
+        {
+            if (target_type == Type_None)
+            {
+                //// ERROR: no guiding type for array literal without type specifier
+                info.result = Check_Error;
+            }
+            else type = target_type;
+        }
+        else
+        {
+            Check_Info array_info = CheckExpression(context, expression->array_literal.type);
+            
+            if (array_info.result != Check_Complete) info.result = array_info.result;
+            else
+            {
+                if (array_info.type != Type_Typeid)
+                {
+                    //// ERROR: type specifier of array literal must be of type typeid
+                    info.result = Check_Error;
+                }
+                else if (array_info.value_kind != Value_Constant)
+                {
+                    //// ERROR: type specifier of array literal must be constant
+                    info.result = Check_Error;
+                }
+                else type = array_info.const_value.type_id;
+            }
+        }
+        
+        if (type != Type_None)
+        {
+            NOT_IMPLEMENTED;
+        }
     }
     else if (expression->kind == AST_ElementOf)
     {
+        Type_ID type           = Type_None;
+        Type_Info* type_info   = 0;
         Check_Info struct_info = {0};
-        if (expression->element_of.structure != 0)
+        if (expression->element_of.structure == 0)
         {
-            struct_info = CheckExpression(context, expression->element_of.structure);
+            if (target_type == Type_None)
+            {
+                //// ERROR: Cannot determine type of implicit selector expression
+                info.result = Check_Error;
+            }
+            else
+            {
+                type_info = Type_InfoOf(target_type);
+                
+                if (type_info == 0 || type_info->kind != Type_Enum)
+                {
+                    //// ERROR: Selector expressions can only be used on enumerations
+                    info.result = Check_Error;
+                }
+                else type = target_type;
+            }
         }
-        
-        if (expression->element_of.structure != 0 && struct_info.result != Check_Complete) info.result = struct_info.result;
         else
         {
-            Type_Info* type_info = 0;
-            if (expression->element_of.structure != 0)
+            struct_info = CheckExpression(context, expression->element_of.structure);
+            
+            if (struct_info.result != Check_Complete) info.result = struct_info.result;
+            else
             {
                 type_info = Type_InfoOf(struct_info.type);
-            }
-            
-            if (type_info == 0)
-            {
-                Type_ID type = Type_None;
                 
-                if (expression->element_of.structure != 0)
+                if (type_info == 0)
                 {
                     if (struct_info.type != Type_Typeid                   ||
                         struct_info.value_kind != Value_Constant          ||
@@ -1043,57 +1069,47 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                         type_info = Type_InfoOf(type);
                     }
                 }
+                else if (type_info->kind == Type_Struct || type_info->kind == Type_Union)
+                {
+                    type = struct_info.type;
+                }
                 else
                 {
-                    if (target_type == Type_None)
-                    {
-                        //// ERROR: Cannot determine type of implicit selector expression
-                        info.result = Check_Error;
-                    }
-                    else
-                    {
-                        type_info = Type_InfoOf(target_type);
-                        
-                        if (type_info == 0 || type_info->kind != Type_Enum)
-                        {
-                            //// ERROR: Selector expressions can only be used on enumerations
-                            info.result = Check_Error;
-                        }
-                        else type = target_type;
-                    }
-                }
-                
-                if (type != Type_None)
-                {
-                    Symbol* symbol = SymbolTable_GetSymbol(&type_info->enumeration.members, expression->element_of.element);
-                    
-                    if (symbol == 0)
-                    {
-                        //// ERROR: No enum member with the name x
-                        info.result = Check_Error;
-                    }
-                    else
-                    {
-                        info = (Check_Info){
-                            .result     = Check_Complete,
-                            .type       = type,
-                            .value_kind = Value_Constant,
-                        };
-                        
-                        Type_ID base_type = type_info->enumeration.backing_type;
-                        if (base_type == Type_SoftInt) info.const_value.soft_int = symbol->enum_member.value.soft_int;
-                        else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64 = symbol->enum_member.value.uint64;
-                        else                                        info.const_value.int64  = symbol->enum_member.value.int64;
-                    }
+                    //// ERROR: Illegal use of element of operator
+                    info.result = Check_Error;
                 }
             }
-            else if (type_info->kind != Type_Struct && type_info->kind != Type_Union)
+        }
+        
+        if (type != Type_None)
+        {
+            if (type_info->kind == Type_Enum)
             {
-                //// ERROR: Illegal use of element of operator
-                info.result = Check_Error;
+                Symbol* symbol = SymbolTable_GetSymbol(&type_info->enumeration.members, expression->element_of.element);
+                
+                if (symbol == 0)
+                {
+                    //// ERROR: No enum member with the name x
+                    info.result = Check_Error;
+                }
+                else
+                {
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = type,
+                        .value_kind = Value_Constant,
+                    };
+                    
+                    Type_ID base_type = type_info->enumeration.backing_type;
+                    if (base_type == Type_SoftInt) info.const_value.soft_int = symbol->enum_member.value.soft_int;
+                    else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64 = symbol->enum_member.value.uint64;
+                    else                                        info.const_value.int64  = symbol->enum_member.value.int64;
+                }
             }
             else
             {
+                ASSERT(type_info->kind == Type_Struct || type_info->kind == Type_Enum);
+                
                 // TODO: Incomplete elements (e.g. circular pointers)
                 Symbol* symbol = SymbolTable_GetSymbol(&type_info->structure.members, expression->element_of.element);
                 
