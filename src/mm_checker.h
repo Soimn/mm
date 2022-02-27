@@ -30,19 +30,19 @@ internal CHECK_RESULT CheckScope(Check_Context* context, AST_Node* scope);
 internal CHECK_RESULT CheckStatement(Check_Context* context, AST_Node* statement);
 
 internal Check_Info
-CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_type)
+CheckExpression(Check_Context* context, AST_Node* expression, Type_ID guiding_type)
 {
     Check_Info info = { .result = Check_Error };
     
     if (expression == 0)
     {
         //// ERROR: Missing expression
-        info.result = Check_Error;
+        return (Check_Info){ .result = Check_Error };
     }
     else if (expression->kind >= AST_FirstSpecial && expression->kind <= AST_LastSpecial)
     {
         //// ERROR: x is not an expression
-        info.result = Check_Error;
+        return (Check_Info){ .result = Check_Error };
     }
     else if (expression->kind == AST_Compound)
     {
@@ -52,12 +52,12 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     {
         Check_Info left_info = CheckExpression(context, expression->binary_expr.left);
         
-        if (left_info.result != Check_Complete) info.result = left_info.result;
+        if (left_info.result != Check_Complete) return (Check_Info){ .result = left_info.result };
         else
         {
             Check_Info right_info = CheckExpression(context, expression->binary_expr.right);
             
-            if (right_info.result != Check_Complete) info.result = right_info.result;
+            if (right_info.result != Check_Complete) return (Check_Info){ .result = right_info.result };
             else
             {
                 Type_ID common_type = Type_None;
@@ -76,24 +76,25 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 }
                 else if (Type_IsSoft(left_info.type) && Type_IsSoft(right_info.type))
                 {
-                    if (target_type == Type_None)
+                    if (guiding_type == Type_None)
                     {
                         //// ERROR: Not enough context to harden types
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else
                     {
-                        if (!Type_HardenTo(left_info.type, target_type, &lhs))
+                        if (!Type_HardenTo(left_info.type, guiding_type, &lhs))
                         {
                             //// ERROR: Cannot harden type x to y
-                            info.result = Check_Error;
+                            return (Check_Info){ .result = Check_Error };
                         }
-                        else if (!Type_HardenTo(left_info.type, target_type, &lhs))
+                        else if (!Type_HardenTo(left_info.type, guiding_type, &lhs))
                         {
                             //// ERROR: Cannot harden type x to y
-                            info.result = Check_Error;
+                            return (Check_Info){ .result = Check_Error };
                         }
-                        else common_type = target_type;
+                        
+                        common_type = guiding_type;
                     }
                 }
                 else if (Type_IsSoft(left_info.type) ^ Type_IsSoft(right_info.type))
@@ -126,486 +127,467 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 else
                 {
                     //// ERROR: Incompatible types
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 
-                if (common_type != Type_None)
+                if (expression->kind == AST_Mul || expression->kind == AST_Div)
                 {
-                    if (expression->kind == AST_Mul || expression->kind == AST_Div)
+                    if (!Type_IsNumeric(common_type))
                     {
-                        if (!Type_IsNumeric(common_type))
-                        {
-                            //// ERROR: operator requires common numeric type
-                            info.result = Check_Error;
-                        }
-                        else
-                        {
-                            info = (Check_Info){
-                                .result = Check_Complete,
-                                .type   = common_type,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
-                            
-                            if (info.value_kind == Value_Constant)
-                            {
-                                if (expression->kind == AST_Mul)
-                                {
-                                    if (common_type == Type_SoftInt)
-                                    {
-                                        info.const_value.soft_int = BigInt_Mul(lhs.soft_int, rhs.soft_int);
-                                    }
-                                    else if (Type_IsUnsignedInteger(common_type))
-                                    {
-                                        info.const_value.uint64 = ChopUint(lhs.uint64 * rhs.uint64, Type_SizeOf(common_type));
-                                    }
-                                    else if (Type_IsSignedInteger(common_type))
-                                    {
-                                        umm size = Type_SizeOf(common_type);
-                                        info.const_value.int64 = SignExtend(ChopInt(lhs.int64 * rhs.int64, size), size);
-                                    }
-                                    else if (common_type == Type_SoftFloat)
-                                    {
-                                        info.const_value.soft_float = BigFloat_Mul(lhs.soft_float, rhs.soft_float);
-                                    }
-                                    else if (common_type == Type_F64)
-                                    {
-                                        info.const_value.float64 = lhs.float64 * rhs.float64;
-                                    }
-                                    else
-                                    {
-                                        ASSERT(common_type == Type_F32);
-                                        
-                                        info.const_value.float32 = lhs.float32 * rhs.float32;
-                                    }
-                                }
-                                else
-                                {
-                                    bool is_zero = false;
-                                    
-                                    if (common_type == Type_SoftInt)
-                                    {
-                                        if (BigInt_IsEqual(rhs.soft_int, BigInt_0)) is_zero = true;
-                                        else
-                                        {
-                                            info.const_value.soft_int = BigInt_Div(lhs.soft_int, rhs.soft_int);
-                                        }
-                                    }
-                                    else if (Type_IsUnsignedInteger(common_type))
-                                    {
-                                        if (rhs.uint64 == 0) is_zero = true;
-                                        else
-                                        {
-                                            info.const_value.uint64 = ChopUint(lhs.uint64 / rhs.uint64,
-                                                                               Type_SizeOf(common_type));
-                                        }
-                                    }
-                                    else if (Type_IsSignedInteger(common_type))
-                                    {
-                                        if (rhs.int64 == 0) is_zero = true;
-                                        else
-                                        {
-                                            umm size = Type_SizeOf(common_type);
-                                            info.const_value.int64 = SignExtend(ChopInt(lhs.int64 / rhs.int64, size), size);
-                                        }
-                                    }
-                                    else if (common_type == Type_SoftFloat)
-                                    {
-                                        if (BigFloat_IsEqual(rhs.soft_float, BigFloat_0) ||
-                                            BigFloat_IsEqual(rhs.soft_float, BigFloat_Neg0)) is_zero = true;
-                                        else
-                                        {
-                                            info.const_value.soft_float = BigFloat_Div(lhs.soft_float, rhs.soft_float);
-                                        }
-                                    }
-                                    else if (common_type == Type_F64)
-                                    {
-                                        if (AbsF64(rhs.float64) == 0) is_zero = true;
-                                        else
-                                        {
-                                            info.const_value.float64 = lhs.float64 / rhs.float64;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        ASSERT(common_type == Type_F32);
-                                        
-                                        if (AbsF32(rhs.float32) == 0) is_zero = true;
-                                        else
-                                        {
-                                            info.const_value.float32 = lhs.float32 / rhs.float32;
-                                        }
-                                    }
-                                    
-                                    if (is_zero)
-                                    {
-                                        //// ERROR: Divide by zero
-                                        info.result = Check_Error;
-                                    }
-                                }
-                            }
-                        }
+                        //// ERROR: operator requires common numeric type
+                        return (Check_Info){ .result = Check_Error };
                     }
-                    else if (expression->kind == AST_Rem)
+                    
+                    info = (Check_Info){
+                        .result = Check_Complete,
+                        .type   = common_type,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
                     {
-                        if (!Type_IsInteger(common_type))
+                        if (expression->kind == AST_Mul)
                         {
-                            //// ERROR: operator requires common integer type
-                            info.result = Check_Error;
-                        }
-                        else
-                        {
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = common_type,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
-                            
-                            if (info.value_kind == Value_Constant)
+                            if (common_type == Type_SoftInt)
                             {
-                                bool is_zero = false;
-                                
-                                if (common_type == Type_SoftInt)
-                                {
-                                    if (BigInt_IsEqual(rhs.soft_int, BigInt_0)) is_zero = true;
-                                    else
-                                    {
-                                        info.const_value.soft_int = BigInt_Rem(lhs.soft_int, rhs.soft_int);
-                                    }
-                                }
-                                else if (Type_IsUnsignedInteger(common_type))
-                                {
-                                    if (rhs.uint64 == 0) is_zero = true;
-                                    else
-                                    {
-                                        info.const_value.uint64 = lhs.uint64 % rhs.uint64;
-                                    }
-                                }
-                                else
-                                {
-                                    ASSERT(Type_IsSignedInteger(common_type));
-                                    
-                                    if (rhs.int64 == 0) is_zero = true;
-                                    else
-                                    {
-                                        info.const_value.int64 = lhs.int64 % rhs.int64;
-                                    }
-                                }
-                                
-                                if (is_zero)
-                                {
-                                    //// ERROR: Divide by zero
-                                    info.result = Check_Error;
-                                }
+                                info.const_value.soft_int = BigInt_Mul(lhs.soft_int, rhs.soft_int);
                             }
-                        }
-                    }
-                    else if (expression->kind == AST_Add || expression->kind == AST_Sub)
-                    {
-                        Type_Info* type_info = Type_InfoOf(common_type);
-                        
-                        if (!Type_IsNumeric(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
-                        {
-                            //// ERROR: operator requires common numeric or pointer type
-                            info.result = Check_Error;
-                        }
-                        else
-                        {
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = common_type,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
-                            
-                            if (info.value_kind == Value_Constant)
+                            else if (Type_IsUnsignedInteger(common_type))
                             {
-                                if (expression->kind == AST_Add)
-                                {
-                                    if (common_type == Type_SoftInt)
-                                    {
-                                        info.const_value.soft_int = BigInt_Add(lhs.soft_int, rhs.soft_int);
-                                    }
-                                    else if (common_type == Type_SoftFloat)
-                                    {
-                                        info.const_value.soft_float = BigFloat_Add(lhs.soft_float, rhs.soft_float);
-                                    }
-                                    else if (Type_IsInteger(common_type))
-                                    {
-                                        // NOTE: Wraps on overflow
-                                        info.const_value.uint64 = ChopUint(lhs.uint64 + rhs.uint64, Type_SizeOf(common_type));
-                                    }
-                                    else if (common_type == Type_F32)     
-                                    {
-                                        info.const_value.float32 = lhs.float32 + rhs.float32;
-                                    }
-                                    else if (Type_IsFloat(common_type))   
-                                    {
-                                        info.const_value.float64 = lhs.float64 + rhs.float64;
-                                    }
-                                    else
-                                    {
-                                        ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
-                                        info.const_value.pointer = lhs.pointer + rhs.pointer;
-                                    }
-                                }
-                                else
-                                {
-                                    if (common_type == Type_SoftInt)
-                                    {
-                                        info.const_value.soft_int = BigInt_Sub(lhs.soft_int, rhs.soft_int);
-                                    }
-                                    else if (common_type == Type_SoftFloat)
-                                    {
-                                        info.const_value.soft_float = BigFloat_Sub(lhs.soft_float, rhs.soft_float);
-                                    }
-                                    else if (Type_IsInteger(common_type))
-                                    {
-                                        // NOTE: Wraps on overflow
-                                        info.const_value.uint64 = ChopUint(lhs.uint64 + ~rhs.uint64 + 1,
-                                                                           Type_SizeOf(common_type));
-                                    }
-                                    else if (common_type == Type_F32)
-                                    {
-                                        info.const_value.float32 = lhs.float32 - rhs.float32;
-                                    }
-                                    else if (Type_IsFloat(common_type))
-                                    {
-                                        info.const_value.float64 = lhs.float64 - rhs.float64;
-                                    }
-                                    else
-                                    {
-                                        ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
-                                        info.const_value.pointer = lhs.pointer - rhs.pointer;
-                                    }
-                                }
+                                info.const_value.uint64 = ChopUint(lhs.uint64 * rhs.uint64, Type_SizeOf(common_type));
                             }
-                        }
-                    }
-                    else if (expression->kind >= AST_IsLess && expression->kind <= AST_IsGreaterEqual)
-                    {
-                        Type_Info* type_info = Type_InfoOf(common_type);
-                        
-                        if (!Type_IsNumeric(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
-                        {
-                            //// ERROR: operator requires common numeric or pointer type
-                            info.result = Check_Error;
-                        }
-                        else
-                        {
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = Type_Bool,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
-                            
-                            if (info.value_kind == Value_Constant)
+                            else if (Type_IsSignedInteger(common_type))
                             {
-                                bool is_less, is_greater;
-                                
-                                if (common_type == Type_SoftInt)
-                                {
-                                    is_less    = BigInt_IsLess(lhs.soft_int, rhs.soft_int);
-                                    is_greater = BigInt_IsGreater(lhs.soft_int, rhs.soft_int);
-                                }
-                                else if (common_type == Type_SoftFloat)
-                                {
-                                    is_less    = BigFloat_IsLess(lhs.soft_float, rhs.soft_float);
-                                    is_greater = BigFloat_IsGreater(lhs.soft_float, rhs.soft_float);
-                                }
-                                else if (Type_IsUnsignedInteger(common_type))
-                                {
-                                    is_less    = (lhs.uint64 < rhs.uint64);
-                                    is_greater = (lhs.uint64 > rhs.uint64);
-                                }
-                                else if (Type_IsSignedInteger(common_type))
-                                {
-                                    is_less    = (lhs.int64 < rhs.int64);
-                                    is_greater = (lhs.int64 > rhs.int64);
-                                }
-                                else if (common_type == Type_F32)
-                                {
-                                    is_less    = (lhs.float32 < rhs.float32);
-                                    is_greater = (lhs.float32 > rhs.float32);
-                                }
-                                else if (Type_IsFloat(common_type))
-                                {
-                                    is_less    = (lhs.float64 < rhs.float64);
-                                    is_greater = (lhs.float64 > rhs.float64);
-                                }
-                                else
-                                {
-                                    ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
-                                    is_less    = (lhs.pointer < rhs.pointer);
-                                    is_greater = (lhs.pointer > rhs.pointer);
-                                }
-                                
-                                switch (expression->kind)
-                                {
-                                    case AST_IsLess:         info.const_value.boolean = is_less;     break;
-                                    case AST_IsGreater:      info.const_value.boolean = is_greater;  break;
-                                    case AST_IsLessEqual:    info.const_value.boolean = !is_greater; break;
-                                    case AST_IsGreaterEqual: info.const_value.boolean = !is_less;    break;
-                                    INVALID_DEFAULT_CASE;
-                                }
-                            }
-                        }
-                    }
-                    else if (expression->kind == AST_BitAnd ||
-                             expression->kind >= AST_BitOr && expression->kind <= AST_BitXor)
-                    {
-                        if (!Type_IsInteger(common_type) && common_type != Type_Bool)
-                        {
-                            //// ERROR: operator requires common hard integer or boolean type
-                            info.result = Check_Error;
-                        }
-                        else
-                        {
-                            // NOTE: This is guarded against when choosing the common type
-                            ASSERT(!Type_IsSoft(common_type));
-                            
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = common_type,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
-                            
-                            if (info.value_kind == Value_Constant)
-                            {
-                                if (common_type == Type_Bool)
-                                {
-                                    bool l = lhs.boolean;
-                                    bool r = rhs.boolean;
-                                    
-                                    if      (expression->kind == AST_BitOr)  info.const_value.boolean = l | r;
-                                    else if (expression->kind == AST_BitXor) info.const_value.boolean = l ^ r;
-                                    else                                     info.const_value.boolean = l & r;
-                                }
-                                else
-                                {
-                                    u64 l = lhs.uint64;
-                                    u64 r = rhs.uint64;
-                                    
-                                    if      (expression->kind == AST_BitOr)  info.const_value.uint64 = l | r;
-                                    else if (expression->kind == AST_BitXor) info.const_value.uint64 = l ^ r;
-                                    else                                     info.const_value.uint64 = l & r;
-                                }
-                            }
-                        }
-                    }
-                    else if (expression->kind >= AST_BitSar && expression->kind <= AST_BitShl)
-                    {
-                        if (!Type_IsInteger(common_type))
-                        {
-                            //// ERROR: operator requires common hard integer type
-                            info.result = Check_Error;
-                        }
-                        else
-                        {
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = common_type,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
-                            
-                            if (info.value_kind == Value_Constant)
-                            {
-                                u64 l = lhs.uint64;
-                                u64 r = rhs.uint64;
-                                
                                 umm size = Type_SizeOf(common_type);
-                                ASSERT(size >= 1 && size <= 8);
-                                
-                                u64 masks[] = {
-                                    0x07,
-                                    0x0F,
-                                    0x1F,
-                                    0x3F,
-                                };
-                                
-                                l  = SignExtend(l, size);
-                                r &= masks[size - 1];
-                                
-                                u64 result;
-                                if      (expression->kind == AST_BitSar) result = (u64)((i64)l >> r);
-                                else if (expression->kind == AST_BitShr) result = l >> r;
-                                else if (expression->kind == AST_BitShl) result = l << r;
-                                else
-                                {
-                                    result = l << r | (((l & 1) << r) - 1);
-                                }
-                                
-                                info.const_value.uint64 = ChopInt(result, size);
+                                info.const_value.int64 = SignExtend(ChopInt(lhs.int64 * rhs.int64, size), size);
                             }
-                        }
-                    }
-                    else if (expression->kind == AST_IsEqual || expression->kind == AST_IsNotEqual)
-                    {
-                        Type_Info* type_info = Type_InfoOf(common_type);
-                        
-                        if (common_type == Type_Any ||
-                            !Type_IsPrimitive(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
-                        {
-                            //// ERROR: operator requires common non any primitive or pointer type
-                            info.result = Check_Error;
+                            else if (common_type == Type_SoftFloat)
+                            {
+                                info.const_value.soft_float = BigFloat_Mul(lhs.soft_float, rhs.soft_float);
+                            }
+                            else if (common_type == Type_F64)
+                            {
+                                info.const_value.float64 = lhs.float64 * rhs.float64;
+                            }
+                            else
+                            {
+                                ASSERT(common_type == Type_F32);
+                                
+                                info.const_value.float32 = lhs.float32 * rhs.float32;
+                            }
                         }
                         else
                         {
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = Type_Bool,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
+                            bool is_zero = false;
                             
-                            if (info.value_kind == Value_Constant)
+                            if (common_type == Type_SoftInt)
                             {
-                                if (common_type == Type_SoftInt)
-                                {
-                                    info.const_value.boolean = BigInt_IsEqual(lhs.soft_int, rhs.soft_int);
-                                }
-                                else if (common_type == Type_SoftFloat)
-                                {
-                                    info.const_value.boolean = BigFloat_IsEqual(lhs.soft_float, rhs.soft_float);
-                                }
-                                else if (common_type == Type_Byte)    info.const_value.boolean = (lhs.byte    == rhs.byte);
-                                else if (common_type == Type_Typeid)  info.const_value.boolean = (lhs.type_id == rhs.type_id);
-                                else if (Type_IsInteger(common_type)) info.const_value.boolean = (lhs.uint64  == rhs.uint64);
-                                else if (common_type == Type_F32)     info.const_value.boolean = (lhs.float32 == rhs.float32);
-                                else if (Type_IsFloat(common_type))   info.const_value.boolean = (lhs.float64 == rhs.float64);
-                                else if (common_type == Type_String)  info.const_value.boolean = (lhs.string  == rhs.string);
-                                else if (common_type == Type_Bool)    info.const_value.boolean = (lhs.boolean == rhs.boolean);
+                                if (BigInt_IsEqual(rhs.soft_int, BigInt_0)) is_zero = true;
                                 else
                                 {
-                                    ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
-                                    info.const_value.boolean = (lhs.pointer == rhs.pointer);
+                                    info.const_value.soft_int = BigInt_Div(lhs.soft_int, rhs.soft_int);
                                 }
+                            }
+                            else if (Type_IsUnsignedInteger(common_type))
+                            {
+                                if (rhs.uint64 == 0) is_zero = true;
+                                else
+                                {
+                                    info.const_value.uint64 = ChopUint(lhs.uint64 / rhs.uint64,
+                                                                       Type_SizeOf(common_type));
+                                }
+                            }
+                            else if (Type_IsSignedInteger(common_type))
+                            {
+                                if (rhs.int64 == 0) is_zero = true;
+                                else
+                                {
+                                    umm size = Type_SizeOf(common_type);
+                                    info.const_value.int64 = SignExtend(ChopInt(lhs.int64 / rhs.int64, size), size);
+                                }
+                            }
+                            else if (common_type == Type_SoftFloat)
+                            {
+                                if (BigFloat_IsEqual(rhs.soft_float, BigFloat_0) ||
+                                    BigFloat_IsEqual(rhs.soft_float, BigFloat_Neg0)) is_zero = true;
+                                else
+                                {
+                                    info.const_value.soft_float = BigFloat_Div(lhs.soft_float, rhs.soft_float);
+                                }
+                            }
+                            else if (common_type == Type_F64)
+                            {
+                                if (AbsF64(rhs.float64) == 0) is_zero = true;
+                                else
+                                {
+                                    info.const_value.float64 = lhs.float64 / rhs.float64;
+                                }
+                            }
+                            else
+                            {
+                                ASSERT(common_type == Type_F32);
+                                
+                                if (AbsF32(rhs.float32) == 0) is_zero = true;
+                                else
+                                {
+                                    info.const_value.float32 = lhs.float32 / rhs.float32;
+                                }
+                            }
+                            
+                            if (is_zero)
+                            {
+                                //// ERROR: Divide by zero
+                                return (Check_Info){ .result = Check_Error };
                             }
                         }
                     }
-                    else
+                }
+                else if (expression->kind == AST_Rem)
+                {
+                    if (!Type_IsInteger(common_type))
                     {
-                        ASSERT(expression->kind == AST_And || expression->kind == AST_Or);
+                        //// ERROR: operator requires common integer type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = common_type,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        bool is_zero = false;
                         
-                        if (common_type != Type_Bool)
+                        if (common_type == Type_SoftInt)
                         {
-                            //// ERROR: operator requires common boolean type
-                            info.result = Check_Error;
+                            if (BigInt_IsEqual(rhs.soft_int, BigInt_0)) is_zero = true;
+                            else
+                            {
+                                info.const_value.soft_int = BigInt_Rem(lhs.soft_int, rhs.soft_int);
+                            }
+                        }
+                        else if (Type_IsUnsignedInteger(common_type))
+                        {
+                            if (rhs.uint64 == 0) is_zero = true;
+                            else
+                            {
+                                info.const_value.uint64 = lhs.uint64 % rhs.uint64;
+                            }
                         }
                         else
                         {
-                            info = (Check_Info){
-                                .result     = Check_Complete,
-                                .type       = Type_Bool,
-                                .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
-                            };
+                            ASSERT(Type_IsSignedInteger(common_type));
                             
-                            if (info.value_kind == Value_Constant)
+                            if (rhs.int64 == 0) is_zero = true;
+                            else
                             {
-                                bool l = lhs.boolean;
-                                bool r = rhs.boolean;
-                                
-                                if (expression->kind == AST_And) info.const_value.boolean = l && r;
-                                else                             info.const_value.boolean = l || r;
+                                info.const_value.int64 = lhs.int64 % rhs.int64;
                             }
                         }
+                        
+                        if (is_zero)
+                        {
+                            //// ERROR: Divide by zero
+                            return (Check_Info){ .result = Check_Error };
+                        }
+                    }
+                }
+                else if (expression->kind == AST_Add || expression->kind == AST_Sub)
+                {
+                    Type_Info* type_info = Type_InfoOf(common_type);
+                    
+                    if (!Type_IsNumeric(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
+                    {
+                        //// ERROR: operator requires common numeric or pointer type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = common_type,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        if (expression->kind == AST_Add)
+                        {
+                            if (common_type == Type_SoftInt)
+                            {
+                                info.const_value.soft_int = BigInt_Add(lhs.soft_int, rhs.soft_int);
+                            }
+                            else if (common_type == Type_SoftFloat)
+                            {
+                                info.const_value.soft_float = BigFloat_Add(lhs.soft_float, rhs.soft_float);
+                            }
+                            else if (Type_IsInteger(common_type))
+                            {
+                                // NOTE: Wraps on overflow
+                                info.const_value.uint64 = ChopUint(lhs.uint64 + rhs.uint64, Type_SizeOf(common_type));
+                            }
+                            else if (common_type == Type_F32)     
+                            {
+                                info.const_value.float32 = lhs.float32 + rhs.float32;
+                            }
+                            else if (Type_IsFloat(common_type))   
+                            {
+                                info.const_value.float64 = lhs.float64 + rhs.float64;
+                            }
+                            else
+                            {
+                                ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                                info.const_value.pointer = lhs.pointer + rhs.pointer;
+                            }
+                        }
+                        else
+                        {
+                            if (common_type == Type_SoftInt)
+                            {
+                                info.const_value.soft_int = BigInt_Sub(lhs.soft_int, rhs.soft_int);
+                            }
+                            else if (common_type == Type_SoftFloat)
+                            {
+                                info.const_value.soft_float = BigFloat_Sub(lhs.soft_float, rhs.soft_float);
+                            }
+                            else if (Type_IsInteger(common_type))
+                            {
+                                // NOTE: Wraps on overflow
+                                info.const_value.uint64 = ChopUint(lhs.uint64 + ~rhs.uint64 + 1,
+                                                                   Type_SizeOf(common_type));
+                            }
+                            else if (common_type == Type_F32)
+                            {
+                                info.const_value.float32 = lhs.float32 - rhs.float32;
+                            }
+                            else if (Type_IsFloat(common_type))
+                            {
+                                info.const_value.float64 = lhs.float64 - rhs.float64;
+                            }
+                            else
+                            {
+                                ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                                info.const_value.pointer = lhs.pointer - rhs.pointer;
+                            }
+                        }
+                    }
+                }
+                else if (expression->kind >= AST_IsLess && expression->kind <= AST_IsGreaterEqual)
+                {
+                    Type_Info* type_info = Type_InfoOf(common_type);
+                    
+                    if (!Type_IsNumeric(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
+                    {
+                        //// ERROR: operator requires common numeric or pointer type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = Type_Bool,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        bool is_less, is_greater;
+                        
+                        if (common_type == Type_SoftInt)
+                        {
+                            is_less    = BigInt_IsLess(lhs.soft_int, rhs.soft_int);
+                            is_greater = BigInt_IsGreater(lhs.soft_int, rhs.soft_int);
+                        }
+                        else if (common_type == Type_SoftFloat)
+                        {
+                            is_less    = BigFloat_IsLess(lhs.soft_float, rhs.soft_float);
+                            is_greater = BigFloat_IsGreater(lhs.soft_float, rhs.soft_float);
+                        }
+                        else if (Type_IsUnsignedInteger(common_type))
+                        {
+                            is_less    = (lhs.uint64 < rhs.uint64);
+                            is_greater = (lhs.uint64 > rhs.uint64);
+                        }
+                        else if (Type_IsSignedInteger(common_type))
+                        {
+                            is_less    = (lhs.int64 < rhs.int64);
+                            is_greater = (lhs.int64 > rhs.int64);
+                        }
+                        else if (common_type == Type_F32)
+                        {
+                            is_less    = (lhs.float32 < rhs.float32);
+                            is_greater = (lhs.float32 > rhs.float32);
+                        }
+                        else if (Type_IsFloat(common_type))
+                        {
+                            is_less    = (lhs.float64 < rhs.float64);
+                            is_greater = (lhs.float64 > rhs.float64);
+                        }
+                        else
+                        {
+                            ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                            is_less    = (lhs.pointer < rhs.pointer);
+                            is_greater = (lhs.pointer > rhs.pointer);
+                        }
+                        
+                        switch (expression->kind)
+                        {
+                            case AST_IsLess:         info.const_value.boolean = is_less;     break;
+                            case AST_IsGreater:      info.const_value.boolean = is_greater;  break;
+                            case AST_IsLessEqual:    info.const_value.boolean = !is_greater; break;
+                            case AST_IsGreaterEqual: info.const_value.boolean = !is_less;    break;
+                            INVALID_DEFAULT_CASE;
+                        }
+                    }
+                }
+                else if (expression->kind == AST_BitAnd ||
+                         expression->kind >= AST_BitOr && expression->kind <= AST_BitXor)
+                {
+                    if (!Type_IsInteger(common_type) && common_type != Type_Bool)
+                    {
+                        //// ERROR: operator requires common hard integer or boolean type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    // NOTE: This is guarded against when choosing the common type
+                    ASSERT(!Type_IsSoft(common_type));
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = common_type,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        if (common_type == Type_Bool)
+                        {
+                            bool l = lhs.boolean;
+                            bool r = rhs.boolean;
+                            
+                            if      (expression->kind == AST_BitOr)  info.const_value.boolean = l | r;
+                            else if (expression->kind == AST_BitXor) info.const_value.boolean = l ^ r;
+                            else                                     info.const_value.boolean = l & r;
+                        }
+                        else
+                        {
+                            u64 l = lhs.uint64;
+                            u64 r = rhs.uint64;
+                            
+                            if      (expression->kind == AST_BitOr)  info.const_value.uint64 = l | r;
+                            else if (expression->kind == AST_BitXor) info.const_value.uint64 = l ^ r;
+                            else                                     info.const_value.uint64 = l & r;
+                        }
+                    }
+                }
+                else if (expression->kind >= AST_BitSar && expression->kind <= AST_BitShl)
+                {
+                    if (!Type_IsInteger(common_type))
+                    {
+                        //// ERROR: operator requires common hard integer type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = common_type,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        u64 l = lhs.uint64;
+                        u64 r = rhs.uint64;
+                        
+                        umm size = Type_SizeOf(common_type);
+                        ASSERT(size >= 1 && size <= 8);
+                        
+                        u64 masks[] = {
+                            0x07,
+                            0x0F,
+                            0x1F,
+                            0x3F,
+                        };
+                        
+                        l  = SignExtend(l, size);
+                        r &= masks[size - 1];
+                        
+                        u64 result;
+                        if      (expression->kind == AST_BitSar) result = (u64)((i64)l >> r);
+                        else if (expression->kind == AST_BitShr) result = l >> r;
+                        else if (expression->kind == AST_BitShl) result = l << r;
+                        else
+                        {
+                            result = l << r | (((l & 1) << r) - 1);
+                        }
+                        
+                        info.const_value.uint64 = ChopInt(result, size);
+                    }
+                }
+                else if (expression->kind == AST_IsEqual || expression->kind == AST_IsNotEqual)
+                {
+                    Type_Info* type_info = Type_InfoOf(common_type);
+                    
+                    if (common_type == Type_Any ||
+                        !Type_IsPrimitive(common_type) && type_info != 0 && type_info->kind != Type_Pointer)
+                    {
+                        //// ERROR: operator requires common non any primitive or pointer type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = Type_Bool,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        if (common_type == Type_SoftInt)
+                        {
+                            info.const_value.boolean = BigInt_IsEqual(lhs.soft_int, rhs.soft_int);
+                        }
+                        else if (common_type == Type_SoftFloat)
+                        {
+                            info.const_value.boolean = BigFloat_IsEqual(lhs.soft_float, rhs.soft_float);
+                        }
+                        else if (common_type == Type_Byte)    info.const_value.boolean = (lhs.byte    == rhs.byte);
+                        else if (common_type == Type_Typeid)  info.const_value.boolean = (lhs.type_id == rhs.type_id);
+                        else if (Type_IsInteger(common_type)) info.const_value.boolean = (lhs.uint64  == rhs.uint64);
+                        else if (common_type == Type_F32)     info.const_value.boolean = (lhs.float32 == rhs.float32);
+                        else if (Type_IsFloat(common_type))   info.const_value.boolean = (lhs.float64 == rhs.float64);
+                        else if (common_type == Type_String)  info.const_value.boolean = (lhs.string  == rhs.string);
+                        else if (common_type == Type_Bool)    info.const_value.boolean = (lhs.boolean == rhs.boolean);
+                        else
+                        {
+                            ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+                            info.const_value.boolean = (lhs.pointer == rhs.pointer);
+                        }
+                    }
+                }
+                else
+                {
+                    ASSERT(expression->kind == AST_And || expression->kind == AST_Or);
+                    
+                    if (common_type != Type_Bool)
+                    {
+                        //// ERROR: operator requires common boolean type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = Type_Bool,
+                        .value_kind = MAX(Value_Register, MIN(left_info.value_kind, right_info.value_kind)),
+                    };
+                    
+                    if (info.value_kind == Value_Constant)
+                    {
+                        bool l = lhs.boolean;
+                        bool r = rhs.boolean;
+                        
+                        if (expression->kind == AST_And) info.const_value.boolean = l && r;
+                        else                             info.const_value.boolean = l || r;
                     }
                 }
             }
@@ -615,7 +597,7 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     {
         Check_Info operand_info = CheckExpression(context, expression->array_type.type);
         
-        if (operand_info.result != Check_Complete) info.result = operand_info.result;
+        if (operand_info.result != Check_Complete) return (Check_Info){ .result = operand_info.result };
         else
         {
             if (expression->kind == AST_Reference)
@@ -624,16 +606,14 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 if (operand_info.value_kind != Value_Memory)
                 {
                     //// ERROR: operand to reference operator must be an l value
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else
-                {
-                    info = (Check_Info){
-                        .result     = Check_Complete,
-                        .type       = Type_PointerTo(operand_info.type),
-                        .value_kind = Value_Memory,
-                    };
-                }
+                
+                info = (Check_Info){
+                    .result     = Check_Complete,
+                    .type       = Type_PointerTo(operand_info.type),
+                    .value_kind = Value_Memory,
+                };
             }
             else if (expression->kind == AST_Dereference)
             {
@@ -642,60 +622,56 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 if (type_info == 0 || type_info->kind != Type_Pointer)
                 {
                     //// ERROR: operand to dereference operator must be of pointer type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else
-                {
-                    info = (Check_Info){
-                        .result     = Check_Complete,
-                        .type       = type_info->elem_type,
-                        .value_kind = Value_Memory,
-                    };
-                }
+                
+                info = (Check_Info){
+                    .result     = Check_Complete,
+                    .type       = type_info->elem_type,
+                    .value_kind = Value_Memory,
+                };
             }
             else if (expression->kind == AST_Neg)
             {
                 if (!Type_IsNumeric(operand_info.type))
                 {
                     //// ERROR: operand to arithmetic negation operator must be of numeric type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else
+                
+                info = (Check_Info){
+                    .result     = Check_Complete,
+                    .type       = operand_info.type,
+                    .value_kind = MAX(operand_info.value_kind, Value_Register),
+                };
+                
+                if (info.value_kind == Value_Constant)
                 {
-                    info = (Check_Info){
-                        .result     = Check_Complete,
-                        .type       = operand_info.type,
-                        .value_kind = MAX(operand_info.value_kind, Value_Register),
-                    };
-                    
-                    if (info.value_kind == Value_Constant)
+                    if (info.type == Type_SoftFloat)
                     {
-                        if (info.type == Type_SoftFloat)
-                        {
-                            info.const_value.soft_float = BigFloat_Neg(operand_info.const_value.soft_float);
-                        }
-                        else if (info.type == Type_F32)
-                        {
-                            info.const_value.float32 = -operand_info.const_value.float32;
-                        }
-                        else if (info.type == Type_F64)
-                        {
-                            info.const_value.float64 = -operand_info.const_value.float64;
-                        }
-                        else if (info.type == Type_SoftInt)
-                        {
-                            info.const_value.soft_int = BigInt_Neg(operand_info.const_value.soft_int);
-                        }
-                        else if (Type_IsUnsignedInteger(info.type))
-                        {
-                            info.const_value.uint64 = ~operand_info.const_value.uint64 + 1;
-                        }
-                        else
-                        {
-                            ASSERT(Type_IsSignedInteger(info.type));
-                            
-                            info.const_value.int64 = -operand_info.const_value.int64;
-                        }
+                        info.const_value.soft_float = BigFloat_Neg(operand_info.const_value.soft_float);
+                    }
+                    else if (info.type == Type_F32)
+                    {
+                        info.const_value.float32 = -operand_info.const_value.float32;
+                    }
+                    else if (info.type == Type_F64)
+                    {
+                        info.const_value.float64 = -operand_info.const_value.float64;
+                    }
+                    else if (info.type == Type_SoftInt)
+                    {
+                        info.const_value.soft_int = BigInt_Neg(operand_info.const_value.soft_int);
+                    }
+                    else if (Type_IsUnsignedInteger(info.type))
+                    {
+                        info.const_value.uint64 = ~operand_info.const_value.uint64 + 1;
+                    }
+                    else
+                    {
+                        ASSERT(Type_IsSignedInteger(info.type));
+                        
+                        info.const_value.int64 = -operand_info.const_value.int64;
                     }
                 }
             }
@@ -704,12 +680,12 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 if (!Type_IsInteger(operand_info.type))
                 {
                     //// ERROR: operand to bitwise not operator must be of integer type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else if (Type_IsSoft(operand_info.type))
                 {
                     //// ERROR: operand to bitwise not operator must be a hard type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else
                 {
@@ -730,7 +706,7 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 if (operand_info.type != Type_Bool)
                 {
                     //// ERROR: operand to logical not operator must be of boolean type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else
                 {
@@ -755,44 +731,44 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         {
             Check_Info operand_info = CheckExpression(context, expression->array_type.type);
             
-            if (operand_info.result != Check_Complete) info.result = operand_info.result;
+            if (operand_info.result != Check_Complete) return (Check_Info){ .result = operand_info.result };
             else
             {
                 Check_Info size_info = CheckExpression(context, expression->array_type.size);
                 
-                if (size_info.result != Check_Complete) info.result = size_info.result;
+                if (size_info.result != Check_Complete) return (Check_Info){ .result = size_info.result };
                 else
                 {
                     if (operand_info.type != Type_Typeid)
                     {
                         //// ERROR: operand of type descriptor must be of type typeid
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else if (operand_info.value_kind != Value_Constant)
                     {
                         //// ERROR: operand of type descriptor must be constant
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else if (Type_IsInteger(size_info.type))
                     {
                         //// ERROR: size of array type descriptor must be of integer type
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else if (size_info.value_kind != Value_Constant)
                     {
                         //// ERROR: size of array type descriptor must be constant
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else if (Type_IsSignedInteger(size_info.type) && (size_info.value_kind != Value_Constant || size_info.const_value.int64 < 0) ||
                              size_info.type == Type_SoftInt && !BigInt_IsGreater(size_info.const_value.soft_int, BigInt_0))
                     {
                         //// ERROR: size of array type descriptor must be positive
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else if (size_info.type == Type_SoftInt && BigInt_IsGreater(size_info.const_value.soft_int, BigInt_U64_MAX))
                     {
                         //// ERROR: Buy more ram
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
                     else
                     {
@@ -813,32 +789,30 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         {
             Check_Info operand_info = CheckExpression(context, expression->unary_expr);
             
-            if (operand_info.result != Check_Complete) info.result = operand_info.result;
+            if (operand_info.result != Check_Complete) return (Check_Info){ .result = operand_info.result };
             else
             {
                 if (operand_info.type != Type_Typeid)
                 {
                     //// ERROR: operand of type descriptor must be of type typeid
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else if (operand_info.value_kind != Value_Constant)
                 {
                     //// ERROR: operand of type descriptor must be constant
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else
-                {
-                    info = (Check_Info){
-                        .result     = Check_Complete,
-                        .type       = Type_Typeid,
-                        .value_kind = Value_Constant,
-                    };
-                    
-                    Type_ID elem_type = operand_info.const_value.type_id;
-                    if      (expression->kind == AST_PointerType) info.const_value.type_id = Type_PointerTo(elem_type);
-                    else if (expression->kind == AST_SliceType)   info.const_value.type_id = Type_SliceOf(elem_type);
-                    else INVALID_CODE_PATH;
-                }
+                
+                info = (Check_Info){
+                    .result     = Check_Complete,
+                    .type       = Type_Typeid,
+                    .value_kind = Value_Constant,
+                };
+                
+                Type_ID elem_type = operand_info.const_value.type_id;
+                if      (expression->kind == AST_PointerType) info.const_value.type_id = Type_PointerTo(elem_type);
+                else if (expression->kind == AST_SliceType)   info.const_value.type_id = Type_SliceOf(elem_type);
+                else INVALID_CODE_PATH;
             }
         }
     }
@@ -943,48 +917,46 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         
         if (expression->struct_literal.type == 0)
         {
-            if (target_type == Type_None)
+            if (guiding_type == Type_None)
             {
-                //// ERROR: no guiding type for array literal without type specifier
-                info.result = Check_Error;
+                //// ERROR: no guiding type for struct literal without type specifier
+                return (Check_Info){ .result = Check_Error };
             }
-            else type = target_type;
+            else type = guiding_type;
         }
         else
         {
-            Check_Info array_info = CheckExpression(context, expression->array_literal.type);
+            Check_Info struct_info = CheckExpression(context, expression->struct_literal.type);
             
-            if (array_info.result != Check_Complete) info.result = array_info.result;
+            if (struct_info.result != Check_Complete) return (Check_Info){ .result = struct_info.result };
             else
             {
-                if (array_info.type != Type_Typeid)
+                if (struct_info.type != Type_Typeid)
                 {
                     //// ERROR: type specifier of array literal must be of type typeid
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else if (array_info.value_kind != Value_Constant)
+                else if (struct_info.value_kind != Value_Constant)
                 {
                     //// ERROR: type specifier of array literal must be constant
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else type = array_info.const_value.type_id;
+                
+                type = struct_info.const_value.type_id;
             }
         }
         
-        if (type != Type_None)
+        Type_Info* type_info = Type_InfoOf(guiding_type);
+        
+        if (type_info->kind != Type_Struct && type_info->kind != Type_Union &&
+            type_info->kind != Type_Array && type_info->kind != Type_Slice)
         {
-            Type_Info* type_info = Type_InfoOf(target_type);
-            
-            if (type_info->kind != Type_Struct && type_info->kind != Type_Union &&
-                type_info->kind != Type_Array && type_info->kind != Type_Slice)
-            {
-                //// ERROR: struct literals can only be used to create struct, union, array and slice types
-                info.result = Check_Error;
-            }
-            else
-            {
-                NOT_IMPLEMENTED;
-            }
+            //// ERROR: struct literals can only be used to create struct, union, array and slice types
+            return (Check_Info){ .result = Check_Error };
+        }
+        else
+        {
+            NOT_IMPLEMENTED;
         }
     }
     else if (expression->kind == AST_ArrayLiteral)
@@ -993,181 +965,174 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         
         if (expression->array_literal.type == 0)
         {
-            if (target_type == Type_None)
+            if (guiding_type == Type_None)
             {
                 //// ERROR: no guiding type for array literal without type specifier
-                info.result = Check_Error;
+                return (Check_Info){ .result = Check_Error };
             }
-            else type = target_type;
+            
+            type = guiding_type;
         }
         else
         {
             Check_Info array_info = CheckExpression(context, expression->array_literal.type);
             
-            if (array_info.result != Check_Complete) info.result = array_info.result;
+            if (array_info.result != Check_Complete) return (Check_Info){ .result = array_info.result };
             else
             {
                 if (array_info.type != Type_Typeid)
                 {
                     //// ERROR: type specifier of array literal must be of type typeid
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else if (array_info.value_kind != Value_Constant)
                 {
                     //// ERROR: type specifier of array literal must be constant
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else type = array_info.const_value.type_id;
+                
+                type = array_info.const_value.type_id;
             }
         }
         
-        if (type != Type_None)
+        umm num_args  = 0;
+        umm num_elems = 0;
+        for (AST_Node* arg = expression->array_literal.args; arg != 0; arg = arg->next)
         {
-            umm num_args  = 0;
-            umm num_elems = 0;
-            for (AST_Node* arg = expression->array_literal.args; arg != 0; arg = arg->next)
+            if (arg->kind != AST_NamedValue)
             {
-                if (arg->kind != AST_NamedValue)
-                {
-                    //// ERROR: element in array literal must be a named value
-                    info.result = Check_Error;
-                }
-                else if (arg->named_value.value == 0)
-                {
-                    //// ERROR: element in array literal must have a value
-                    info.result = Check_Error;
-                }
+                //// ERROR: element in array literal must be a named value
+                return (Check_Info){ .result = Check_Error };
+            }
+            else if (arg->named_value.value == 0)
+            {
+                //// ERROR: element in array literal must have a value
+                return (Check_Info){ .result = Check_Error };
+            }
+            
+            umm start_index = 0;
+            umm end_index   = 0;
+            if (arg->named_value.name == 0)
+            {
+                start_index = num_elems;
+                end_index   = num_elems;
+            }
+            else if (arg->named_value.name->kind == AST_Range)
+            {
+                Check_Info start_info = CheckExpression(context, arg->named_value.name->range.start);
+                
+                if (start_info.result != Check_Complete) NOT_IMPLEMENTED;
                 else
                 {
-                    umm start_index = 0;
-                    umm end_index   = 0;
-                    if (arg->named_value.name == 0)
-                    {
-                        start_index = num_elems;
-                        end_index   = num_elems;
-                    }
-                    else if (arg->named_value.name->kind == AST_Range)
-                    {
-                        Check_Info start_info = CheckExpression(context, arg->named_value.name->range.start);
-                        
-                        if (start_info.result != Check_Complete) NOT_IMPLEMENTED;
-                        else
-                        {
-                            Check_Info end_info = CheckExpression(context, arg->named_value.name->range.end);
-                            
-                            if (end_info.result != Check_Complete) NOT_IMPLEMENTED;
-                            else
-                            {
-                                NOT_IMPLEMENTED; // TODO: Coercion
-                                if (!Type_IsInteger(start_info.type) || !Type_IsInteger(end_info.type))
-                                {
-                                    //// ERROR: Both sides of range must be of integer type
-                                    info.result = Check_Error;
-                                }
-                                else if (start_info.value_kind != Value_Constant || end_info.value_kind != Value_Constant)
-                                {
-                                    //// ERROR: Both sides of range must be constant
-                                    info.result = Check_Error;
-                                }
-                                else if (Type_IsSignedInteger(start_info.type) && start_info.const_value.int64 < 0 ||
-                                         Type_IsSignedInteger(end_info.type)   && end_info.const_value.int64   < 0)
-                                {
-                                    //// ERROR: Index specifier of named element in array literal cannot be negative
-                                    info.result = Check_Error;
-                                }
-                                else if (start_info.type == Type_SoftInt &&
-                                         BigInt_IsGreater(start_info.const_value.soft_int, BigInt_U64_MAX))
-                                {
-                                    //// ERROR: Buy more ram
-                                    info.result = Check_Error;
-                                }
-                                else if (end_info.type == Type_SoftInt &&
-                                         BigInt_IsGreater(end_info.const_value.soft_int, BigInt_U64_MAX))
-                                {
-                                    //// ERROR: Buy more ram
-                                    info.result = Check_Error;
-                                }
-                                else
-                                {
-                                    if (start_info.type == Type_SoftInt) start_index = BigInt_ToU64(start_info.const_value.soft_int);
-                                    else                                 start_index = start_info.const_value.uint64;
-                                    
-                                    if (end_info.type == Type_SoftInt) end_index = BigInt_ToU64(end_info.const_value.soft_int);
-                                    else                               end_index = end_info.const_value.uint64;
-                                    
-                                    end_index = (end_index == 0 ? 0 : end_index - arg->named_value.name->range.is_open);
-                                    
-                                    if (end_index < start_index)
-                                    {
-                                        //// ERROR: End index of range is less than start index
-                                        info.result = Check_Error;
-                                    }
-                                    else
-                                    {
-                                        NOT_IMPLEMENTED;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Check_Info end_info = CheckExpression(context, arg->named_value.name->range.end);
+                    
+                    if (end_info.result != Check_Complete) NOT_IMPLEMENTED;
                     else
                     {
-                        Check_Info index_info = CheckExpression(context, arg->named_value.name);
-                        
-                        if (index_info.result != Check_Complete) NOT_IMPLEMENTED;
-                        else
+                        NOT_IMPLEMENTED; // TODO: Coercion
+                        if (!Type_IsInteger(start_info.type) || !Type_IsInteger(end_info.type))
                         {
-                            if (!Type_IsInteger(index_info.type))
-                            {
-                                //// ERROR: Index specifier of named element in array literal must be of integer type
-                                info.result = Check_Error;
-                            }
-                            else if (index_info.value_kind != Value_Constant)
-                            {
-                                //// ERROR: Index specifier of named element in array literal must be constant
-                                info.result = Check_Error;
-                            }
-                            else if (Type_IsSignedInteger(index_info.type) && index_info.const_value.int64 < 0)
-                            {
-                                //// ERROR: Index specifier of named element in array literal cannot be negative
-                                info.result = Check_Error;
-                            }
-                            else if (index_info.type == Type_SoftInt &&
-                                     BigInt_IsGreater(index_info.const_value.soft_int, BigInt_U64_MAX))
-                            {
-                                //// ERROR: Buy more ram
-                                info.result = Check_Error;
-                            }
-                            else
-                            {
-                                if (index_info.type == Type_SoftInt) start_index = BigInt_ToU64(index_info.const_value.soft_int);
-                                else                                 start_index = index_info.const_value.uint64;
-                                
-                                end_index = start_index;
-                                
-                                NOT_IMPLEMENTED;
-                            }
+                            //// ERROR: Both sides of range must be of integer type
+                            return (Check_Info){ .result = Check_Error };
                         }
-                    }
-                    
-                    // TODO: Check if start_index overlaps with previous elements
-                    if (NOT_IMPLEMENTED)
-                    {
-                        Check_Info value_info = CheckExpression(context, arg->named_value.value);
+                        else if (start_info.value_kind != Value_Constant || end_info.value_kind != Value_Constant)
+                        {
+                            //// ERROR: Both sides of range must be constant
+                            return (Check_Info){ .result = Check_Error };
+                        }
+                        else if (Type_IsSignedInteger(start_info.type) && start_info.const_value.int64 < 0 ||
+                                 Type_IsSignedInteger(end_info.type)   && end_info.const_value.int64   < 0)
+                        {
+                            //// ERROR: Index specifier of named element in array literal cannot be negative
+                            return (Check_Info){ .result = Check_Error };
+                        }
+                        else if (start_info.type == Type_SoftInt &&
+                                 BigInt_IsGreater(start_info.const_value.soft_int, BigInt_U64_MAX))
+                        {
+                            //// ERROR: Buy more ram
+                            return (Check_Info){ .result = Check_Error };
+                        }
+                        else if (end_info.type == Type_SoftInt &&
+                                 BigInt_IsGreater(end_info.const_value.soft_int, BigInt_U64_MAX))
+                        {
+                            //// ERROR: Buy more ram
+                            return (Check_Info){ .result = Check_Error };
+                        }
                         
-                        if (value_info.result != Check_Complete) info.result = value_info.result;
+                        if (start_info.type == Type_SoftInt) start_index = BigInt_ToU64(start_info.const_value.soft_int);
+                        else                                 start_index = start_info.const_value.uint64;
+                        
+                        if (end_info.type == Type_SoftInt) end_index = BigInt_ToU64(end_info.const_value.soft_int);
+                        else                               end_index = end_info.const_value.uint64;
+                        
+                        end_index = (end_index == 0 ? 0 : end_index - arg->named_value.name->range.is_open);
+                        
+                        if (end_index < start_index)
+                        {
+                            //// ERROR: End index of range is less than start index
+                            return (Check_Info){ .result = Check_Error };
+                        }
                         else
                         {
-                            // TODO: is type of value equal or coercable
                             NOT_IMPLEMENTED;
                         }
                     }
+                }
+            }
+            else
+            {
+                Check_Info index_info = CheckExpression(context, arg->named_value.name);
+                
+                if (index_info.result != Check_Complete) NOT_IMPLEMENTED;
+                else
+                {
+                    if (!Type_IsInteger(index_info.type))
+                    {
+                        //// ERROR: Index specifier of named element in array literal must be of integer type
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    else if (index_info.value_kind != Value_Constant)
+                    {
+                        //// ERROR: Index specifier of named element in array literal must be constant
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    else if (Type_IsSignedInteger(index_info.type) && index_info.const_value.int64 < 0)
+                    {
+                        //// ERROR: Index specifier of named element in array literal cannot be negative
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    else if (index_info.type == Type_SoftInt &&
+                             BigInt_IsGreater(index_info.const_value.soft_int, BigInt_U64_MAX))
+                    {
+                        //// ERROR: Buy more ram
+                        return (Check_Info){ .result = Check_Error };
+                    }
+                    
+                    if (index_info.type == Type_SoftInt) start_index = BigInt_ToU64(index_info.const_value.soft_int);
+                    else                                 start_index = index_info.const_value.uint64;
+                    
+                    end_index = start_index;
+                    
                     NOT_IMPLEMENTED;
                 }
             }
             
+            // TODO: Check if start_index overlaps with previous elements
+            if (NOT_IMPLEMENTED)
+            {
+                Check_Info value_info = CheckExpression(context, arg->named_value.value);
+                
+                if (value_info.result != Check_Complete) return (Check_Info){ .result = value_info.result };
+                else
+                {
+                    // TODO: is type of value equal or coercable
+                    NOT_IMPLEMENTED;
+                }
+            }
             NOT_IMPLEMENTED;
         }
+        
+        NOT_IMPLEMENTED;
     }
     else if (expression->kind == AST_ElementOf)
     {
@@ -1176,28 +1141,29 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         Check_Info struct_info = {0};
         if (expression->element_of.structure == 0)
         {
-            if (target_type == Type_None)
+            if (guiding_type == Type_None)
             {
                 //// ERROR: Cannot determine type of implicit selector expression
-                info.result = Check_Error;
+                return (Check_Info){ .result = Check_Error };
             }
             else
             {
-                type_info = Type_InfoOf(target_type);
+                type_info = Type_InfoOf(guiding_type);
                 
                 if (type_info == 0 || type_info->kind != Type_Enum)
                 {
                     //// ERROR: Selector expressions can only be used on enumerations
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
-                else type = target_type;
+                
+                type = guiding_type;
             }
         }
         else
         {
             struct_info = CheckExpression(context, expression->element_of.structure);
             
-            if (struct_info.result != Check_Complete) info.result = struct_info.result;
+            if (struct_info.result != Check_Complete) return (Check_Info){ .result = struct_info.result };
             else
             {
                 type_info = Type_InfoOf(struct_info.type);
@@ -1210,13 +1176,11 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                         Type_InfoOf(struct_info.const_value.type_id)->kind != Type_Enum)
                     {
                         //// ERROR: Illegal use of element of operator
-                        info.result = Check_Error;
+                        return (Check_Info){ .result = Check_Error };
                     }
-                    else
-                    {
-                        type      = struct_info.const_value.type_id;
-                        type_info = Type_InfoOf(type);
-                    }
+                    
+                    type      = struct_info.const_value.type_id;
+                    type_info = Type_InfoOf(type);
                 }
                 else if (type_info->kind == Type_Struct || type_info->kind == Type_Union)
                 {
@@ -1225,64 +1189,58 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                 else
                 {
                     //// ERROR: Illegal use of element of operator
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
             }
         }
         
-        if (type != Type_None)
+        if (type_info->kind == Type_Enum)
         {
-            if (type_info->kind == Type_Enum)
+            Symbol* symbol = SymbolTable_GetSymbol(&type_info->enumeration.members, expression->element_of.element);
+            
+            if (symbol == 0)
             {
-                Symbol* symbol = SymbolTable_GetSymbol(&type_info->enumeration.members, expression->element_of.element);
-                
-                if (symbol == 0)
-                {
-                    //// ERROR: No enum member with the name x
-                    info.result = Check_Error;
-                }
-                else
-                {
-                    info = (Check_Info){
-                        .result     = Check_Complete,
-                        .type       = type,
-                        .value_kind = Value_Constant,
-                    };
-                    
-                    Type_ID base_type    = type_info->enumeration.backing_type;
-                    Const_Val member_val = symbol->enum_member.value;
-                    if      (base_type == Type_SoftInt)         info.const_value.soft_int = member_val.soft_int;
-                    else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64   = member_val.uint64;
-                    else                                        info.const_value.int64    = member_val.int64;
-                }
+                //// ERROR: No enum member with the name x
+                return (Check_Info){ .result = Check_Error };
             }
-            else
+            
+            info = (Check_Info){
+                .result     = Check_Complete,
+                .type       = type,
+                .value_kind = Value_Constant,
+            };
+            
+            Type_ID base_type    = type_info->enumeration.backing_type;
+            Const_Val member_val = symbol->enum_member.value;
+            if      (base_type == Type_SoftInt)         info.const_value.soft_int = member_val.soft_int;
+            else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64   = member_val.uint64;
+            else                                        info.const_value.int64    = member_val.int64;
+        }
+        else
+        {
+            ASSERT(type_info->kind == Type_Struct || type_info->kind == Type_Union);
+            
+            // TODO: Incomplete elements (e.g. circular pointers)
+            Symbol* symbol = SymbolTable_GetSymbol(&type_info->structure.members, expression->element_of.element);
+            
+            if (symbol == 0)
             {
-                ASSERT(type_info->kind == Type_Struct || type_info->kind == Type_Enum);
-                
-                // TODO: Incomplete elements (e.g. circular pointers)
-                Symbol* symbol = SymbolTable_GetSymbol(&type_info->structure.members, expression->element_of.element);
-                
-                if (symbol == 0)
-                {
-                    //// ERROR: Struct/union has no element named x
-                    info.result = Check_Error;
-                }
-                else
-                {
-                    ASSERT(symbol->kind == Symbol_Var);
-                    
-                    info = (Check_Info){
-                        .result     = Check_Complete,
-                        .type       = symbol->variable.type,
-                        .value_kind = struct_info.value_kind,
-                    };
-                    
-                    if (info.value_kind == Value_Constant)
-                    {
-                        NOT_IMPLEMENTED;
-                    }
-                }
+                //// ERROR: Struct/union has no element named x
+                return (Check_Info){ .result = Check_Error };
+            }
+            
+            // TODO: Maybe stop mixing asserts and error returns in prep for metprogramming?
+            ASSERT(symbol->kind == Symbol_Var);
+            
+            info = (Check_Info){
+                .result     = Check_Complete,
+                .type       = symbol->variable.type,
+                .value_kind = struct_info.value_kind,
+            };
+            
+            if (info.value_kind == Value_Constant)
+            {
+                NOT_IMPLEMENTED;
             }
         }
     }
@@ -1298,12 +1256,12 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
     {
         Check_Info array_info = CheckExpression(context, expression->subscript_expr.array);
         
-        if (array_info.result != Check_Complete) info.result = array_info.result;
+        if (array_info.result != Check_Complete) return (Check_Info){ .result = array_info.result };
         else
         {
             Check_Info index_info = CheckExpression(context, expression->subscript_expr.index);
             
-            if (index_info.result != Check_Complete) info.result = index_info.result;
+            if (index_info.result != Check_Complete) return (Check_Info){ .result = index_info.result };
             else
             {
                 Type_Info* type_info = Type_InfoOf(array_info.type);
@@ -1312,46 +1270,44 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                                        type_info->kind != Type_Pointer))
                 {
                     //// ERROR: Subscript operator requires an array, slice of pointer operand type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else if (!Type_IsInteger(index_info.type))
                 {
                     //// ERROR: Index must be of integer type
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else if (Type_IsSignedInteger(index_info.type) && (index_info.value_kind != Value_Constant || index_info.const_value.int64 < 0) || 
                          index_info.type == Type_SoftInt && BigInt_IsLess(index_info.const_value.soft_int, BigInt_0))
                 {
                     //// ERROR: Index must be positive
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else if (index_info.type == Type_SoftInt && BigInt_IsGreater(index_info.const_value.soft_int, BigInt_U64_MAX))
                 {
                     //// ERROR: Buy more ram
-                    info.result = Check_Error;
+                    return (Check_Info){ .result = Check_Error };
+                }
+                
+                u64 index = index_info.const_value.uint64;
+                if (index_info.type == Type_SoftInt) index = BigInt_ToU64(info.const_value.soft_int);
+                
+                if (type_info->kind == Type_Array && index > type_info->array.size)
+                {
+                    //// ERROR: Index too great
+                    return (Check_Info){ .result = Check_Error };
                 }
                 else
                 {
-                    u64 index = index_info.const_value.uint64;
-                    if (index_info.type == Type_SoftInt) index = BigInt_ToU64(info.const_value.soft_int);
+                    info = (Check_Info){
+                        .result     = Check_Complete,
+                        .type       = (type_info->kind == Type_Array ? type_info->array.elem_type : type_info->elem_type),
+                        .value_kind = MAX(Value_Register, MIN(array_info.value_kind, index_info.value_kind)),
+                    };
                     
-                    if (type_info->kind == Type_Array && index > type_info->array.size)
+                    if (info.value_kind == Value_Constant)
                     {
-                        //// ERROR: Index too great
-                        info.result = Check_Error;
-                    }
-                    else
-                    {
-                        info = (Check_Info){
-                            .result     = Check_Complete,
-                            .type       = (type_info->kind == Type_Array ? type_info->array.elem_type : type_info->elem_type),
-                            .value_kind = MAX(Value_Register, MIN(array_info.value_kind, index_info.value_kind)),
-                        };
-                        
-                        if (info.value_kind == Value_Constant)
-                        {
-                            NOT_IMPLEMENTED;
-                        }
+                        NOT_IMPLEMENTED;
                     }
                 }
             }
