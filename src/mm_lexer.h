@@ -40,6 +40,8 @@ typedef enum TOKEN_KIND
     Token_Float,
     Token_Not,                                           // !
     Token_Complement,                                    // ~
+    Token_Elipsis,                                       // ..
+    Token_ElipsisLess,                                   // ..<
     
     Token_FirstPostfixLevel,
     Token_OpenParen,                                     // (
@@ -396,6 +398,18 @@ lexer->offset += 1;                   \
                 {
                     token.kind = Token_OpenPeriodParen;
                     lexer->offset += 1;
+                }
+                
+                if (c[1] == '.')
+                {
+                    token.kind = Token_Elipsis;
+                    lexer->offset += 1;
+                    
+                    if (c[2] == '<')
+                    {
+                        token.kind = Token_ElipsisLess;
+                        lexer->offset += 1;
+                    }
                 }
             } break;
             

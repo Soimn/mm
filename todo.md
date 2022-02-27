@@ -13,3 +13,6 @@ add sign extend + n bit masks
 
 
 reconsider "single return policy"
+
+should a := .[1, 2, 3] be legal?
+This would require a special case for guiding types, where the expression can decide on its own guiding type where appropriate

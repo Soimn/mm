@@ -794,11 +794,50 @@ ParsePrefixExpression(Parser_State* state, AST_Node** expression)
 }
 
 internal bool
-ParseBinaryExpression(Parser_State* state, AST_Node** expression)
+ParseRange(Parser_State* state, AST_Node** expression)
 {
     bool encountered_errors = false;
     
     if (!ParsePrefixExpression(state, expression)) encountered_errors = true;
+    else
+    {
+        // NOTE: Ranges do not count as expressions,  meaning a..b..c is illegal.
+        //       However, to make error messages more consistent they are treated
+        //       as expressions in the parser. This will ensure a..b..c and (a..b)..c
+        //       throw the same error message.
+        while (!encountered_errors)
+        {
+            Token token = GetToken(state);
+            
+            if (token.kind == Token_Elipsis || token.kind == Token_ElipsisLess)
+            {
+                bool is_open = (token.kind == Token_ElipsisLess);
+                NextToken(state);
+                
+                AST_Node* start = *expression;
+                AST_Node* end   = 0;
+                
+                if (!ParsePrefixExpression(state, &end)) encountered_errors = true;
+                else
+                {
+                    *expression = PushNode(state, AST_Range);
+                    (*expression)->range.is_open = is_open;
+                    (*expression)->range.start   = start;
+                    (*expression)->range.end     = end;
+                }
+            }
+        }
+    }
+    
+    return !encountered_errors;
+}
+
+internal bool
+ParseBinaryExpression(Parser_State* state, AST_Node** expression)
+{
+    bool encountered_errors = false;
+    
+    if (!ParseRange(state, expression)) encountered_errors = true;
     else
     {
         while (!encountered_errors)
@@ -813,14 +852,14 @@ ParseBinaryExpression(Parser_State* state, AST_Node** expression)
                 AST_Node** slot = expression;
                 AST_Node* right;
                 
-                if (!ParsePrefixExpression(state, &right)) encountered_errors = true;
+                if (!ParseRange(state, &right)) encountered_errors = true;
                 else
                 {
-                    umm block = op >> 4;
+                    umm block = AST_EXPR_BLOCK_FROM_KIND(op);
                     
                     for (;;)
                     {
-                        if ((*slot)->kind >> 4 > block) slot = &(*slot)->binary_expr.right;
+                        if (AST_EXPR_BLOCK_FROM_KIND((*slot)->kind) > block) slot = &(*slot)->binary_expr.right;
                         else
                         {
                             AST_Node* left = *slot;

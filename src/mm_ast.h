@@ -2,8 +2,15 @@ typedef enum AST_NODE_KIND
 {
     AST_Invalid = 0,
     
-    // NOTE: Special nodes
-    AST_NamedValue,
+    // NOTE: These nodes are neither expressions, statements nor declarations.
+    //       They only exist to make some things easier to handle, e.g.
+    //       return a = 0, b = 1;
+    //       and
+    //       int.[0..50 = 0, 51..63 = 1]
+    AST_FirstSpecial,
+    AST_NamedValue = AST_FirstSpecial,
+    AST_Range,
+    AST_LastSpecial = AST_Range,
     
     AST_FirstExpression,
     AST_Identifier = AST_FirstExpression,
@@ -99,6 +106,9 @@ typedef enum AST_NODE_KIND
     AST_NODE_KIND_MAX = 256,
 } AST_NODE_KIND;
 
+// NOTE: This is used for parsing of binary expressions
+#define AST_EXPR_BLOCK_FROM_KIND(kind) ((kind) >> 4)
+
 typedef struct AST_Node
 {
     AST_NODE_KIND kind;
@@ -111,6 +121,13 @@ typedef struct AST_Node
             struct AST_Node* name;
             struct AST_Node* value;
         } named_value;
+        
+        struct
+        {
+            struct AST_Node* start;
+            struct AST_Node* end;
+            bool is_open;
+        } range;
         
         Interned_String identifier;
         Interned_String string;

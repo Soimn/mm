@@ -39,6 +39,11 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         //// ERROR: Missing expression
         info.result = Check_Error;
     }
+    else if (expression->kind >= AST_FirstSpecial && expression->kind <= AST_LastSpecial)
+    {
+        //// ERROR: x is not an expression
+        info.result = Check_Error;
+    }
     else if (expression->kind == AST_Compound)
     {
         info = CheckExpression(context, expression->compound_expr);
@@ -970,9 +975,10 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         {
             Type_Info* type_info = Type_InfoOf(target_type);
             
-            if (type_info->kind != Type_Struct)
+            if (type_info->kind != Type_Struct && type_info->kind != Type_Union &&
+                type_info->kind != Type_Array && type_info->kind != Type_Slice)
             {
-                //// ERROR: struct literals can only construct structs
+                //// ERROR: struct literals can only be used to create struct, union, array and slice types
                 info.result = Check_Error;
             }
             else
@@ -1017,6 +1023,149 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
         
         if (type != Type_None)
         {
+            umm num_args  = 0;
+            umm num_elems = 0;
+            for (AST_Node* arg = expression->array_literal.args; arg != 0; arg = arg->next)
+            {
+                if (arg->kind != AST_NamedValue)
+                {
+                    //// ERROR: element in array literal must be a named value
+                    info.result = Check_Error;
+                }
+                else if (arg->named_value.value == 0)
+                {
+                    //// ERROR: element in array literal must have a value
+                    info.result = Check_Error;
+                }
+                else
+                {
+                    umm start_index = 0;
+                    umm end_index   = 0;
+                    if (arg->named_value.name == 0)
+                    {
+                        start_index = num_elems;
+                        end_index   = num_elems;
+                    }
+                    else if (arg->named_value.name->kind == AST_Range)
+                    {
+                        Check_Info start_info = CheckExpression(context, arg->named_value.name->range.start);
+                        
+                        if (start_info.result != Check_Complete) NOT_IMPLEMENTED;
+                        else
+                        {
+                            Check_Info end_info = CheckExpression(context, arg->named_value.name->range.end);
+                            
+                            if (end_info.result != Check_Complete) NOT_IMPLEMENTED;
+                            else
+                            {
+                                NOT_IMPLEMENTED; // TODO: Coercion
+                                if (!Type_IsInteger(start_info.type) || !Type_IsInteger(end_info.type))
+                                {
+                                    //// ERROR: Both sides of range must be of integer type
+                                    info.result = Check_Error;
+                                }
+                                else if (start_info.value_kind != Value_Constant || end_info.value_kind != Value_Constant)
+                                {
+                                    //// ERROR: Both sides of range must be constant
+                                    info.result = Check_Error;
+                                }
+                                else if (Type_IsSignedInteger(start_info.type) && start_info.const_value.int64 < 0 ||
+                                         Type_IsSignedInteger(end_info.type)   && end_info.const_value.int64   < 0)
+                                {
+                                    //// ERROR: Index specifier of named element in array literal cannot be negative
+                                    info.result = Check_Error;
+                                }
+                                else if (start_info.type == Type_SoftInt &&
+                                         BigInt_IsGreater(start_info.const_value.soft_int, BigInt_U64_MAX))
+                                {
+                                    //// ERROR: Buy more ram
+                                    info.result = Check_Error;
+                                }
+                                else if (end_info.type == Type_SoftInt &&
+                                         BigInt_IsGreater(end_info.const_value.soft_int, BigInt_U64_MAX))
+                                {
+                                    //// ERROR: Buy more ram
+                                    info.result = Check_Error;
+                                }
+                                else
+                                {
+                                    if (start_info.type == Type_SoftInt) start_index = BigInt_ToU64(start_info.const_value.soft_int);
+                                    else                                 start_index = start_info.const_value.uint64;
+                                    
+                                    if (end_info.type == Type_SoftInt) end_index = BigInt_ToU64(end_info.const_value.soft_int);
+                                    else                               end_index = end_info.const_value.uint64;
+                                    
+                                    end_index = (end_index == 0 ? 0 : end_index - arg->named_value.name->range.is_open);
+                                    
+                                    if (end_index < start_index)
+                                    {
+                                        //// ERROR: End index of range is less than start index
+                                        info.result = Check_Error;
+                                    }
+                                    else
+                                    {
+                                        NOT_IMPLEMENTED;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Check_Info index_info = CheckExpression(context, arg->named_value.name);
+                        
+                        if (index_info.result != Check_Complete) NOT_IMPLEMENTED;
+                        else
+                        {
+                            if (!Type_IsInteger(index_info.type))
+                            {
+                                //// ERROR: Index specifier of named element in array literal must be of integer type
+                                info.result = Check_Error;
+                            }
+                            else if (index_info.value_kind != Value_Constant)
+                            {
+                                //// ERROR: Index specifier of named element in array literal must be constant
+                                info.result = Check_Error;
+                            }
+                            else if (Type_IsSignedInteger(index_info.type) && index_info.const_value.int64 < 0)
+                            {
+                                //// ERROR: Index specifier of named element in array literal cannot be negative
+                                info.result = Check_Error;
+                            }
+                            else if (index_info.type == Type_SoftInt &&
+                                     BigInt_IsGreater(index_info.const_value.soft_int, BigInt_U64_MAX))
+                            {
+                                //// ERROR: Buy more ram
+                                info.result = Check_Error;
+                            }
+                            else
+                            {
+                                if (index_info.type == Type_SoftInt) start_index = BigInt_ToU64(index_info.const_value.soft_int);
+                                else                                 start_index = index_info.const_value.uint64;
+                                
+                                end_index = start_index;
+                                
+                                NOT_IMPLEMENTED;
+                            }
+                        }
+                    }
+                    
+                    // TODO: Check if start_index overlaps with previous elements
+                    if (NOT_IMPLEMENTED)
+                    {
+                        Check_Info value_info = CheckExpression(context, arg->named_value.value);
+                        
+                        if (value_info.result != Check_Complete) info.result = value_info.result;
+                        else
+                        {
+                            // TODO: is type of value equal or coercable
+                            NOT_IMPLEMENTED;
+                        }
+                    }
+                    NOT_IMPLEMENTED;
+                }
+            }
+            
             NOT_IMPLEMENTED;
         }
     }
@@ -1100,10 +1249,11 @@ CheckExpression(Check_Context* context, AST_Node* expression, Type_ID target_typ
                         .value_kind = Value_Constant,
                     };
                     
-                    Type_ID base_type = type_info->enumeration.backing_type;
-                    if (base_type == Type_SoftInt) info.const_value.soft_int = symbol->enum_member.value.soft_int;
-                    else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64 = symbol->enum_member.value.uint64;
-                    else                                        info.const_value.int64  = symbol->enum_member.value.int64;
+                    Type_ID base_type    = type_info->enumeration.backing_type;
+                    Const_Val member_val = symbol->enum_member.value;
+                    if      (base_type == Type_SoftInt)         info.const_value.soft_int = member_val.soft_int;
+                    else if (Type_IsUnsignedInteger(base_type)) info.const_value.uint64   = member_val.uint64;
+                    else                                        info.const_value.int64    = member_val.int64;
                 }
             }
             else
