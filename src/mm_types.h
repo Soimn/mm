@@ -256,3 +256,13 @@ Type_SizeOf(Type_ID type)
     
     return size;
 }
+
+internal bool
+Type_IsCastableTo(Type_ID src, Type_ID dst)
+{
+    bool result = false;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
