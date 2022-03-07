@@ -6,6 +6,8 @@
 #error 32 bit mode is not supported yet
 #endif
 
+#include <immintrin.h>
+
 typedef signed __int8  i8;
 typedef signed __int16 i16;
 typedef signed __int32 i32;
@@ -73,6 +75,8 @@ typedef struct String
 #define GB(N) ((umm)(N) << 30)
 #define TB(N) ((umm)(N) << 40)
 
+#define IS_POW_OF_2(n) (((n == 0) | ((n) & ((n) - 1))) == 0)
+
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
 #define internal static
@@ -86,7 +90,7 @@ typedef u32 File_ID;
 
 enum KEYWORD_KIND
 {
-    Keyword_Include,
+    Keyword_Include = 0,
     Keyword_Proc,
     Keyword_Struct,
     Keyword_Union,
@@ -107,6 +111,8 @@ enum KEYWORD_KIND
     KEYWORD_KIND_MAX = Keyword_Return,
     KEYWORD_KIND_COUNT,
 };
+
+#define IS_KEYWORD(istring) ((istring) <= KEYWORD_KIND_MAX)
 
 typedef u64 Interned_String;
 #define BLANK_IDENTIFIER U64_MAX
@@ -207,7 +213,7 @@ MM_InternString(String string)
 #include "mm_const_val.h"
 #include "mm_symbols.h"
 #include "mm_types.h"
-#include "mm_checker.h"
+//#include "mm_checker.h"
 
 internal bool
 MM_Init()
@@ -258,7 +264,7 @@ MM_Init()
         
         Copy(keywords[i].data, *slot + 1, keywords[i].size);
         
-        // NOTE: Keywords stor their keyword index right after the character data
+        // NOTE: Keywords store their keyword index right after the character data
         *((u8*)(*slot + 1) + keywords[i].size) = (u8)i;
         
         

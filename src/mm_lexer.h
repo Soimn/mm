@@ -42,6 +42,7 @@ typedef enum TOKEN_KIND
     Token_Complement,                                    // ~
     Token_Elipsis,                                       // ..
     Token_ElipsisLess,                                   // ..<
+    Token_Cash,                                          // $
     
     Token_FirstPostfixLevel,
     Token_OpenParen,                                     // (
@@ -240,6 +241,7 @@ Lexer_NextToken(Lexer* lexer)
             case ';': token.kind = Token_Semicolon;    break;
             case '?': token.kind = Token_QuestionMark; break;
             case '~': token.kind = Token_Complement;   break;
+            case '$': token.kind = Token_Cash;         break;
             
 #define SINGLE_OR_EQ(single_c, single, eq) \
 case single_c:                         \

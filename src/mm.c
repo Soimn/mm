@@ -157,5 +157,9 @@ WinMainCRTStartup()
     
     OutputDebugStringA(succeeded ? "\n\nsucceeded\n" : "\n\nfailed\n");
     
+    Big_Int a = { .parts[3] = 2349085, .parts[2] = 45398475, .parts[1] = 4598347598756, .parts[0] = 320942830949 };
+    Big_Int b = { .parts[3] = 3240923445, .parts[2] = 34560964570981, .parts[1] = 2102345890, .parts[0] = 124230948 };
+    Big_Int c = BigInt_Mul(a, b);
+    
     ExitProcess(0);
 }

@@ -4,8 +4,8 @@ typedef enum TYPE_KIND
     
     Type_FirstPrimitive,
     Type_Byte = Type_FirstPrimitive,
-    Type_Typeid,
     Type_Any,
+    Type_Typeid,
     
     Type_FirstInteger,
     Type_SoftInt = Type_FirstInteger,
@@ -16,7 +16,8 @@ typedef enum TYPE_KIND
     Type_I16,
     Type_I32,
     Type_I64,
-    Type_LastInt = Type_I64,
+    Type_I128,
+    Type_LastInt = Type_I128,
     
     Type_FirstUint,
     Type_Uint = Type_FirstUint,
@@ -24,21 +25,32 @@ typedef enum TYPE_KIND
     Type_U16,
     Type_U32,
     Type_U64,
-    Type_LastUint = Type_U64,
+    Type_U128,
+    Type_LastUint = Type_U128,
     Type_LastInteger = Type_LastUint,
     
     Type_FirstFloat,
     Type_SoftFloat = Type_FirstFloat,
     
     Type_Float,
+    Type_F16,
     Type_F32,
     Type_F64,
     Type_LastFloat = Type_F64,
     
-    Type_String,
+    Type_FirstBool,
+    Type_SoftBool = Type_FirstBool,
     
     Type_Bool,
-    Type_LastPrimitive = Type_Bool,
+    Type_B8,
+    Type_B16,
+    Type_B32,
+    Type_B64,
+    Type_B128,
+    Type_LastBool = Type_B128,
+    Type_LastPrimitive = Type_LastBool,
+    
+    Type_String,
     
     Type_Array,
     Type_Slice,
@@ -50,140 +62,53 @@ typedef enum TYPE_KIND
     Type_Enum,
 } TYPE_KIND;
 
-typedef enum CALLING_CONVENTION_KIND
+typedef enum CALL_CONV_KIND
 {
-    CallingConvention_None = 0,
-    
-    CALLING_CONVENTION_KIND_COUNT
-} CALLING_CONVENTION_KIND;
+    CALL_CONV_KIND_COUNT
+} CALL_CONV_KIND;
 
 typedef struct Type_Info
 {
     TYPE_KIND kind;
-    u32 size;
     
     union
     {
         struct
         {
-            Type_ID elem_type;
             u64 size;
+            Type_ID elem_type;
         } array;
         
         Type_ID elem_type;
         
         struct
         {
-            Symbol_Table parameters;
-            Symbol_Table return_types;
-            CALLING_CONVENTION_KIND calling_convention;
+            // TODO: Polymorphism with type specialization
+            // Type_Table* poly_type_table ?
+            Symbol_Table* parameters;
+            Symbol_Table* return_values;
+            CALL_CONV_KIND call_conv;
         } proc;
         
         struct
         {
-            Symbol_Table members;
+            Symbol_Table* members;
         } structure;
         
         struct
         {
-            Type_ID backing_type;
-            Symbol_Table members;
+            Type_ID underlying_type;
+            Symbol_Table* members;
         } enumeration;
     };
 } Type_Info;
 
-internal inline Type_ID
-Type_ArrayOf(Type_ID type, umm size)
+typedef struct Type_Table
 {
-    Type_ID result = Type_None;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
+    bool _;
+} Type_Table;
 
-internal inline Type_ID
-Type_SliceOf(Type_ID type)
-{
-    Type_ID result = Type_None;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal inline Type_ID
-Type_PointerTo(Type_ID type)
-{
-    Type_ID result = Type_None;
-    
-    NOT_IMPLEMENTED;
-    
-    return result;
-}
-
-internal inline bool
-Type_IsInteger(Type_ID type)
-{
-    return (type >= Type_FirstInteger && type <= Type_LastInteger);
-}
-
-internal inline bool
-Type_IsUnsignedInteger(Type_ID type)
-{
-    return (type >= Type_FirstUint && type <= Type_LastUint);
-}
-
-internal inline bool
-Type_IsSignedInteger(Type_ID type)
-{
-    return (type >= Type_FirstInt && type <= Type_LastInt);
-}
-
-internal inline bool
-Type_IsFloat(Type_ID type)
-{
-    return (type >= Type_FirstFloat && type <= Type_LastFloat);
-}
-
-internal inline bool
-Type_IsNumeric(Type_ID type)
-{
-    return (Type_IsInteger(type) || Type_IsFloat(type));
-}
-
-internal inline bool
-Type_IsSoft(Type_ID type)
-{
-    return (type == Type_SoftInt || type == Type_SoftFloat);
-}
-
-internal inline Type_ID
-Type_Harden(Type_ID type)
-{
-    Type_ID result = Type_None;
-    if      (type == Type_SoftInt)    result = Type_Int;
-    else if (type == Type_SoftFloat)  result = Type_Float;
-    else INVALID_CODE_PATH;
-    
-    return result;
-}
-
-internal Type_ID
-Type_HardenTo(Type_ID src, Type_ID dst, Const_Val* val)
-{
-    if (src == Type_SoftInt)
-    {
-        NOT_IMPLEMENTED;
-    }
-    else if (src == Type_SoftFloat)
-    {
-        NOT_IMPLEMENTED;
-    }
-    else INVALID_CODE_PATH;
-}
-
-internal inline Type_Info*
+internal Type_Info*
 Type_InfoOf(Type_ID type)
 {
     Type_Info* result = 0;
@@ -193,76 +118,107 @@ Type_InfoOf(Type_ID type)
     return result;
 }
 
-internal inline bool
-Type_IsComposite(Type_ID type)
+internal bool
+Type_IsInteger(Type_ID type)
 {
-    return (type > Type_LastPrimitive);
-}
-
-// NOTE: Type_None is ignored, asking if something, that is
-//       not a type, is a primitive type makes no sense
-internal inline bool
-Type_IsPrimitive(Type_ID type)
-{
-    return (type <= Type_LastPrimitive);
-}
-
-internal inline umm
-Type_SizeOf(Type_ID type)
-{
-    umm size;
-    if (Type_IsComposite(type)) size = Type_InfoOf(type)->size;
-    else
-    {
-        ASSERT(!Type_IsSoft(type));
-        
-        switch (type)
-        {
-            
-            case Type_Byte:
-            case Type_I8:
-            case Type_U8:
-            case Type_Bool:
-            size = 1;
-            break;
-            
-            case Type_I16:
-            case Type_U16:
-            size = 2;
-            break;
-            
-            case Type_I32:
-            case Type_U32:
-            case Type_F32:
-            case Type_Typeid:
-            size = 4;
-            break;
-            
-            case Type_Int:
-            case Type_I64:
-            case Type_Uint:
-            case Type_U64:
-            case Type_Float:
-            case Type_F64:
-            size = 8;
-            break;
-            
-            case Type_Any:
-            case Type_String:
-            size = 16;
-            break;
-        }
-    }
-    
-    return size;
+    return (type >= Type_FirstInteger && type <= Type_LastInteger);
 }
 
 internal bool
-Type_IsCastableTo(Type_ID src, Type_ID dst)
+Type_IsSignedInteger(Type_ID type)
+{
+    return (type >= Type_FirstInt && type <= Type_LastInt);
+}
+
+internal bool
+Type_IsUnsignedInteger(Type_ID type)
+{
+    return (type >= Type_FirstUint && type <= Type_LastUint);
+}
+
+internal bool
+Type_IsFloat(Type_ID type)
+{
+    return (type >= Type_FirstFloat && type <= Type_LastFloat);
+}
+
+internal bool
+Type_IsBool(Type_ID type)
+{
+    return (type >= Type_FirstBool && type <= Type_LastBool);
+}
+
+internal Type_ID
+Type_PointerTo(Type_ID type)
+{
+    Type_ID result = Type_None;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal Type_ID
+Type_StripPointer(Type_ID type)
+{
+    Type_Info* type_info = Type_InfoOf(type);
+    ASSERT(type_info != 0 && type_info->kind == Type_Pointer);
+    
+    return type_info->elem_type;
+}
+
+internal Type_ID
+Type_SliceOf(Type_ID type)
+{
+    Type_ID result = Type_None;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal Type_ID
+Type_StripSlice(Type_ID type)
+{
+    Type_Info* type_info = Type_InfoOf(type);
+    ASSERT(type_info != 0 && type_info->kind == Type_Slice);
+    
+    return type_info->elem_type;
+}
+
+internal Type_ID
+Type_ArrayOf(Type_ID type, u64 size)
+{
+    Type_ID result = Type_None;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
+internal Type_ID
+Type_StripArray(Type_ID type)
+{
+    Type_Info* type_info = Type_InfoOf(type);
+    ASSERT(type_info != 0 && type_info->kind == Type_Array);
+    
+    return type_info->array.elem_type;
+}
+
+internal bool
+Type_Exists(Type_ID type)
 {
     bool result = false;
     
     NOT_IMPLEMENTED;
     
     return result;
+}
+
+internal bool
+Type_IsSoft(Type_ID type)
+{
+    return (type == Type_SoftInt   ||
+            type == Type_SoftFloat ||
+            type == Type_SoftBool);
 }

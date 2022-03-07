@@ -49,6 +49,27 @@ internal bool ParseExpression(Parser_State* state, AST_Node** expression);
 internal bool ParseScope(Parser_State* state, AST_Node** scope);
 
 internal bool
+ParseExpressionList(Parser_State* state, AST_Node** list)
+{
+    bool encountered_errors = false;
+    
+    AST_Node** next_expr = list;
+    while (!encountered_errors)
+    {
+        if (!ParseExpression(state, next_expr)) encountered_errors = true;
+        else
+        {
+            next_expr = &(*next_expr)->next;
+            
+            if (EatTokenOfKind(state, Token_Comma)) continue;
+            else                                    break;
+        }
+    }
+    
+    return !encountered_errors;
+}
+
+internal bool
 ParseNamedValueList(Parser_State* state, AST_Node** list)
 {
     bool encountered_errors = false;
@@ -80,98 +101,6 @@ ParseNamedValueList(Parser_State* state, AST_Node** list)
                 
                 if (EatTokenOfKind(state, Token_Comma)) continue;
                 else                                    break;
-            }
-        }
-    }
-    
-    return !encountered_errors;
-}
-
-internal bool
-ParseSimpleVariableDeclaration(Parser_State* state, AST_Node** decl, bool allow_using, bool allow_value)
-{
-    bool encountered_errors = false;
-    
-    *decl = PushNode(state, AST_Variable);
-    
-    Token token = GetToken(state);
-    if (token.kind == Token_Identifier && token.identifier == Keyword_Using)
-    {
-        if (!allow_using)
-        {
-            //// ERROR: Using is not allowed in this context
-        }
-        else
-        {
-            NextToken(state);
-            (*decl)->var_decl.is_using = true;
-        }
-    }
-    
-    AST_Node** next_name = &(*decl)->var_decl.names;
-    while (!encountered_errors)
-    {
-        token = GetToken(state);
-        
-        if (token.kind != Token_Identifier)
-        {
-            //// ERROR: Missing variable name
-            encountered_errors = true;
-        }
-        else if (token.identifier <= KEYWORD_KIND_MAX)
-        {
-            //// ERROR: Illegal use of keyword as variable name
-            encountered_errors = true;
-        }
-        else
-        {
-            NextToken(state);
-            
-            *next_name = PushNode(state, AST_Identifier);
-            (*next_name)->identifier = token.identifier;
-            
-            next_name = &(*next_name)->next;
-            
-            if (EatTokenOfKind(state, Token_Comma)) continue;
-            else                                    break;
-        }
-    }
-    
-    if (!encountered_errors)
-    {
-        if (!EatTokenOfKind(state, Token_Colon))
-        {
-            //// ERROR: Missing type of variable
-            encountered_errors = true;
-        }
-        else
-        {
-            token = GetToken(state);
-            if (token.kind != Token_Equals)
-            {
-                if (!ParseExpression(state, &(*decl)->var_decl.type))
-                {
-                    encountered_errors = true;
-                }
-            }
-        }
-    }
-    
-    if (!encountered_errors)
-    {
-        if (EatTokenOfKind(state, Token_Equals))
-        {
-            if (!allow_value)
-            {
-                //// ERROR: Assignment is not allowed in this context
-                encountered_errors = true;
-            }
-            else
-            {
-                if (!ParseExpression(state, &(*decl)->var_decl.values))
-                {
-                    encountered_errors = true;
-                }
             }
         }
     }
@@ -214,6 +143,16 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         
         NextToken(state);
     }
+    else if (token.kind == Token_Cash)
+    {
+        *expression = PushNode(state, AST_PolyConstant);
+        NextToken(state);
+        
+        if (!ParsePrimaryExpression(state, &(*expression)->poly.operand))
+        {
+            encountered_errors = true;
+        }
+    }
     else if (token.kind == Token_Identifier)
     {
         if (token.identifier == Keyword_True || token.identifier == Keyword_False)
@@ -238,17 +177,64 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                     
                     while (!encountered_errors)
                     {
-                        if (!ParseSimpleVariableDeclaration(state, next_param, true, true)) encountered_errors = true;
+                        *next_param = PushNode(state, AST_Variable);
+                        
+                        token = GetToken(state);
+                        if (token.kind == Token_Identifier && token.identifier == Keyword_Using)
+                        {
+                            NextToken(state);
+                            (*next_param)->var_decl.is_using = true;
+                        }
+                        
+                        if (!ParseExpression(state, &(*next_param)->var_decl.names)) encountered_errors = true;
                         else
                         {
-                            next_param = &(*next_param)->next;
+                            token = GetToken(state);
                             
-                            if (EatTokenOfKind(state, Token_Comma)) continue;
-                            else break;
+                            if (token.kind == Token_Comma)
+                            {
+                                //// ERROR: Multiple variable declarations are not allowed for procedure parameters
+                                encountered_errors = true;
+                            }
+                            else
+                            {
+                                if (!EatTokenOfKind(state, Token_Colon))
+                                {
+                                    //// ERROR: Missing type of parameter
+                                    encountered_errors = true;
+                                }
+                                else
+                                {
+                                    token = GetToken(state);
+                                    if (token.kind != Token_Equals)
+                                    {
+                                        if (!ParseExpression(state, &(*next_param)->var_decl.type)) 
+                                        {
+                                            encountered_errors = true;
+                                        }
+                                    }
+                                    
+                                    if (EatTokenOfKind(state, Token_Equals))
+                                    {
+                                        if (!ParseExpression(state, &(*next_param)->var_decl.values)) 
+                                        {
+                                            encountered_errors = true;
+                                        }
+                                    }
+                                    
+                                    if (!encountered_errors)
+                                    {
+                                        next_param = &(*next_param)->next;
+                                        
+                                        if (EatTokenOfKind(state, Token_Comma)) continue;
+                                        else break;
+                                    }
+                                }
+                            }
                         }
                     }
                     
-                    if (!EatTokenOfKind(state, Token_CloseParen))
+                    if (!encountered_errors && !EatTokenOfKind(state, Token_CloseParen))
                     {
                         //// ERROR: Missing closing paren
                         encountered_errors = true;
@@ -271,13 +257,53 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                     
                     while (!encountered_errors)
                     {
-                        if (!ParseSimpleVariableDeclaration(state, next_value, false, false)) encountered_errors = true;
+                        *next_value = PushNode(state, AST_Variable);
+                        
+                        token = GetToken(state);
+                        if (token.kind == Token_Identifier && token.identifier == Keyword_Using)
+                        {
+                            //// ERROR: Using is not allowed on return values
+                            encountered_errors = true;
+                        }
+                        
+                        if (!ParseExpression(state, &(*next_value)->var_decl.names)) encountered_errors = true;
                         else
                         {
-                            next_value = &(*next_value)->next;
+                            token = GetToken(state);
                             
-                            if (EatTokenOfKind(state, Token_Comma)) continue;
-                            else break;
+                            if (token.kind == Token_Comma)
+                            {
+                                //// ERROR: Multiple variable declarations are not allowed for return values
+                                encountered_errors = true;
+                            }
+                            else
+                            {
+                                if (!EatTokenOfKind(state, Token_Colon))
+                                {
+                                    //// ERROR: Missing type of return value
+                                    encountered_errors = true;
+                                }
+                                else
+                                {
+                                    token = GetToken(state);
+                                    if (token.kind == Token_Equals)
+                                    {
+                                        //// ERROR: Assignment is not allowed in return value declaration
+                                        encountered_errors = true;
+                                    }
+                                    else
+                                    {
+                                        if (!ParseExpression(state, &(*next_value)->var_decl.type)) encountered_errors = true;
+                                        else
+                                        {
+                                            next_value = &(*next_value)->next;
+                                            
+                                            if (EatTokenOfKind(state, Token_Comma)) continue;
+                                            else break;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     
@@ -339,15 +365,56 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
                     AST_Node** next_member = &members;
                     
                     while (!encountered_errors)
-                        
                     {
-                        if (!ParseSimpleVariableDeclaration(state, next_member, true, false)) encountered_errors = true;
+                        token = GetToken(state);
+                        if (token.kind == Token_CloseBrace) break;
+                        
+                        *next_member = PushNode(state, AST_Variable);
+                        
+                        if (token.kind == Token_Identifier && token.identifier == Keyword_Using)
+                        {
+                            NextToken(state);
+                            (*next_member)->var_decl.is_using = true;
+                        }
+                        
+                        if (!ParseExpression(state, &(*next_member)->var_decl.names)) encountered_errors = true;
                         else
                         {
-                            next_member = &(*next_member)->next;
+                            token = GetToken(state);
                             
-                            if (EatTokenOfKind(state, Token_Comma)) continue;
-                            else                                    break;
+                            if (token.kind == Token_Comma)
+                            {
+                                //// ERROR: Multiple variable declarations are not allowed for struct members
+                                encountered_errors = true;
+                            }
+                            else
+                            {
+                                if (!EatTokenOfKind(state, Token_Colon))
+                                {
+                                    //// ERROR: Missing type of struct member
+                                    encountered_errors = true;
+                                }
+                                else
+                                {
+                                    token = GetToken(state);
+                                    if (token.kind == Token_Equals)
+                                    {
+                                        //// ERROR: Assignment is not allowed in struct declaration
+                                        encountered_errors = true;
+                                    }
+                                    else
+                                    {
+                                        if (!ParseExpression(state, &(*next_member)->var_decl.type)) encountered_errors = true;
+                                        else
+                                        {
+                                            next_member = &(*next_member)->next;
+                                            
+                                            if (EatTokenOfKind(state, Token_Semicolon)) continue;
+                                            else                                        break;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     
@@ -430,20 +497,13 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
     }
     else if (EatTokenOfKind(state, Token_Period))
     {
-        token = GetToken(state);
+        AST_Node* element = 0;
         
-        if (token.kind != Token_Identifier)
-        {
-            //// ERROR: Missing name of element
-            encountered_errors = true;
-        }
+        if (ParsePrimaryExpression(state, &element)) encountered_errors = true;
         else
         {
-            Interned_String element = token.identifier;
-            
-            *expression = PushNode(state, AST_ElementOf);
-            (*expression)->element_of.structure = 0;
-            (*expression)->element_of.element   = element;
+            *expression = PushNode(state, AST_Selector);
+            (*expression)->selector.element = element;
         }
     }
     else if (EatTokenOfKind(state, Token_OpenPeriodBrace))
@@ -532,53 +592,11 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
 }
 
 internal bool
-ParseTypeExpression(Parser_State* state, AST_Node** expression)
-{
-    bool encountered_errors = false;
-    
-    AST_Node** slot = expression;
-    while (!encountered_errors)
-    {
-        if (EatTokenOfKind(state, Token_Hat))
-        {
-            *slot = PushNode(state, AST_PointerType);
-            slot = &(*slot)->unary_expr;
-        }
-        else if (EatTokenOfKind(state, Token_OpenBracket))
-        {
-            if (EatTokenOfKind(state, Token_CloseBracket))
-            {
-                *slot = PushNode(state, AST_SliceType);
-                slot = &(*slot)->unary_expr;
-            }
-            else
-            {
-                AST_Node* size;
-                if (!ParseExpression(state, &size)) encountered_errors = true;
-                else
-                {
-                    *slot = PushNode(state, AST_ArrayType);
-                    (*slot)->array_type.size = size;
-                    slot = &(*slot)->array_type.type;
-                }
-            }
-        }
-        else
-        {
-            if (!ParsePrimaryExpression(state, slot)) encountered_errors = true;
-            break;
-        }
-    }
-    
-    return !encountered_errors;
-}
-
-internal bool
 ParsePostfixExpression(Parser_State* state, AST_Node** expression)
 {
     bool encountered_errors = false;
     
-    if (!ParseTypeExpression(state, expression)) encountered_errors = true;
+    if (!ParsePrimaryExpression(state, expression)) encountered_errors = true;
     else
     {
         while (!encountered_errors)
@@ -628,7 +646,117 @@ ParsePostfixExpression(Parser_State* state, AST_Node** expression)
                     (*expression)->element_of.element   = element;
                 }
             }
-            else if (EatTokenOfKind(state, Token_OpenPeriodBrace))
+            else if (EatTokenOfKind(state, Token_OpenBracket))
+            {
+                AST_Node* array = *expression;
+                AST_Node* index = 0;
+                
+                Token token = GetToken(state);
+                if (token.kind != Token_CloseBracket)
+                {
+                    if (!ParseExpression(state, &index))
+                    {
+                        encountered_errors = true;
+                    }
+                }
+                
+                if (!encountered_errors)
+                {
+                    if (EatTokenOfKind(state, Token_Colon))
+                    {
+                        AST_Node* past_end = 0;
+                        
+                        if (!EatTokenOfKind(state, Token_CloseBracket))
+                        {
+                            if (!ParseExpression(state, &past_end)) encountered_errors = true;
+                            else
+                            {
+                                if (!EatTokenOfKind(state, Token_CloseBracket))
+                                {
+                                    //// ERROR: Missing closing bracket
+                                    encountered_errors = true;
+                                }
+                            }
+                        }
+                        
+                        if (!encountered_errors)
+                        {
+                            *expression = PushNode(state, AST_Slice);
+                            (*expression)->slice_expr.array    = array;
+                            (*expression)->slice_expr.start    = index;
+                            (*expression)->slice_expr.past_end = past_end;
+                        }
+                    }
+                    else if (EatTokenOfKind(state, Token_CloseBracket))
+                    {
+                        *expression = PushNode(state, AST_Subscript);
+                        (*expression)->subscript_expr.array = array;
+                        (*expression)->subscript_expr.index = index;
+                    }
+                    else
+                    {
+                        //// ERROR: Missing closing bracket
+                        encountered_errors = true;
+                    }
+                }
+            }
+            else break;
+        }
+    }
+    
+    return !encountered_errors;
+}
+internal bool
+ParseTypeExpression(Parser_State* state, AST_Node** expression)
+{
+    bool encountered_errors = false;
+    
+    AST_Node** slot = expression;
+    while (!encountered_errors)
+    {
+        if (EatTokenOfKind(state, Token_And))
+        {
+            *slot = PushNode(state, AST_Reference);
+            slot = &(*slot)->unary_expr;
+        }
+        else if (EatTokenOfKind(state, Token_Star))
+        {
+            *slot = PushNode(state, AST_Dereference);
+            slot = &(*slot)->unary_expr;
+        }
+        else if (EatTokenOfKind(state, Token_OpenBracket))
+        {
+            if (EatTokenOfKind(state, Token_CloseBracket))
+            {
+                *slot = PushNode(state, AST_SliceType);
+                slot = &(*slot)->unary_expr;
+            }
+            else
+            {
+                AST_Node* size;
+                if (!ParseExpression(state, &size)) encountered_errors = true;
+                else
+                {
+                    *slot = PushNode(state, AST_ArrayType);
+                    (*slot)->array_type.size = size;
+                    slot = &(*slot)->array_type.type;
+                }
+            }
+        }
+        else
+        {
+            if (!ParsePostfixExpression(state, slot)) encountered_errors = true;
+            break;
+        }
+    }
+    
+    if (!encountered_errors)
+    {
+        // NOTE: Casting to and constructing a typeid is illegal, therefore chaining .(), .[] or .{} will never
+        //       be legal. This is ignored in the parser and catched in the checker instead.
+        while (!encountered_errors)
+        {
+            if (EatTokenOfKind(state, Token_OpenPeriodBrace))
             {
                 AST_Node* type = *expression;
                 AST_Node* args = 0;
@@ -703,60 +831,6 @@ ParsePostfixExpression(Parser_State* state, AST_Node** expression)
                     (*expression)->cast_expr.expr = expr;
                 }
             }
-            else if (EatTokenOfKind(state, Token_OpenBracket))
-            {
-                AST_Node* array = *expression;
-                AST_Node* index = 0;
-                
-                Token token = GetToken(state);
-                if (token.kind != Token_CloseBracket)
-                {
-                    if (!ParseExpression(state, &index))
-                    {
-                        encountered_errors = true;
-                    }
-                }
-                
-                if (!encountered_errors)
-                {
-                    if (EatTokenOfKind(state, Token_Colon))
-                    {
-                        AST_Node* past_end = 0;
-                        
-                        if (!EatTokenOfKind(state, Token_CloseBracket))
-                        {
-                            if (!ParseExpression(state, &past_end)) encountered_errors = true;
-                            else
-                            {
-                                if (!EatTokenOfKind(state, Token_CloseBracket))
-                                {
-                                    //// ERROR: Missing closing bracket
-                                    encountered_errors = true;
-                                }
-                            }
-                        }
-                        
-                        if (!encountered_errors)
-                        {
-                            *expression = PushNode(state, AST_Slice);
-                            (*expression)->slice_expr.array    = array;
-                            (*expression)->slice_expr.start    = index;
-                            (*expression)->slice_expr.past_end = past_end;
-                        }
-                    }
-                    else if (EatTokenOfKind(state, Token_CloseBracket))
-                    {
-                        *expression = PushNode(state, AST_Subscript);
-                        (*expression)->subscript_expr.array = array;
-                        (*expression)->subscript_expr.index = index;
-                    }
-                    else
-                    {
-                        //// ERROR: Missing closing bracket
-                        encountered_errors = true;
-                    }
-                }
-            }
             else break;
         }
     }
@@ -776,13 +850,11 @@ ParsePrefixExpression(Parser_State* state, AST_Node** expression)
         
         if      (EatTokenOfKind(state, Token_Plus)) continue;
         else if (EatTokenOfKind(state, Token_Minus))      op = AST_Neg;
-        else if (EatTokenOfKind(state, Token_Star))       op = AST_Dereference;
-        else if (EatTokenOfKind(state, Token_And))        op = AST_Reference;
         else if (EatTokenOfKind(state, Token_Not))        op = AST_Not;
         else if (EatTokenOfKind(state, Token_Complement)) op = AST_BitNot;
         else
         {
-            if (!ParsePostfixExpression(state, slot)) encountered_errors = true;
+            if (!ParseTypeExpression(state, slot)) encountered_errors = true;
             break;
         }
         
@@ -809,7 +881,8 @@ ParseRange(Parser_State* state, AST_Node** expression)
         {
             Token token = GetToken(state);
             
-            if (token.kind == Token_Elipsis || token.kind == Token_ElipsisLess)
+            if (token.kind != Token_Elipsis && token.kind != Token_ElipsisLess) break;
+            else
             {
                 bool is_open = (token.kind == Token_ElipsisLess);
                 NextToken(state);
@@ -912,27 +985,6 @@ ParseExpression(Parser_State* state, AST_Node** expression)
                     }
                 }
             }
-        }
-    }
-    
-    return !encountered_errors;
-}
-
-internal bool
-ParseExpressionList(Parser_State* state, AST_Node** list)
-{
-    bool encountered_errors = false;
-    
-    AST_Node** next_expr = list;
-    while (!encountered_errors)
-    {
-        if (!ParseExpression(state, next_expr)) encountered_errors = true;
-        else
-        {
-            next_expr = &(*next_expr)->next;
-            
-            if (EatTokenOfKind(state, Token_Comma)) continue;
-            else                                    break;
         }
     }
     
@@ -1053,7 +1105,7 @@ ParseUsingExpressionVariableOrConstant(Parser_State* state, AST_Node** node)
                             //// ERROR: Missing name of alias
                             encountered_errors = true;
                         }
-                        else if (token.identifier <= KEYWORD_KIND_MAX)
+                        else if (IS_KEYWORD(token.identifier))
                         {
                             //// ERROR: Illegal use of keyword as alias name
                             encountered_errors = true;
@@ -1098,7 +1150,7 @@ ParseStatement(Parser_State* state, AST_Node** statement)
             //// ERROR: Missing name of label
             encountered_errors = true;
         }
-        else if (token.identifier <= KEYWORD_KIND_MAX)
+        else if (IS_KEYWORD(token.identifier))
         {
             //// ERROR: Illegal use of keyword as label name
             encountered_errors = true;
@@ -1405,7 +1457,7 @@ ParseStatement(Parser_State* state, AST_Node** statement)
             Interned_String jmp_label = BLANK_IDENTIFIER;
             if (token.kind == Token_Identifier)
             {
-                if (token.identifier <= KEYWORD_KIND_MAX)
+                if (IS_KEYWORD(token.identifier))
                 {
                     //// ERROR: Illegal use of keyword as jump label
                     encountered_errors = true;

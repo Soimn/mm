@@ -1,16 +1,17 @@
 typedef enum SYMBOL_KIND
 {
     Symbol_Var,
-    Symbol_Parameter,
     Symbol_Const,
-    Symbol_EnumMember,
-    
     Symbol_UsingLink,
+    Symbol_Parameter,
+    Symbol_StructMember,
+    Symbol_EnumMember,
 } SYMBOL_KIND;
 
 typedef struct Symbol
 {
     SYMBOL_KIND kind;
+    bool is_complete;
     
     union
     {
@@ -30,7 +31,7 @@ typedef struct Symbol
         struct
         {
             Interned_String accessor; // NOTE: BLANK_IDENTIFIER counts as having no accessor
-            // link to symbol,
+            // link to symbol, this may not be in the same symbol table e.g. a: Struct; { using a; }
             // restriction within scope
         } using_link;
         
@@ -38,12 +39,22 @@ typedef struct Symbol
         {
             Interned_String name;
             Type_ID type;
-            Const_Val default_value;
+            bool is_const;
+            Const_Val value;
         } parameter;
         
         struct
         {
             Interned_String name;
+            Type_ID type;
+            //bool is_using;
+        } struct_member;
+        
+        struct
+        {
+            Interned_String name;
+            Type_ID underlying_type;
+            Type_ID enum_type;
             Const_Val value;
         } enum_member;
     };

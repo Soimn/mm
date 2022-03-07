@@ -4,12 +4,13 @@ typedef enum AST_NODE_KIND
     
     // NOTE: These nodes are neither expressions, statements nor declarations.
     //       They only exist to make some things easier to handle, e.g.
-    //       return a = 0, b = 1;
+    //       return .a = 0, .b = 1;
     //       and
     //       int.[0..50 = 0, 51..63 = 1]
     AST_FirstSpecial,
     AST_NamedValue = AST_FirstSpecial,
     AST_Range,
+    AST_PolyConstant,
     AST_LastSpecial = AST_Range,
     
     AST_FirstExpression,
@@ -24,31 +25,31 @@ typedef enum AST_NODE_KIND
     AST_Union,
     AST_Enum,
     AST_Compound,
-    AST_Conditional,
-    
-    AST_FirstTypeLevel = 5*16,
-    AST_PointerType = AST_FirstTypeLevel,
-    AST_SliceType,
-    AST_ArrayType,
-    AST_LastTypeLevel = 6*16 - 1,
-    
-    AST_FirstPostfixLevel = 6*16,
-    AST_Call = AST_FirstPostfixLevel,
-    AST_ElementOf,
+    AST_Selector,
     AST_StructLiteral,
     AST_ArrayLiteral,
     AST_Cast,
+    AST_Conditional,
+    
+    AST_FirstPostfixLevel,
+    AST_Call = AST_FirstPostfixLevel,
+    AST_ElementOf,
     AST_Subscript,
     AST_Slice,
-    AST_LastPostfixLevel = 7*16 - 1,
+    AST_LastPostfixLevel,
     
-    AST_FirstPrefixLevel = 7*16,
-    AST_Not = AST_FirstPrefixLevel,
-    AST_BitNot,
+    AST_FirstTypeLevel,
+    AST_SliceType = AST_FirstTypeLevel,
+    AST_ArrayType,
     AST_Dereference,
     AST_Reference,
+    AST_LastTypeLevel = AST_Reference,
+    
+    AST_FirstPrefixLevel,
+    AST_Not = AST_FirstPrefixLevel,
+    AST_BitNot,
     AST_Neg,
-    AST_LastPrefixLevel = 8*16 - 1,
+    AST_LastPrefixLevel,
     
     AST_FirstMulLevel = 8*16,
     AST_FirstBinary = AST_FirstMulLevel, 
@@ -129,12 +130,16 @@ typedef struct AST_Node
             bool is_open;
         } range;
         
+        struct
+        {
+            struct AST_Node* operand;
+        } poly;
+        
         Interned_String identifier;
         Interned_String string;
         Big_Int integer;
         Big_Float floating;
         bool boolean;
-        Type_ID type_id;
         
         struct
         {
@@ -163,9 +168,32 @@ typedef struct AST_Node
         
         struct
         {
+            struct AST_Node* element;
+        } selector;
+        
+        struct
+        {
             struct AST_Node* member_type;
             struct AST_Node* members;
         } enum_type;
+        
+        struct
+        {
+            struct AST_Node* type;
+            struct AST_Node* args;
+        } struct_literal;
+        
+        struct
+        {
+            struct AST_Node* type;
+            struct AST_Node* args;
+        } array_literal;
+        
+        struct
+        {
+            struct AST_Node* type;
+            struct AST_Node* expr;
+        } cast_expr;
         
         struct AST_Node* compound_expr;
         struct AST_Node* unary_expr;
@@ -200,24 +228,6 @@ typedef struct AST_Node
             struct AST_Node* structure;
             Interned_String element;
         } element_of;
-        
-        struct
-        {
-            struct AST_Node* type;
-            struct AST_Node* args;
-        } struct_literal;
-        
-        struct
-        {
-            struct AST_Node* type;
-            struct AST_Node* args;
-        } array_literal;
-        
-        struct
-        {
-            struct AST_Node* type;
-            struct AST_Node* expr;
-        } cast_expr;
         
         struct
         {
