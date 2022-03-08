@@ -177,23 +177,13 @@ BigInt_Rem(Big_Int a, Big_Int b)
 internal inline bool
 BigInt_IsGreater(Big_Int a, Big_Int b)
 {
-    i8 r3 = (i8)(a.parts[3] > b.parts[3]) - (i8)(a.parts[3] < b.parts[3]);
-    i8 r2 = (i8)(a.parts[2] > b.parts[2]) - (i8)(a.parts[2] < b.parts[2]);
-    i8 r1 = (i8)(a.parts[1] > b.parts[1]) - (i8)(a.parts[1] < b.parts[1]);
-    i8 r0 = (i8)(a.parts[0] > b.parts[0]) - (i8)(a.parts[0] < b.parts[0]);
-    
-    return ((8*r3 + 4*r2 + 2*r1 + r0) > 0);
+    return ((i64)BigInt_Sub(b, a).parts[3] < 0);
 }
 
 internal inline bool
 BigInt_IsLess(Big_Int a, Big_Int b)
 {
-    i8 r3 = (i8)(a.parts[3] > b.parts[3]) - (i8)(a.parts[3] < b.parts[3]);
-    i8 r2 = (i8)(a.parts[2] > b.parts[2]) - (i8)(a.parts[2] < b.parts[2]);
-    i8 r1 = (i8)(a.parts[1] > b.parts[1]) - (i8)(a.parts[1] < b.parts[1]);
-    i8 r0 = (i8)(a.parts[0] > b.parts[0]) - (i8)(a.parts[0] < b.parts[0]);
-    
-    return ((8*r3 + 4*r2 + 2*r1 + r0) < 0);
+    return ((i64)BigInt_Sub(a, b).parts[3] < 0);
 }
 
 internal inline bool
