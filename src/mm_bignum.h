@@ -79,7 +79,7 @@ BigInt_SignExtend(Big_Int val, imm byte_size)
 }
 
 internal inline Big_Int
-BigInt_Neg(Big_Int val, imm byte_size)
+BigInt_Neg(Big_Int val)
 {
     Big_Int result;
     
@@ -88,11 +88,11 @@ BigInt_Neg(Big_Int val, imm byte_size)
     u8 c2 = _subborrow_u64(c1, 0, val.parts[2], &result.parts[2]);
     _subborrow_u64(c2, 0, val.parts[3], &result.parts[3]);
     
-    return BigInt_ChopToSize(result, byte_size);
+    return result;
 }
 
 internal inline Big_Int
-BigInt_Add(Big_Int a, Big_Int b, imm byte_size)
+BigInt_Add(Big_Int a, Big_Int b)
 {
     Big_Int result;
     
@@ -101,11 +101,11 @@ BigInt_Add(Big_Int a, Big_Int b, imm byte_size)
     u8 c2 = _addcarry_u64(c1, a.parts[2], b.parts[2], &result.parts[2]);
     _addcarry_u64(c2, a.parts[3], b.parts[3], &result.parts[3]);
     
-    return BigInt_ChopToSize(result, byte_size);
+    return result;
 }
 
 internal inline Big_Int
-BigInt_Sub(Big_Int a, Big_Int b, imm byte_size)
+BigInt_Sub(Big_Int a, Big_Int b)
 {
     Big_Int result;
     
@@ -114,9 +114,10 @@ BigInt_Sub(Big_Int a, Big_Int b, imm byte_size)
     u8 c2 = _subborrow_u64(c1, a.parts[2], b.parts[2], &result.parts[2]);
     _subborrow_u64(c2, a.parts[3], b.parts[3], &result.parts[3]);
     
-    return BigInt_ChopToSize(result, byte_size);
+    return result;
 }
 
+// TODO: _mul128 is a MSVC intrinsic, replace with something else
 internal inline Big_Int
 BigInt_Mul(Big_Int a, Big_Int b)
 {
@@ -158,15 +159,12 @@ BigInt_Mul(Big_Int a, Big_Int b)
     
     return result;
 }
-/*
 
 internal inline Big_Int
 BigInt_Div(Big_Int a, Big_Int b)
 {
-    return (Big_Int){
-        .sign  = a.sign  * b.sign,
-        .value = a.value / b.value,
-    };
+    NOT_IMPLEMENTED;
+    return (Big_Int){0};
 }
 
 internal inline Big_Int
@@ -179,20 +177,30 @@ BigInt_Rem(Big_Int a, Big_Int b)
 internal inline bool
 BigInt_IsGreater(Big_Int a, Big_Int b)
 {
-    return (a.sign == b.sign ? (a.value > b.value) ^ (a.sign == -1) : a.sign > b.sign);
+    i8 r3 = (i8)(a.parts[3] > b.parts[3]) - (i8)(a.parts[3] < b.parts[3]);
+    i8 r2 = (i8)(a.parts[2] > b.parts[2]) - (i8)(a.parts[2] < b.parts[2]);
+    i8 r1 = (i8)(a.parts[1] > b.parts[1]) - (i8)(a.parts[1] < b.parts[1]);
+    i8 r0 = (i8)(a.parts[0] > b.parts[0]) - (i8)(a.parts[0] < b.parts[0]);
+    
+    return ((8*r3 + 4*r2 + 2*r1 + r0) > 0);
 }
 
 internal inline bool
 BigInt_IsLess(Big_Int a, Big_Int b)
 {
-    return (a.sign == b.sign ? (a.value < b.value) ^ (a.sign == -1) : a.sign < b.sign);
+    i8 r3 = (i8)(a.parts[3] > b.parts[3]) - (i8)(a.parts[3] < b.parts[3]);
+    i8 r2 = (i8)(a.parts[2] > b.parts[2]) - (i8)(a.parts[2] < b.parts[2]);
+    i8 r1 = (i8)(a.parts[1] > b.parts[1]) - (i8)(a.parts[1] < b.parts[1]);
+    i8 r0 = (i8)(a.parts[0] > b.parts[0]) - (i8)(a.parts[0] < b.parts[0]);
+    
+    return ((8*r3 + 4*r2 + 2*r1 + r0) < 0);
 }
 
 internal inline bool
 BigInt_IsEqual(Big_Int a, Big_Int b)
 {
-    return (a.sign == b.sign && a.value == b.value);
-}*/
+    return Memcmp(&a, &b, sizeof(Big_Int));
+}
 
 
 typedef struct Big_Float

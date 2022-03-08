@@ -213,7 +213,7 @@ MM_InternString(String string)
 #include "mm_const_val.h"
 #include "mm_symbols.h"
 #include "mm_types.h"
-//#include "mm_checker.h"
+#include "mm_checker.h"
 
 internal bool
 MM_Init()

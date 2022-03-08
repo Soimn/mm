@@ -60,6 +60,23 @@ Move(void* src, void* dst, umm size)
     else Copy(src, dst, size);
 }
 
+internal inline bool
+Memcmp(void* a, void* b, umm size)
+{
+    bool result = true;
+    
+    for (umm i = 0; i < size; ++i)
+    {
+        if (((u8*)a)[i] != ((u8*)b)[i])
+        {
+            result = false;
+            break;
+        }
+    }
+    
+    return result;
+}
+
 #define ARENA_RESERVATION_SIZE GB(1)
 #define ARENA_PAGE_SIZE KB(16)
 typedef struct Arena
