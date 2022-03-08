@@ -39,7 +39,7 @@ CheckExpression(Check_Context* context, AST_Node* expression)
         //// ERROR
         CHECK_RETURN_ERROR("Missing expression");
     }
-    else if (expression->kind < AST_FirstExpression || expression > AST_LastExpression)
+    else if (expression->kind < AST_FirstExpression || expression->kind > AST_LastExpression)
     {
         if (expression->kind == AST_PolyConstant)
         {
@@ -77,15 +77,15 @@ CheckExpression(Check_Context* context, AST_Node* expression)
         NOT_IMPLEMENTED;
     }
     else if (expression->kind >= AST_FirstTypeLevel   && expression->kind <= AST_LastTypeLevel ||
-             expression->kins >= AST_FirstPrefixLevel && expression->kind <= AST_LastPrefixLevel)
+             expression->kind >= AST_FirstPrefixLevel && expression->kind <= AST_LastPrefixLevel)
     {
         if (expression->kind == AST_ArrayType)
         {
             Check_Info type_info = CheckExpression(context, expression->array_type.type);
-            CHECK_RETURN_ON_NOT_COMPLETE(operand_info);
+            CHECK_RETURN_ON_NOT_COMPLETE(type_info);
             
             Check_Info size_info = CheckExpression(context, expression->array_type.type);
-            CHECK_RETURN_ON_NOT_COMPLETE(operand_info);
+            CHECK_RETURN_ON_NOT_COMPLETE(size_info);
             
             if (type_info.type != Type_Typeid ||
                 type_info.value_kind != Value_Constant)
@@ -98,14 +98,14 @@ CheckExpression(Check_Context* context, AST_Node* expression)
                 //// ERROR
                 CHECK_RETURN_ERROR("given type does not exist");
             }
-            else if (!Type_IsInteger(size_info.type)                                                               ||
-                     size_info.value_kind != Value_Constant                                                        ||
-                     size_info.type == Type_SoftInt && !BigInt_IsGreater(size_info.const_value.soft_int, BigInt_0))
+            else if (!Type_IsInteger(size_info.type)        ||
+                     size_info.value_kind != Value_Constant ||
+                     !BigInt_IsGreater(size_info.const_value.soft_int, BigInt_0)) // IMPORTANT TODO: Maybe ConstVal_IsGreater?
             {
                 //// ERROR
                 CHECK_RETURN_ERROR("size of array type must be a constant positive integer");
             }
-            else if (size_info.type == Type_SoftInt && BigInt_IsGreater(size_info.const_value.soft_int, BigInt_U64_MAX))
+            else if (BigInt_IsGreater(size_info.const_value.soft_int, BigInt_U64_MAX))
             {
                 //// ERROR
                 CHECK_RETURN_ERROR("sorry, exabyte arrays are not yet supported... In the meantime buy more ram, like a lot.");
@@ -187,7 +187,7 @@ CheckExpression(Check_Context* context, AST_Node* expression)
                 return (Check_Info){
                     .result              = Check_Complete,
                     .type                = operand_info.type,
-                    .value_kind          = MAX(Value_Register, operand_info.value_kind);
+                    .value_kind          = MAX(Value_Register, operand_info.value_kind),
                     .const_value.boolean = !operand_info.const_value.boolean,
                 };
             }
@@ -200,13 +200,10 @@ CheckExpression(Check_Context* context, AST_Node* expression)
                 }
                 
                 return (Check_Info){
-                    .result               = Check_Complete,
-                    .type                 = operand_info.type,
-                    .value_kind           = MAX(Value_Register, operand_info.value_kind);
-                    .const_value.soft_int = BigInt_BitNot(operand_info.const_value.soft_int,
-                                                          (operand_info.type == Type_SoftInt 
-                                                           ? -1 
-                                                           : Type_Sizeof(operand_info.type))),
+                    .result      = Check_Complete,
+                    .type        = operand_info.type,
+                    .value_kind  = MAX(Value_Register, operand_info.value_kind),
+                    .const_value = ConstVal_BitNot(operand_info.const_value, operand_info.type),
                 };
             }
             /*

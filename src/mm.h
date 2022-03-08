@@ -210,9 +210,9 @@ MM_InternString(String string)
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
+#include "mm_types.h"
 #include "mm_const_val.h"
 #include "mm_symbols.h"
-#include "mm_types.h"
 #include "mm_checker.h"
 
 internal bool

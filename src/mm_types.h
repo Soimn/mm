@@ -85,20 +85,20 @@ typedef struct Type_Info
         {
             // TODO: Polymorphism with type specialization
             // Type_Table* poly_type_table ?
-            Symbol_Table* parameters;
-            Symbol_Table* return_values;
+            struct Symbol_Table* parameters;
+            struct Symbol_Table* return_values;
             CALL_CONV_KIND call_conv;
         } proc;
         
         struct
         {
-            Symbol_Table* members;
+            struct Symbol_Table* members;
         } structure;
         
         struct
         {
             Type_ID underlying_type;
-            Symbol_Table* members;
+            struct Symbol_Table* members;
         } enumeration;
     };
 } Type_Info;
@@ -215,10 +215,20 @@ Type_Exists(Type_ID type)
     return result;
 }
 
-internal bool
+internal inline bool
 Type_IsSoft(Type_ID type)
 {
     return (type == Type_SoftInt   ||
             type == Type_SoftFloat ||
             type == Type_SoftBool);
+}
+
+internal inline imm
+Type_Sizeof(Type_ID type)
+{
+    umm size = 0;
+    // Soft types return -1
+    NOT_IMPLEMENTED;
+    
+    return size;
 }

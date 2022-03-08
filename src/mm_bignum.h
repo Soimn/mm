@@ -4,6 +4,7 @@ typedef struct Big_Int
 } Big_Int;
 
 global Big_Int BigInt_0       = {0};
+global Big_Int BigInt_1       = { .parts[0] = 1 };
 global Big_Int BigInt_U64_MAX = { .parts[0] = U64_MAX };
 
 internal inline Big_Int
@@ -50,6 +51,7 @@ BigInt_ChopToSize(Big_Int val, imm byte_size)
     return result;
 }
 
+// NOTE: This is why x64 inline assembly should be supported
 internal Big_Int
 BigInt_SignExtend(Big_Int val, imm byte_size)
 {
@@ -117,6 +119,26 @@ BigInt_Sub(Big_Int a, Big_Int b)
     return result;
 }
 
+internal inline bool
+BigInt_IsGreater(Big_Int a, Big_Int b)
+{
+    Big_Int sub = BigInt_Sub(b, a);
+    return ((i64)sub.parts[3] < 0);
+}
+
+internal inline bool
+BigInt_IsLess(Big_Int a, Big_Int b)
+{
+    Big_Int sub = BigInt_Sub(a, b);
+    return ((i64)sub.parts[3] < 0);
+}
+
+internal inline bool
+BigInt_IsEqual(Big_Int a, Big_Int b)
+{
+    return Memcmp(&a, &b, sizeof(Big_Int));
+}
+
 // TODO: _mul128 is a MSVC intrinsic, replace with something else
 internal inline Big_Int
 BigInt_Mul(Big_Int a, Big_Int b)
@@ -161,37 +183,97 @@ BigInt_Mul(Big_Int a, Big_Int b)
 }
 
 internal inline Big_Int
-BigInt_Div(Big_Int a, Big_Int b)
+BigInt_DivMod(Big_Int a, Big_Int b, Big_Int* rem)
 {
-    NOT_IMPLEMENTED;
-    return (Big_Int){0};
+    Big_Int quotient = {0};
+    
+    // TODO: Replace this, b = 1 will be a nightmare
+    while (BigInt_IsLess(a, b))
+    {
+        a = BigInt_Sub(a, b);
+        quotient = BigInt_Add(quotient, BigInt_1);
+    }
+    
+    *rem = a;
+    
+    return quotient;
 }
 
 internal inline Big_Int
-BigInt_Rem(Big_Int a, Big_Int b)
+BigInt_BitNot(Big_Int v)
 {
+    return (Big_Int){
+        .parts[0] = ~v.parts[0],
+        .parts[1] = ~v.parts[1],
+        .parts[2] = ~v.parts[2],
+        .parts[3] = ~v.parts[3],
+    };
+}
+
+internal inline Big_Int
+BigInt_BitAnd(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){
+        .parts[0] = v0.parts[0] & v0.parts[0],
+        .parts[1] = v0.parts[1] & v0.parts[1],
+        .parts[2] = v0.parts[2] & v0.parts[2],
+        .parts[3] = v0.parts[3] & v0.parts[3],
+    };
+}
+
+internal inline Big_Int
+BigInt_BitOr(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){
+        .parts[0] = v0.parts[0] | v0.parts[0],
+        .parts[1] = v0.parts[1] | v0.parts[1],
+        .parts[2] = v0.parts[2] | v0.parts[2],
+        .parts[3] = v0.parts[3] | v0.parts[3],
+    };
+}
+
+internal inline Big_Int
+BigInt_BitXor(Big_Int v0, Big_Int v1)
+{
+    return (Big_Int){
+        .parts[0] = v0.parts[0] ^ v0.parts[0],
+        .parts[1] = v0.parts[1] ^ v0.parts[1],
+        .parts[2] = v0.parts[2] ^ v0.parts[2],
+        .parts[3] = v0.parts[3] ^ v0.parts[3],
+    };
+}
+
+internal inline Big_Int
+BigInt_BitShl(Big_Int v0, Big_Int v1)
+{
+    Big_Int result = {0};
     NOT_IMPLEMENTED;
-    return (Big_Int){0};
+    return result;
 }
 
-internal inline bool
-BigInt_IsGreater(Big_Int a, Big_Int b)
+internal inline Big_Int
+BigInt_BitSplatLeft(Big_Int v0, Big_Int v1)
 {
-    return ((i64)BigInt_Sub(b, a).parts[3] < 0);
+    Big_Int result = {0};
+    NOT_IMPLEMENTED;
+    return result;
 }
 
-internal inline bool
-BigInt_IsLess(Big_Int a, Big_Int b)
+internal inline Big_Int
+BigInt_BitShr(Big_Int v0, Big_Int v1)
 {
-    return ((i64)BigInt_Sub(a, b).parts[3] < 0);
+    Big_Int result = {0};
+    NOT_IMPLEMENTED;
+    return result;
 }
 
-internal inline bool
-BigInt_IsEqual(Big_Int a, Big_Int b)
+internal inline Big_Int
+BigInt_BitSar(Big_Int v0, Big_Int v1)
 {
-    return Memcmp(&a, &b, sizeof(Big_Int));
+    Big_Int result = {0};
+    NOT_IMPLEMENTED;
+    return result;
 }
-
 
 typedef struct Big_Float
 {
