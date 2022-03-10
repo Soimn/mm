@@ -1,6 +1,6 @@
 
 // TODO: Replace this
-internal u64
+internal inline u64
 String_HashOf(String string)
 {
     umm result = 0;
@@ -39,7 +39,7 @@ String_Match(String s0, String s1)
     return result;
 }
 
-internal String
+internal inline String
 String_FromInternedString(Interned_String string)
 {
     Interned_String_Entry* slot = (Interned_String_Entry*)string;

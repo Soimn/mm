@@ -699,11 +699,11 @@ lexer->offset += 1;                   \
                     }
                 }
                 
-                else if (c[0] == '"')
+                else if (c[0] == '"' || c[0] == '\'')
                 {
                     umm start = lexer->offset;
                     
-                    while (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] != '"')
+                    while (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] != c[0])
                     {
                         if (lexer->string.data[lexer->offset] == '\\') lexer->offset += 1;
                         lexer->offset += 1;
@@ -711,7 +711,7 @@ lexer->offset += 1;                   \
                     
                     if (lexer->offset == lexer->string.size)
                     {
-                        //// ERROR: Unterminated string literal
+                        //// ERROR: Unterminated string/char literal
                     }
                     else
                     {
@@ -871,84 +871,62 @@ lexer->offset += 1;                   \
                             }
                         }
                         
-                        if (!encountered_errors)
+                        if (encountered_errors) Arena_EndTemp(MM.string_arena, marker);
+                        else
                         {
-                            token.kind = Token_String;
-                            
-                            u32 hash;
-                            Interned_String_Entry** slot = MM_GetInternedStringSlot(string, &hash);
-                            
-                            if (*slot != 0)
+                            if (c[0] == '\'')
                             {
-                                token.string = (u64)*slot;
+                                if (string.size == 0)
+                                {
+                                    //// ERROR: Empty char lit
+                                    encountered_errors = true;
+                                }
+                                else if (!((i8)string.data[0] > 0 && string.size == 1          ||
+                                           (string.data[0] & 0xC0) == 0xC0 && string.size == 2 ||
+                                           (string.data[0] & 0xE0) == 0xE0 && string.size == 3 ||
+                                           (string.data[0] & 0xF0) == 0xF0 && string.size == 4))
+                                {
+                                    //// ERROR: Too many characters in char lit
+                                    encountered_errors = true;
+                                }
+                                else
+                                {
+                                    token.kind = Token_Character;
+                                    
+                                    token.character = 0;
+                                    Copy(string.data, &token.character, string.size);
+                                }
                                 Arena_EndTemp(MM.string_arena, marker);
                             }
                             else
                             {
-                                Arena_ReifyTemp(MM.string_arena, marker);
-                                *slot = entry;
+                                token.kind = Token_String;
                                 
-                                *entry = (Interned_String_Entry){
-                                    .next = 0,
-                                    .hash = hash,
-                                    .size = (u32)string.size,
-                                };
+                                u32 hash;
+                                Interned_String_Entry** slot = MM_GetInternedStringSlot(string, &hash);
                                 
-                                Copy(string.data, entry + 1, string.size);
-                                
-                                token.string = (u64)*slot;
+                                if (*slot != 0)
+                                {
+                                    token.string = (u64)*slot;
+                                    Arena_EndTemp(MM.string_arena, marker);
+                                }
+                                else
+                                {
+                                    Arena_ReifyTemp(MM.string_arena, marker);
+                                    *slot = entry;
+                                    
+                                    *entry = (Interned_String_Entry){
+                                        .next = 0,
+                                        .hash = hash,
+                                        .size = (u32)string.size,
+                                    };
+                                    
+                                    Copy(string.data, entry + 1, string.size);
+                                    
+                                    token.string = (u64)*slot;
+                                }
                             }
                         }
-                    }
-                }
-                
-                else if (c[0] == '\'')
-                {
-                    bool encountered_errors = false;
-                    
-                    u8 character = c[1];
-                    
-                    umm terminator_index = 2;
-                    
-                    if (c[1] == '\\')
-                    {
-                        switch (c[2])
-                        {
-                            case 'a':  character = 0x07; break;
-                            case 'b':  character = 0x08; break;
-                            case 't':  character = 0x09; break;
-                            case 'n':  character = 0x0A; break;
-                            case 'v':  character = 0x0B; break;
-                            case 'f':  character = 0x0C; break;
-                            case 'r':  character = 0x0D; break;
-                            case 'e':  character = 0x1B; break;
-                            case '"':  character = 0x22; break;
-                            case '\'': character = 0x27; break;
-                            case '\\': character = 0x5C; break;
-                            
-                            default:
-                            {
-                                //// ERROR: Invalid character escape sequence
-                                encountered_errors = true;
-                            } break;
-                        }
-                        
-                        terminator_index = 3;
-                    }
-                    else if (c[1] == '\'')
-                    {
-                        //// ERROR: Missing character in character litteral
-                        encountered_errors = true;
-                    }
-                    
-                    if (c[terminator_index] != '\'')
-                    {
-                        //// ERROR: Missing terminating ' character in character litteral
-                    }
-                    else
-                    {
-                        token.kind      = Token_Character;
-                        token.character = character;
                     }
                 }
                 else

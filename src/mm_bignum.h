@@ -38,24 +38,25 @@ BigInt_ToU64(Big_Int val)
 }
 
 internal Big_Int
-BigInt_ChopToSize(Big_Int val, imm byte_size)
+BigInt_ChopToSize(Big_Int val, umm byte_size)
 {
-    ASSERT(byte_size == -1 || IS_POW_OF_2(byte_size) && byte_size <= 16);
+    ASSERT(IS_POW_OF_2(byte_size) && byte_size <= 32);
     
     Big_Int result;
-    result.parts[0] = val.parts[0] & (((u64)1 << ((u64)byte_size*8)) - 1);
+    u64 mask = ((u64)1 << (byte_size*8)) - 1;
+    result.parts[0] = val.parts[0] & (byte_size < 8 ? mask : U64_MAX);
     result.parts[1] = val.parts[1] & ((u64)byte_size >= 16 ? U64_MAX : 0);
-    result.parts[2] = val.parts[2] & (     byte_size == -1 ? U64_MAX : 0);
-    result.parts[3] = val.parts[3] & (     byte_size == -1 ? U64_MAX : 0);
+    result.parts[2] = val.parts[2] & (     byte_size < 0   ? U64_MAX : 0);
+    result.parts[3] = val.parts[3] & (     byte_size < 0   ? U64_MAX : 0);
     
     return result;
 }
 
 // NOTE: This is why x64 inline assembly should be supported
 internal Big_Int
-BigInt_SignExtend(Big_Int val, imm byte_size)
+BigInt_SignExtend(Big_Int val, umm byte_size)
 {
-    ASSERT(byte_size == -1 || IS_POW_OF_2(byte_size) && byte_size <= 16);
+    ASSERT(IS_POW_OF_2(byte_size) && byte_size <= 32);
     
     i64 ext_8  = (i8) val.parts[0];
     i64 ext_16 = (i16)val.parts[0];
@@ -67,10 +68,10 @@ BigInt_SignExtend(Big_Int val, imm byte_size)
     if (byte_size == 4) lo = ext_32;
     
     i64 mi = val.parts[1];
-    if ((((u64)byte_size < 16) & (lo < 0)) != 0) mi = -1;
+    if (((byte_size < 16) & (lo < 0)) != 0) mi = -1;
     
     u64 hi_mask = 0;
-    if ((byte_size != -1) & (mi < 0)) hi_mask = U64_MAX;
+    if ((byte_size <= 16) & (mi < 0)) hi_mask = U64_MAX;
     
     return (Big_Int){
         .parts[0] = (u64)lo,
