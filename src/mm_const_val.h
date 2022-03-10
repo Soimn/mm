@@ -41,6 +41,48 @@ ConstVal_FromString(Interned_String val)
     return (Const_Val){ .string = val };
 }
 
+internal inline Const_Val
+ConstVal_ConvertTo(Const_Val val, Type_ID src, Type_ID dst, bool* is_representable)
+{
+    Const_Val result;
+    
+    if (Type_IsInteger(src))
+    {
+        if (Type_IsUnsignedInteger(dst))
+        {
+            Big_Int chopped_val = BigInt_ChopToSize(val.soft_int, Type_Sizeof(dst));
+            
+            if (is_representable) *is_representable = BigInt_IsEqual(chopped_val, val.soft_int);
+            result = ConstVal_FromBigInt(chopped_val);
+        }
+        else if (Type_IsInteger(dst))
+        {
+            umm size = ABS(Type_Sizeof(dst));
+            Big_Int chopped_val = BigInt_SignExtend(BigInt_ChopToSize(val.soft_int, size), size);
+            
+            if (is_representable) *is_representable = BigInt_IsEqual(chopped_val, val.soft_int);
+            result = ConstVal_FromBigInt(chopped_val);
+        }
+        else if (Type_IsBoolean(dst))
+        {
+            if (is_representable) *is_representable = true;
+            result = ConstVal_FromBool(!BigInt_IsEqual(val.soft_int, BigInt_0));
+        }
+        else NOT_IMPLEMENTED;
+    }
+    else if (Type_IsFloat(src))
+    {
+        NOT_IMPLEMENTED;
+    }
+    else if (Type_IsBoolean(src))
+    {
+        NOT_IMPLEMENTED;
+    }
+    else NOT_IMPLEMENTED;
+    
+    return result;
+}
+
 internal inline bool
 ConstVal_IsEqual(Const_Val v0, Const_Val v1, Type_ID type)
 {

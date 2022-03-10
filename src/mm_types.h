@@ -311,3 +311,23 @@ Type_Sizeof(Type_ID type)
     
     return size;
 }
+
+internal inline Type_ID
+Type_CommonType(Type_ID a, Type_ID b)
+{
+    Type_ID common = Type_None;
+    
+    NOT_IMPLEMENTED;
+    
+    return common;
+}
+
+internal inline Type_ID
+Type_IsCastableTo(Type_ID src, Type_ID dst)
+{
+    bool result = false;
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}

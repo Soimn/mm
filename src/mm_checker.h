@@ -60,10 +60,27 @@ CheckExpression(Check_Context* context, AST_Node* expression)
         Check_Info lhs_info = CheckExpression(context, expression->binary_expr.left);
         CHECK_RETURN_ON_NOT_COMPLETE(lhs_info);
         
-        NOT_IMPLEMENTED;
-        Type_ID common_type;
-        Const_Val lhs;
-        Const_Val rhs;
+        Type_ID common_type = Type_CommonType(lhs_info.type, rhs_info.type);
+        
+        if (common_type == Type_None)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("No common type");
+        }
+        
+        bool lhs_representable, rhs_representable;
+        Const_Val lhs = ConstVal_ConvertTo(lhs_info.const_value, lhs_info.type, common_type, &lhs_representable);
+        Const_Val rhs = ConstVal_ConvertTo(rhs_info.const_value, rhs_info.type, common_type, &rhs_representable);
+        if (!lhs_representable)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("Lhs is not representable as the common type X");
+        }
+        if (!rhs_representable)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("Rhs is not representable as the common type X");
+        }
         
         if (expression->kind == AST_Mul)
         {
@@ -487,6 +504,35 @@ CheckExpression(Check_Context* context, AST_Node* expression)
     }
     else if (expression->kind == AST_Cast)
     {
+        Check_Info expr_info = CheckExpression(context, expression->cast_expr.expr);
+        CHECK_RETURN_ON_NOT_COMPLETE(expr_info);
+        
+        Check_Info type_info = CheckExpression(context, expression->cast_expr.type);
+        CHECK_RETURN_ON_NOT_COMPLETE(type_info);
+        
+        if (type_info.type != Type_Typeid ||
+            type_info.value_kind != Value_Constant)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("Destination type must be a constant value of type typeid");
+        }
+        else if (!Type_Exists(type_info.const_value.type_id))
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("Destination type does not exist");
+        }
+        else if (Type_IsCastableTo(expr_info.type, type_info.const_value.type_id))
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("Expression is not castable to the destination type");
+        }
+        
+        return (Check_Info){
+            .result = Check_Complete,
+            .type = type_info.const_value.type_id,
+            .value_kind = MAX(Value_Register, expr_info.value_kind),
+            .const_value = ConstVal_ConvertTo(expr_info.const_value, expr_info.type, type_info.const_value.type_id, 0),
+        };
         NOT_IMPLEMENTED;
     }
     else if (expression->kind == AST_Conditional)
@@ -506,6 +552,46 @@ CheckExpression(Check_Context* context, AST_Node* expression)
             CHECK_RETURN_ERROR("Condition of conditional expression must be of boolean type");
         }
         
+        Type_ID common_type = Type_CommonType(true_info.type, false_info.type);
+        
+        if (common_type == Type_None)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("No common type");
+        }
+        
+        bool is_true_rep, is_false_rep;
+        Const_Val true_clause  = ConstVal_ConvertTo(true_info.const_value, true_info.type, common_type, &is_true_rep);
+        Const_Val false_clause = ConstVal_ConvertTo(false_info.const_value, false_info.type, common_type, &is_false_rep);
+        if (!is_true_rep)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("True is not representable as the common type X");
+        }
+        if (!is_false_rep)
+        {
+            //// ERROR
+            CHECK_RETURN_ERROR("False clause is not representable as the common type X");
+        }
+        
+        if (condition_info.value_kind == Value_Constant)
+        {
+            bool clause = condition_info.const_value.boolean;
+            return (Check_Info){
+                .result      = Check_Complete,
+                .type        = common_type,
+                .value_kind  = (clause ? true_info.value_kind  : false_info.value_kind),
+                .const_value = (clause ? true_clause           : false_clause),
+            };
+        }
+        else
+        {
+            return (Check_Info){
+                .result     = Check_Complete,
+                .type       = common_type,
+                .value_kind = Value_Register,
+            };
+        }
         NOT_IMPLEMENTED;
     }
     else if (expression->kind == AST_Call)
