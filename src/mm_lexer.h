@@ -467,234 +467,192 @@ lexer->offset += 1;                   \
                 {
                     bool encountered_errors = false;
                     
-                    umm base      = 10;
-                    bool is_float = false;
-                    
-                    u64 integer              = 0;
-                    umm integer_digit_count  = 0;
-                    u64 fraction             = 0;
-                    umm fraction_digit_count = 0;
-                    i64 exponent             = 0;
-                    
-                    bool integer_overflow = false;
+                    umm base              = 10;
+                    umm digit_count       = 0;
+                    bool is_hex_float     = false;
+                    Big_Int integer       = {0};
                     
                     if (c[0] == '0')
                     {
-                        if      (c[1] == 'y') base = 32;
+                        if      (c[1] == 'z') base = 62;
+                        else if (c[1] == 's') base = 60;
+                        else if (c[1] == 'y') base = 32;
                         else if (c[1] == 'x') base = 16;
-                        else if (c[1] == 'h') base = 16, is_float = true;
+                        else if (c[1] == 'h') base = 16, is_hex_float = true;
+                        else if (c[1] == 'd') base = 12;
+                        else if (c[1] == 'o') base = 8;
                         else if (c[1] == 'b') base = 2;
                     }
                     
                     if (base != 10) lexer->offset += 1;
-                    else            integer = c[0] - '0', integer_digit_count += 1;
+                    else integer = BigInt_Add(integer, BigInt_FromU64(c[0] & 0xF)), ++digit_count;
                     
-                    while (lexer->offset < lexer->string.size)
+                    Big_Int big_base = BigInt_FromU64(base);
+                    
+                    while (!encountered_errors && lexer->offset < lexer->string.size)
                     {
-                        i8 digit = 0;
-                        
                         u8 ch = lexer->string.data[lexer->offset];
-                        if      (ch >= '0' && ch <= '9') digit = ch - '0';
-                        else if (ch >= 'a' && ch <= 'v') digit = (ch - 'a') + 10;
-                        else if (ch >= 'A' && ch <= 'V') digit = (ch - 'A') + 10;
+                        
+                        u8 offset;
+                        if      (ch >= '0' && ch <= '9') offset = 0;
+                        else if (ch >= 'A' && ch <= 'Z') offset = 10;
+                        else if (ch >= 'a' && ch <= 'z') offset = 36;
                         else if (ch == '_') continue;
                         else                break;
                         
+                        u8 digit = offset + (ch & 0xF);
+                        
                         if (digit >= base)
                         {
-                            //// ERROR: Invalid digit in base % constant
+                            //// ERROR: Base x digit is not representable in base x
                             encountered_errors = true;
-                            break;
                         }
                         else
                         {
                             lexer->offset += 1;
-                            
-                            u64 old_integer = integer;
-                            integer = integer*10 + digit;
-                            
-                            integer_overflow = (integer_overflow || old_integer > integer);
-                            integer_digit_count += 1;
+                            digit_count   += 1;
+                            integer = BigInt_Add(BigInt_Mul(integer, big_base), BigInt_FromU64(digit));
                         }
+                    }
+                    
+                    if (!encountered_errors && digit_count == 0)
+                    {
+                        ASSERT(base != 0);
+                        //// ERROR: Missing digits after base prefix
+                        encountered_errors = true;
                     }
                     
                     if (!encountered_errors)
                     {
-                        if (integer_digit_count == 0)
+                        if (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] == '.')
                         {
-                            //// ERROR: Missing digits after base % literal prefix
-                            encountered_errors = true;
-                        }
-                        else if (integer_overflow)
-                        {
-                            //// ERROR: Internal error. Literal is too large to be parsed by the lexer
-                            encountered_errors = true;
-                        }
-                        else
-                        {
-                            if (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] == '.')
+                            if (base != 10)
                             {
-                                if (is_float)
+                                //// ERROR: Invalid use of decimal point after base x literal
+                                encountered_errors = true;
+                            }
+                            else
+                            {
+                                Big_Int fraction         = {0};
+                                Big_Int exponent         = {0};
+                                umm fract_digit_count    = 0;
+                                umm exponent_digit_count = 0;
+                                
+                                lexer->offset += 1;
+                                
+                                while (!encountered_errors && lexer->offset < lexer->string.size)
                                 {
-                                    //// ERROR: Hexfloats must be separated from periods
-                                    encountered_errors = true;
-                                }
-                                else
-                                {
-                                    lexer->offset += 1;
+                                    u8 ch = lexer->string.data[lexer->offset];
                                     
-                                    integer_overflow = false;
-                                    while (lexer->offset < lexer->string.size)
-                                    {
-                                        i8 digit = 0;
-                                        
-                                        u8 ch = lexer->string.data[lexer->offset];
-                                        if      (ch >= '0' && ch <= '9') digit = ch - '0';
-                                        else if (ch == '_') continue;
-                                        else                break;
-                                        
-                                        lexer->offset += 1;
-                                        
-                                        u64 old_fraction = fraction;
-                                        
-                                        fraction = fraction*10 + digit;
-                                        
-                                        integer_overflow = (integer_overflow || old_fraction > fraction);
-                                        fraction_digit_count += 1;
-                                    }
+                                    u8 offset;
+                                    if      (ch >= '0' && ch <= '9') offset = 0;
+                                    else if (ch >= 'A' && ch <= 'Z') offset = 10;
+                                    else if (ch >= 'a' && ch <= 'z') offset = 36;
+                                    else if (ch == '_') continue;
+                                    else                break;
                                     
-                                    if (fraction_digit_count == 0)
+                                    u8 digit = offset + (ch & 0xF);
+                                    
+                                    if (digit >= base)
                                     {
-                                        //// ERROR: Missing digits after decimal point
-                                        encountered_errors = true;
-                                    }
-                                    else if (integer_overflow)
-                                    {
-                                        //// ERROR: Internal Error. Floating point literal has too many decimals to be parsed by the lexer
+                                        //// ERROR: Base x digit is not representable in base x
                                         encountered_errors = true;
                                     }
                                     else
                                     {
-                                        if (lexer->offset < lexer->string.size && (lexer->string.data[lexer->offset] == 'e' || lexer->string.data[lexer->offset] == 'E'))
-                                        {
-                                            if (base != 10)
-                                            {
-                                                //// ERROR: scientific notation is only allowed for base 10
-                                                encountered_errors = true;
-                                            }
-                                            else
-                                            {
-                                                lexer->offset += 1;
-                                                
-                                                umm exponent_digit_count = 0;
-                                                
-                                                imm sign = 1;
-                                                if (lexer->offset < lexer->string.size && (lexer->string.data[lexer->offset] == '+' || lexer->string.data[lexer->offset] == '-'))
-                                                {
-                                                    lexer->offset += 1;
-                                                    sign = (lexer->string.data[lexer->offset] == '+' ? 1 : -1);
-                                                }
-                                                
-                                                integer_overflow = false;
-                                                while (lexer->offset < lexer->string.size)
-                                                {
-                                                    i8 digit = 0;
-                                                    
-                                                    u8 ch = lexer->string.data[lexer->offset];
-                                                    if      (ch >= '0' && ch <= '9') digit = ch - '0';
-                                                    else if (ch == '_') continue;
-                                                    else                break;
-                                                    
-                                                    lexer->offset += 1;
-                                                    
-                                                    i64 old_exponent = exponent;
-                                                    
-                                                    exponent = exponent*10 + digit;
-                                                    
-                                                    integer_overflow = (integer_overflow || old_exponent > exponent);
-                                                    exponent_digit_count += 1;
-                                                }
-                                                
-                                                exponent *= sign;
-                                                
-                                                if (exponent_digit_count == 0)
-                                                {
-                                                    //// ERROR: Missing digits of exponent after scientific notation suffix
-                                                    encountered_errors = true;
-                                                }
-                                                else if (integer_overflow)
-                                                {
-                                                    //// ERROR: Internal Error. Exponent is long to be parsed by the lexer
-                                                    encountered_errors = true;
-                                                }
-                                            }
-                                        }
+                                        lexer->offset     += 1;
+                                        fract_digit_count += 1;
+                                        fraction = BigInt_Add(BigInt_Mul(fraction, big_base), BigInt_FromU64(digit));
                                     }
                                 }
-                            }
-                            
-                            if (!encountered_errors)
-                            {
-                                if (lexer->offset < lexer->string.size && IsAlpha(lexer->string.data[lexer->offset]))
+                                
+                                if (!encountered_errors && fract_digit_count == 0)
                                 {
-                                    //// ERROR: Numeric literals must be separated from identifiers be at least on non alphabetical character
+                                    //// ERROR: Missing digits after decimal point
                                     encountered_errors = true;
+                                }
+                                else if (lexer->offset < lexer->string.size &&
+                                         (lexer->string.data[lexer->offset] == 'e' ||
+                                          lexer->string.data[lexer->offset] == 'E'))
+                                {
+                                    lexer->offset += 1;
+                                    
+                                    exponent = BigInt_FromU64(1);
+                                    if (lexer->offset < lexer->string.size)
+                                    {
+                                        if      (lexer->string.data[lexer->offset] == '+') lexer->offset += 1;
+                                        else if (lexer->string.data[lexer->offset] == '-')
+                                        {
+                                            lexer->offset += 1;
+                                            exponent = BigInt_Neg(exponent);
+                                        }
+                                    }
+                                    
+                                    while (!encountered_errors && lexer->offset < lexer->string.size)
+                                    {
+                                        u8 ch = lexer->string.data[lexer->offset];
+                                        
+                                        u8 offset;
+                                        if      (ch >= '0' && ch <= '9') offset = 0;
+                                        else if (ch >= 'A' && ch <= 'Z') offset = 10;
+                                        else if (ch >= 'a' && ch <= 'z') offset = 36;
+                                        else if (ch == '_') continue;
+                                        else                break;
+                                        
+                                        u8 digit = offset + (ch & 0xF);
+                                        
+                                        if (digit >= base)
+                                        {
+                                            //// ERROR: Base x digit is not representable in base x
+                                            encountered_errors = true;
+                                        }
+                                        else
+                                        {
+                                            lexer->offset        += 1;
+                                            exponent_digit_count += 1;
+                                            exponent = BigInt_Add(BigInt_Mul(exponent, big_base), BigInt_FromU64(digit));
+                                        }
+                                    }
+                                    
+                                    if (!encountered_errors && exponent_digit_count == 0)
+                                    {
+                                        //// ERROR: Missing digits after exponent prefix
+                                        encountered_errors = true;
+                                    }
+                                }
+                                
+                                if (!encountered_errors)
+                                {
+                                    token.kind     = Token_Float;
+                                    token.floating = BigFloat_FromBigParts(integer, fraction, exponent);
                                 }
                             }
                         }
-                    }
-                    
-                    if (!encountered_errors)
-                    {
-                        if (is_float && base == 16)
+                        else if (is_hex_float)
                         {
-                            if (integer_digit_count == 8)
+                            if (!IS_POW_OF_2(digit_count) || digit_count < 2 || digit_count > 8)
                             {
-                                f32 f;
-                                Copy((u32*)&integer, &f, sizeof(u32));
-                                
-                                token.kind     = Token_Float;
-                                token.floating = BigFloat_FromF64(f);
+                                //// ERROR: Invalid digit count for hex float
+                                encountered_errors = true;
                             }
-                            else if (integer_digit_count == 16)
+                            else if (digit_count == 2)
                             {
-                                f64 f;
-                                Copy(&integer, &f, sizeof(u64));
-                                
-                                token.kind     = Token_Float;
-                                token.floating = BigFloat_FromF64(f);
+                                NOT_IMPLEMENTED;
+                            }
+                            else if (digit_count == 4)
+                            {
+                                NOT_IMPLEMENTED;
                             }
                             else
                             {
-                                //// ERROR: Invalid digit count for hex float. Hex floats must be either 4, 8 or 16 digits long
-                                encountered_errors = true;
+                                ASSERT(digit_count == 8);
+                                NOT_IMPLEMENTED;
                             }
-                        }
-                        else if (is_float)
-                        {
-                            token.kind = Token_Float;
-                            
-                            // HACK
-                            f64 f = (f64)integer;
-                            
-                            f64 adj = 1;
-                            for (umm i = 0; i < fraction_digit_count; ++i) adj *= 10;
-                            
-                            f += fraction / adj;
-                            
-                            adj = 1;
-                            if (exponent < 0) for (umm i = 0; i < (umm)-exponent; ++i) adj /= 10;
-                            else              for (umm i = 0; i < (umm) exponent; ++i) adj *= 10;
-                            
-                            f *= adj;
-                            
-                            token.floating = BigFloat_FromF64(f);
-                            //
                         }
                         else
                         {
                             token.kind    = Token_Int;
-                            token.integer = BigInt_FromU64(integer);
+                            token.integer = integer;
                         }
                     }
                 }

@@ -143,10 +143,19 @@ typedef struct File
 
 typedef struct MM_State
 {
-    struct Arena* file_arena;
-    struct Arena* misc_arena;
-    struct Arena* ast_arena;
-    struct Arena* string_arena;
+    union
+    {
+        struct
+        {
+            struct Arena* file_arena;
+            struct Arena* misc_arena;
+            struct Arena* ast_arena;
+            struct Arena* string_arena;
+        };
+        
+        struct Arena* arena_bank[4];
+    };
+    
     File* first_file;
     File** next_file;
     struct AST_Node* first_parsed_ast;
@@ -220,10 +229,10 @@ MM_Init()
 {
     bool encountered_errors = false;
     
-    MM.file_arena   = Arena_Init();
-    MM.misc_arena   = Arena_Init();
-    MM.ast_arena    = Arena_Init();
-    MM.string_arena = Arena_Init();
+    for (umm i = 0; i < ARRAY_SIZE(MM.arena_bank); ++i)
+    {
+        MM.arena_bank[i] = Arena_Init();
+    }
     
     String keywords[KEYWORD_KIND_COUNT] = {
         [Keyword_Include]  = STRING("include"),

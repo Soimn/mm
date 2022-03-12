@@ -292,6 +292,16 @@ BigFloat_FromF64(f64 val)
     };
 }
 
+internal Big_Float
+BigFloat_FromBigParts(Big_Int integer, Big_Int fraction, Big_Int exponent)
+{
+    Big_Float result = {0};
+    
+    NOT_IMPLEMENTED;
+    
+    return result;
+}
+
 internal inline Big_Float
 BigFloat_Neg(Big_Float val)
 {

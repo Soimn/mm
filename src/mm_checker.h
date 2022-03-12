@@ -533,7 +533,6 @@ CheckExpression(Check_Context* context, AST_Node* expression)
             .value_kind = MAX(Value_Register, expr_info.value_kind),
             .const_value = ConstVal_ConvertTo(expr_info.const_value, expr_info.type, type_info.const_value.type_id, 0),
         };
-        NOT_IMPLEMENTED;
     }
     else if (expression->kind == AST_Conditional)
     {
@@ -592,7 +591,6 @@ CheckExpression(Check_Context* context, AST_Node* expression)
                 .value_kind = Value_Register,
             };
         }
-        NOT_IMPLEMENTED;
     }
     else if (expression->kind == AST_Call)
     {
