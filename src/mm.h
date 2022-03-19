@@ -129,7 +129,7 @@ typedef u64 File_Handle;
 struct Arena;
 internal inline void* System_ReserveMemory(umm size);
 internal inline bool System_CommitMemory(void* ptr, umm size);
-internal inline void System_FreeMemory(void* ptr, umm size);
+internal inline void System_FreeMemory(void* ptr);
 internal bool System_OpenFile(String path, File_Handle* handle);
 internal bool System_ReadFile(File_Handle handle, struct Arena* arena, String* string);
 internal bool System_FileHandlesAreEqual(File_Handle a, File_Handle b);
@@ -143,18 +143,10 @@ typedef struct File
 
 typedef struct MM_State
 {
-    union
-    {
-        struct
-        {
-            struct Arena* file_arena;
-            struct Arena* misc_arena;
-            struct Arena* ast_arena;
-            struct Arena* string_arena;
-        };
-        
-        struct Arena* arena_bank[4];
-    };
+    struct Arena* file_arena;
+    struct Arena* misc_arena;
+    struct Arena* ast_arena;
+    struct Arena* string_arena;
     
     File* first_file;
     File** next_file;
@@ -229,10 +221,12 @@ MM_Init()
 {
     bool encountered_errors = false;
     
-    for (umm i = 0; i < ARRAY_SIZE(MM.arena_bank); ++i)
-    {
-        MM.arena_bank[i] = Arena_Init();
-    }
+    ZeroStruct(&MM);
+    
+    MM.file_arena   = Arena_Init(GB(8));
+    MM.misc_arena   = Arena_Init(GB(8));
+    MM.ast_arena    = Arena_Init(GB(8));
+    MM.string_arena = Arena_Init(GB(8));
     
     String keywords[KEYWORD_KIND_COUNT] = {
         [Keyword_Include]  = STRING("include"),
@@ -343,3 +337,41 @@ MM_IncludeFile(String path)
     
     return !encountered_errors;
 }
+
+typedef enum COMPILER_MESSAGE_KIND
+{
+    CompilerMessage_LoadedFile,
+    CompilerMessage_ParsedFile,
+    CompilerMessage_CheckedDecl,
+    
+    CompilerMessage_Error,
+    CompilerMessage_Warning,
+} COMPILER_MESSAGE_KIND;
+
+typedef struct Compiler_Message
+{
+    COMPILER_MESSAGE_KIND kind;
+    
+    union
+    {
+        struct
+        {
+            // filename, path
+            // contents
+            // who asked for this file
+        } loaded_file;
+        
+        struct
+        {
+            // which file
+            // ast
+        } parsed_file;
+        
+        struct
+        {
+            // which file
+            // ast
+            // type information
+        } checked_decl;
+    };
+} Compiler_Message;

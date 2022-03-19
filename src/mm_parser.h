@@ -472,7 +472,7 @@ ParsePrimaryExpression(Parser_State* state, AST_Node** expression)
         else
         {
             *expression = PushNode(state, AST_Identifier);
-            (*expression)->identifier = token.identifier;
+            (*expression)->identifier.name = token.identifier;
             
             NextToken(state);
         }
@@ -700,6 +700,13 @@ ParsePostfixExpression(Parser_State* state, AST_Node** expression)
                     }
                 }
             }
+            else if (EatTokenOfKind(state, Token_Hat))
+            {
+                AST_Node* operand  = *expression;
+                
+                *expression = PushNode(state, AST_Dereference);
+                (*expression)->unary_expr = operand;
+            }
             else break;
         }
     }
@@ -714,14 +721,9 @@ ParseTypeExpression(Parser_State* state, AST_Node** expression)
     AST_Node** slot = expression;
     while (!encountered_errors)
     {
-        if (EatTokenOfKind(state, Token_And))
+        if (EatTokenOfKind(state, Token_Hat))
         {
             *slot = PushNode(state, AST_Reference);
-            slot = &(*slot)->unary_expr;
-        }
-        else if (EatTokenOfKind(state, Token_Star))
-        {
-            *slot = PushNode(state, AST_Dereference);
             slot = &(*slot)->unary_expr;
         }
         else if (EatTokenOfKind(state, Token_OpenBracket))
@@ -752,8 +754,6 @@ ParseTypeExpression(Parser_State* state, AST_Node** expression)
     
     if (!encountered_errors)
     {
-        // NOTE: Casting to and constructing a typeid is illegal, therefore chaining .(), .[] or .{} will never
-        //       be legal. This is ignored in the parser and catched in the checker instead.
         while (!encountered_errors)
         {
             if (EatTokenOfKind(state, Token_OpenPeriodBrace))
@@ -1120,8 +1120,8 @@ ParseUsingExpressionVariableOrConstant(Parser_State* state, AST_Node** node)
                     if (!encountered_errors)
                     {
                         *node = PushNode(state, AST_Using);
-                        (*node)->using_statement.symbol = expressions;
-                        (*node)->using_statement.alias  = alias;
+                        (*node)->using_statement.expr  = expressions;
+                        (*node)->using_statement.alias = alias;
                     }
                 }
                 else
@@ -1259,7 +1259,8 @@ ParseStatement(Parser_State* state, AST_Node** statement)
                     {
                         token = NextToken(state);
                         
-                        if (token.kind == Token_Identifier && token.identifier == Keyword_If)
+                        if (token.kind == Token_Identifier && (token.identifier == Keyword_If ||
+                                                               token.identifier == Keyword_When))
                         {
                             if (!ParseStatement(state, &false_body))
                             {
@@ -1320,7 +1321,8 @@ ParseStatement(Parser_State* state, AST_Node** statement)
                     {
                         token = NextToken(state);
                         
-                        if (token.kind == Token_Identifier && token.identifier == Keyword_When)
+                        if (token.kind == Token_Identifier && (token.identifier == Keyword_When ||
+                                                               token.identifier == Keyword_If))
                         {
                             if (!ParseStatement(state, &false_body))
                             {

@@ -64,9 +64,9 @@ System_CommitMemory(void* ptr, umm size)
 }
 
 internal inline void
-System_FreeMemory(void* ptr, umm size)
+System_FreeMemory(void* ptr)
 {
-    VirtualFree(ptr, size, MEM_RELEASE);
+    VirtualFree(ptr, 0, MEM_RELEASE);
 }
 
 internal bool
@@ -149,7 +149,7 @@ System_CloseFile(File_Handle handle)
 void __stdcall
 WinMainCRTStartup()
 {
-    Win32_Arena = Arena_Init();
+    Win32_Arena = Arena_Init(GB(1));
     
     MM_Init();
     

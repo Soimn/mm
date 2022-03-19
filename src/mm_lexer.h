@@ -32,6 +32,7 @@ typedef enum TOKEN_KIND
     Token_Colon,                                         // :
     Token_Semicolon,                                     // ;
     Token_Underscore,                                    // _
+    Token_Hat,                                           // ^
     Token_QuestionMark,                                  // ?
     Token_Identifier,
     Token_String,
@@ -39,7 +40,6 @@ typedef enum TOKEN_KIND
     Token_Int,
     Token_Float,
     Token_Not,                                           // !
-    Token_Complement,                                    // ~
     Token_Elipsis,                                       // ..
     Token_ElipsisLess,                                   // ..<
     Token_Cash,                                          // $
@@ -71,7 +71,7 @@ typedef enum TOKEN_KIND
     Token_PlusEquals = Token_FirstAddLevelAssignment,    // +=
     Token_MinusEquals,                                   // -=
     Token_OrEquals,                                      // |=
-    Token_HatEquals,                                     // ^=
+    Token_ComplementEquals,                              // ~=
     Token_LastAddLevelAssignment = 4*16 - 1,
     
     Token_AndAndEquals = 5*16,                           // &&=
@@ -95,7 +95,7 @@ typedef enum TOKEN_KIND
     Token_Plus = Token_FirstAddLevel,                    // +
     Token_Minus,                                         // -
     Token_Or,                                            // |
-    Token_Hat,                                           // ^
+    Token_Complement,                                    // ~
     Token_LastAddLevel = 10*16 - 1,
     
     Token_FirstComparative = 10*16,
@@ -240,17 +240,17 @@ Lexer_NextToken(Lexer* lexer)
             case ',': token.kind = Token_Comma;        break;
             case ';': token.kind = Token_Semicolon;    break;
             case '?': token.kind = Token_QuestionMark; break;
-            case '~': token.kind = Token_Complement;   break;
+            case '^': token.kind = Token_Hat;          break;
             case '$': token.kind = Token_Cash;         break;
             
 #define SINGLE_OR_EQ(single_c, single, eq) \
 case single_c:                         \
 {                                      \
-token.kind = single;              \
+token.kind = single;               \
 if (c[1] == '=')                   \
 {                                  \
-token.kind = eq;              \
-lexer->offset += 1;                   \
+token.kind = eq;               \
+lexer->offset += 1;            \
 }                                  \
 } break
             
@@ -260,7 +260,7 @@ lexer->offset += 1;                   \
             SINGLE_OR_EQ('=', Token_Equals, Token_EqualEquals);
             SINGLE_OR_EQ('/', Token_Slash, Token_SlashEquals);
             SINGLE_OR_EQ('%', Token_Rem, Token_RemEquals);
-            SINGLE_OR_EQ('^', Token_Hat, Token_HatEquals);
+            SINGLE_OR_EQ('~', Token_Complement, Token_ComplementEquals);
             
 #undef SINGLE_OR_EQ
             
@@ -485,7 +485,7 @@ lexer->offset += 1;                   \
                     }
                     
                     if (base != 10) lexer->offset += 1;
-                    else integer = BigInt_Add(integer, BigInt_FromU64(c[0] & 0xF)), ++digit_count;
+                    else integer = BigInt_Add(integer, BigInt_FromU64(c[0] & 0x1F)), ++digit_count;
                     
                     Big_Int big_base = BigInt_FromU64(base);
                     
@@ -500,7 +500,7 @@ lexer->offset += 1;                   \
                         else if (ch == '_') continue;
                         else                break;
                         
-                        u8 digit = offset + (ch & 0xF);
+                        u8 digit = offset + (ch & 0x1F);
                         
                         if (digit >= base)
                         {
@@ -551,7 +551,7 @@ lexer->offset += 1;                   \
                                     else if (ch == '_') continue;
                                     else                break;
                                     
-                                    u8 digit = offset + (ch & 0xF);
+                                    u8 digit = offset + (ch & 0x1F);
                                     
                                     if (digit >= base)
                                     {
@@ -599,7 +599,7 @@ lexer->offset += 1;                   \
                                         else if (ch == '_') continue;
                                         else                break;
                                         
-                                        u8 digit = offset + (ch & 0xF);
+                                        u8 digit = offset + (ch & 0x1F);
                                         
                                         if (digit >= base)
                                         {

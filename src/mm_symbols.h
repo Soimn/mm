@@ -2,79 +2,64 @@ typedef enum SYMBOL_KIND
 {
     Symbol_Var,
     Symbol_Const,
+    
     Symbol_UsingLink,
-    Symbol_Parameter,
-    Symbol_StructMember,
-    Symbol_EnumMember,
+    
+    SYMBOL_KIND_COUNT,
 } SYMBOL_KIND;
 
 typedef struct Symbol
 {
-    SYMBOL_KIND kind;
-    bool is_complete;
+    struct Symbol* next;
+    Interned_String name;
+    u32 declaration_id;
+    u16 depth;
+    u16 index;
     
     union
     {
         struct
         {
-            Interned_String name;
             Type_ID type;
-        } variable;
+            Const_Val const_value;
+        };
         
         struct
         {
-            Interned_String name;
-            Type_ID type;
-            Const_Val value;
-        } constant;
-        
-        struct
-        {
-            Interned_String accessor; // NOTE: BLANK_IDENTIFIER counts as having no accessor
-            // link to symbol, this may not be in the same symbol table e.g. a: Struct; { using a; }
-            // restriction within scope
+            struct Symbol_Table* table;
         } using_link;
-        
-        struct
-        {
-            Interned_String name;
-            Type_ID type;
-            bool is_const;
-            Const_Val value;
-        } parameter;
-        
-        struct
-        {
-            Interned_String name;
-            Type_ID type;
-            //bool is_using;
-        } struct_member;
-        
-        struct
-        {
-            Interned_String name;
-            Type_ID underlying_type;
-            Type_ID enum_type;
-            Const_Val value;
-        } enum_member;
     };
 } Symbol;
 
-// TODO: Should the symbol table have a "parent table" instead of using a scope chain?
 typedef struct Symbol_Table
 {
-    bool _;
+    Arena* arena;
+    u32 hash_table_size;
+    Symbol* anonymous_links_head;
+    Symbol** anonymous_links_tail;
+    Symbol* hash_table[];
 } Symbol_Table;
 
+// IMPORTANT NOTE: The operates at the scope level, which means declaration order within the same scope is ignored
 internal Symbol*
-SymbolTable_GetSymbol(Symbol_Table* table, Interned_String name)
+SymbolTable_GetSymbol(Symbol_Table* table, Interned_String name, u16 search_origin_depth, u16 search_origin_index)
 {
-    Symbol* result = 0;
+    Symbol* symbol = table->hash_table[name % table->hash_table_size];
     
-    if (name != BLANK_IDENTIFIER)
+    for (; symbol != 0; symbol = symbol->next)
     {
-        NOT_IMPLEMENTED;
+        if      (symbol->name != name)                                                         continue;
+        else if (symbol->depth < search_origin_depth)                                          break;
+        else if (symbol->depth == search_origin_depth && symbol->index == search_origin_index) break;
+        else                                                                                   continue;
     }
     
-    return result;
+    for (Symbol* using_link = table->anonymous_links_head;
+         symbol == 0 && using_link != 0;
+         using_link = using_link->next)
+    {
+        symbol = SymbolTable_GetSymbol(using_link->table, 0, 0);
+    }
+    
+    return symbol;
 }

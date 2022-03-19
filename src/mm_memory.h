@@ -77,7 +77,6 @@ Memcmp(void* a, void* b, umm size)
     return result;
 }
 
-#define ARENA_RESERVATION_SIZE GB(1)
 #define ARENA_PAGE_SIZE KB(16)
 typedef struct Arena
 {
@@ -89,11 +88,11 @@ typedef struct Arena
 typedef u64 Arena_Marker;
 
 internal Arena*
-Arena_Init()
+Arena_Init(umm reservation_size)
 {
     Arena* arena = 0;
     
-    void* memory = System_ReserveMemory(ARENA_RESERVATION_SIZE);
+    void* memory = System_ReserveMemory(RoundUp(reservation_size, ARENA_PAGE_SIZE));
     
     if (memory == 0 || !System_CommitMemory(memory, ARENA_PAGE_SIZE))
     {
@@ -145,7 +144,7 @@ Arena_Clear(Arena* arena)
 internal inline void
 Arena_Free(Arena* arena)
 {
-    System_FreeMemory(arena->base, ARENA_RESERVATION_SIZE);
+    System_FreeMemory(arena->base);
     ZeroStruct(arena);
 }
 

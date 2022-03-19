@@ -135,7 +135,11 @@ typedef struct AST_Node
             struct AST_Node* operand;
         } poly;
         
-        Interned_String identifier;
+        struct
+        {
+            Interned_String name;
+        } identifier;
+        
         Interned_String string;
         Big_Int integer;
         Big_Float floating;
@@ -281,7 +285,7 @@ typedef struct AST_Node
         
         struct
         {
-            struct AST_Node* symbol;
+            struct AST_Node* expr;
             Interned_String alias;
         } using_statement;
         
