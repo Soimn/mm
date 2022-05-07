@@ -96,8 +96,7 @@ typedef struct Token
     
     union
     {
-        String_Literal string;
-        Identifier identifier;
+        Interned_String string;
         
         struct
         {
@@ -120,7 +119,7 @@ typedef struct Lexer
 } Lexer;
 
 internal Lexer
-Lexer_Init(u8* content)
+Lexer_Init(Workspace* workspace, u8* content)
 {
     return (Lexer){
         .content        = content,
@@ -133,7 +132,7 @@ Lexer_Init(u8* content)
 internal bool Lexer__DecodeCharacter(u8** cursor, u8* result);
 
 internal Token
-Lexer_Advance(Lexer* lexer)
+Lexer_Advance(Workspace* workspace, Lexer* lexer)
 {
     Token token = { .kind = Token_Invalid, .offset_raw = (u32)(lexer->cursor - lexer->content) };
     
@@ -282,12 +281,26 @@ Lexer_Advance(Lexer* lexer)
                     ++identifier.size;
                 }
                 
-                Identifier identifier = ;
-                NOT_IMPLEMENTED;
+                u64 hash                      = String_Hash(identifier);
+                Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, identifier);
                 
+                if (*entry == 0)
+                {
+                    *entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + identifier.size, ALIGNOF(Interned_String_Entry));
+                    **entry = (Interned_String_Entry){
+                        .next = 0,
+                        .hash = hash,
+                        .string = {
+                            .data = (u8*)(*entry + 1),
+                            .size = identifier.size,
+                        },
+                    };
+                    
+                    Copy(identifier.data, *entry + 1, identifier.size);
+                }
                 
-                token.kind       = Token_Identifier;
-                token.identifier = identifier;
+                token.kind   = Token_Identifier;
+                token.string = (Interned_String)*entry;
             }
             else if (c >= '0' && c <= '9')
             {
@@ -462,7 +475,7 @@ Lexer_Advance(Lexer* lexer)
             {
                 bool encountered_errors = false;
                 
-                String_Literal string_literal = EMPTY_STRING_LITERAL;
+                Interned_String interned_string = INTERNED_STRING_NIL;
                 
                 if (*lexer->cursor != '"')
                 {
@@ -484,9 +497,18 @@ Lexer_Advance(Lexer* lexer)
                     }
                     else
                     {
+                        Arena_Marker marker = Arena_BeginTemp(workspace->string_arena);
+                        
+                        Interned_String_Entry* new_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
+                        *new_entry = (Interned_String_Entry){
+                            .next = 0,
+                            .hash = hash,
+                            .size = raw_string.size,
+                        };
+                        
                         u8* raw_string_cursor = raw_string.data;
                         String string = {
-                            .data = ,
+                            .data = (u8*)(new_entry + 1),
                             .size = 0,
                         };
                         
@@ -499,11 +521,20 @@ Lexer_Advance(Lexer* lexer)
                             }
                         }
                         
-                        if (!encountered_errors)
+                        if (encountered_errors) Arena_EndTemp(workspace->string_arena, marker);
+                        else
                         {
-                            NOT_IMPLEMENTED;
+                            u64 hash                      = String_Hash(string);
+                            Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, string);
                             
-                            string_literal = ;
+                            if (*entry != 0) Arena_EndTemp(workspace->string_arena, marker);
+                            else
+                            {
+                                Arena_ReifyTemp(workspace->string_arena, marker);
+                                *entry = new_entry;
+                            }
+                            
+                            interned_string = (Interned_String)*entry;
                         }
                     }
                 }
@@ -514,7 +545,7 @@ Lexer_Advance(Lexer* lexer)
                     ++lexer->cursor;
                     
                     token.kind   = Token_String;
-                    token.string = string_literal;
+                    token.string = interned_string;
                 }
             }
             else if (c == '\'')

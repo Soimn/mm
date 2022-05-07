@@ -90,13 +90,60 @@ typedef struct String
 // NOTE: This is just a hack to work around a parsing bug in 4coder
 #define TYPEDEF_FUNC(return_val, name, ...) typedef return_val (*name)(__VA_ARGS__)
 
-typedef void* String_Literal;
-typedef void* Identifier;
+umm   System_PageSize();
+void* System_ReserveMemory(umm size);
+void  System_CommitMemory(void* ptr, umm size);
+void  System_FreeMemory(void* ptr);
 
-#define BLANK_IDENTIFIER 0
-#define EMPTY_STRING_LITERAL 0
+typedef enum KEYWORD_KIND
+{
+    Keyword_,
+    
+    KEYWORD_COUNT
+} KEYWORD_KIND;
+
+typedef struct Workspace
+{
+    Arena* string_arena;
+    u64 intern_const_thresh;
+    struct Interned_String_Entry* intern_table[512];
+} Workspace;
+
+internal u64
+String_Hash(String string)
+{
+    // TODO: hash function
+    return (string.size != 0 ? *string.data : 0);
+}
+
+internal bool
+String_Match(String s0, String s1)
+{
+    NOT_IMPLEMENTED;
+}
+
+typedef void* Interned_String;
+#define INTERNED_STRING_NIL 0
+
+typedef struct Interned_String_Entry
+{
+    struct Interned_String_Entry* next;
+    u64 hash;
+    u64 size;
+} Interned_String_Entry;
+
+internal Interned_String_Entry**
+InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
+{
+    Interned_String_Entry** entry = &workspace->intern_table[hash % sizeof(workspace->intern_table)];
+    
+    for (; *entry != 0 && (*entry)->hash != hash && !String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size }); entry = &(*entry)->next);
+    
+    return entry;
+}
 
 #include "mm_bignum.h"
+#include "mm_memory.h"
 #include "mm_lexer.h"
 
 #endif
