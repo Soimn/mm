@@ -169,51 +169,18 @@ Keyword_Dummy_Pad_##e = e + sizeof(s) - 1,
     Keyword_Dummy_Pad_Sentinel,
 };
 
-#if 0
 internal Interned_String_Entry**
 InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
 {
     Interned_String_Entry** entry = &workspace->intern_map[hash % ARRAY_SIZE(workspace->intern_map)];
     
-#if 0
     for (; *entry != 0; entry = &(*entry)->next)
     {
         if ((*entry)->hash == hash && String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })) break;
     }
-#else
-    for (; *entry != 0 && !((*entry)->hash == hash && String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })); entry = &(*entry)->next);
-#endif
     
     return entry;
 }
-#else
-internal Interned_String_Entry**
-InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
-{
-    Interned_String_Entry** entry = &workspace->intern_map[hash % ARRAY_SIZE(workspace->intern_map)];
-    
-#if 0
-    for (; *entry != 0; entry = &(*entry)->next)
-    {
-        if ((*entry)->hash != hash) continue;
-        else
-        {
-            String entry_string = {
-                .data = (*entry)->data,
-                .size = (*entry)->size,
-            };
-            
-            if (String_Match(string, entry_string)) break;
-        }
-    }
-#else
-    for (; *entry != 0 && ((*entry)->hash != hash || !String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })); entry = &(*entry)->next);
-#endif
-    
-    return entry;
-}
-#endif
-
 
 internal Interned_String
 InternedString__FromInternedStringEntry(Workspace* workspace, Interned_String_Entry* entry)
