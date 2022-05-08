@@ -129,7 +129,7 @@ Lexer_Init(Workspace* workspace, u8* content)
     };
 }
 
-internal bool Lexer__DecodeCharacter(u8** cursor, u8* result);
+internal bool Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement);
 
 internal Token
 Lexer_Advance(Workspace* workspace, Lexer* lexer)
@@ -143,7 +143,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
         {
             ++lexer->cursor;
             ++lexer->line;
-            lexer->offset_to_line = lexer->cursor - lexer->content;
+            lexer->offset_to_line = (u32)(lexer->cursor - lexer->content);
         }
         else if (lexer->cursor[0] == '/' && lexer->cursor[1] == '*')
         {
@@ -290,13 +290,10 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     **entry = (Interned_String_Entry){
                         .next = 0,
                         .hash = hash,
-                        .string = {
-                            .data = (u8*)(*entry + 1),
-                            .size = identifier.size,
-                        },
+                        .size = identifier.size,
                     };
                     
-                    Copy(identifier.data, *entry + 1, identifier.size);
+                    Copy(identifier.data, (*entry)->data, identifier.size);
                 }
                 
                 token.kind   = Token_Identifier;
@@ -330,7 +327,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     }
                 }
                 
-                umm pase_base = (umm)base;
+                umm parse_base = (umm)base;
                 if (base == -1)
                 {
                     integer      = BigInt_FromU64(c - '0');
@@ -347,18 +344,18 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     else if (*lexer->cursor >= 'a' && *lexer->cursor <= 'x') digit = *lexer->cursor & 0x1F + 25;
                     else if (*lexer->cursor == '_')
                     {
-                        ++lexer->current;
+                        ++lexer->cursor;
                         continue;
                     }
                     else if (is_float == -1 && *lexer->cursor == '.')
                     {
                         is_float = true;
-                        ++lexer->current;
+                        ++lexer->cursor;
                         break;
                     }
                     else break;
                     
-                    if (digit >= base)
+                    if (digit >= (umm)base)
                     {
                         //// ERROR: digit is too large for current base in numeric literal
                         encountered_errors = true;
@@ -368,7 +365,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                         integer      = BigInt_MulAddU64(integer, parse_base, digit, &status);
                         digit_count += 1;
                         
-                        ++lexer->current;
+                        ++lexer->cursor;
                     }
                 }
                 
@@ -429,11 +426,16 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                     
                                     while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
                                     {
-                                        fractional = BigInt_MulAddU64(fractional, 10, *lexer->cursor & 0xF);
+                                        fractional = BigInt_MulAddU64(fractional, 10, *lexer->cursor & 0xF, &status);
                                         ++lexer->cursor;
                                     }
                                     
-                                    if (*lexer->cursor == 'e')
+                                    if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
+                                    {
+                                        //// ERROR: Fractional part of numeric literal contains too many digits to be representable by any type
+                                        encountered_errors = true;
+                                    }
+                                    else if (*lexer->cursor == 'e')
                                     {
                                         ++lexer->cursor;
                                         
@@ -448,8 +450,14 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                         }
                                         else while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
                                         {
-                                            exponent = BigInt_MulAddU64(exponent, 10, *lexer->cursor & 0xF);
+                                            exponent = BigInt_MulAddU64(exponent, 10, *lexer->cursor & 0xF, &status);
                                             ++lexer->cursor;
+                                        }
+                                        
+                                        if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
+                                        {
+                                            //// ERROR: Exponent part of numeric literal contains too many digits to be representable by any type
+                                            encountered_errors = true;
                                         }
                                     }
                                     
@@ -475,7 +483,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
             {
                 bool encountered_errors = false;
                 
-                Interned_String interned_string = INTERNED_STRING_NIL;
+                Interned_String interned_string = EMPTY_STRING;
                 
                 if (*lexer->cursor != '"')
                 {
@@ -500,11 +508,6 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                         Arena_Marker marker = Arena_BeginTemp(workspace->string_arena);
                         
                         Interned_String_Entry* new_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
-                        *new_entry = (Interned_String_Entry){
-                            .next = 0,
-                            .hash = hash,
-                            .size = raw_string.size,
-                        };
                         
                         u8* raw_string_cursor = raw_string.data;
                         String string = {
@@ -531,7 +534,12 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             else
                             {
                                 Arena_ReifyTemp(workspace->string_arena, marker);
-                                *entry = new_entry;
+                                
+                                **entry = (Interned_String_Entry){
+                                    .next = 0,
+                                    .hash = hash,
+                                    .size = raw_string.size,
+                                };
                             }
                             
                             interned_string = (Interned_String)*entry;
@@ -576,7 +584,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     else                       codepoint = (u32)(bytes[0] & 0x07) << 18 | (u32)(bytes[1] & 0x3F) << 12 | (u32)(bytes[2] & 0x3F) << 6 | (u32)(bytes[3] & 0x3F);
                     
                     token.kind    = Token_Character;
-                    token.big_int = BigInt_FromU64(codepoint);
+                    token.integer = BigInt_FromU64(codepoint);
                 }
             }
         } break;
@@ -616,6 +624,7 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
             {
                 umm digit_count = (**cursor == 'x' ? 2 : (**cursor == 'u' ? 4 : 8));
                 
+                umm codepoint;
                 for (umm i = 0; i < digit_count; ++i)
                 {
                     if      ((*cursor)[1] >= '0' && (*cursor)[1] <= '9') codepoint = codepoint << 4 | ((*cursor)[1] & 0x0F);
@@ -676,8 +685,6 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
     }
     else if ((**cursor & 0x80) != 0)
     {
-        bool succeeded = false;
-        
         umm length = 1;
         if      ((**cursor & 0xF8) == 0xF0) length = 4;
         else if ((**cursor & 0xF0) == 0xE0) length = 3;
@@ -696,7 +703,7 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
             
             for (umm i = 0; i < length; ++i, ++cursor)
             {
-                if ((**cusor & 0xC0) == 0x80) *result++ = **cursor;
+                if ((**cursor & 0xC0) == 0x80) *result++ = **cursor;
                 else
                 {
                     //// ERROR: Missing sequence byte in UTF-8 codepoint
@@ -709,5 +716,5 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
     
     *cursor += 1;
     
-    return !enocuntered_errors;
+    return !encountered_errors;
 }

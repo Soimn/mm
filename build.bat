@@ -5,7 +5,7 @@ if "%Platform%" neq "x64" (
     exit /b 1
 )
 
-set "diag_options= /nologo /FC /diagnostics:column /W4"
+set "diag_options= /nologo /FC /diagnostics:column /W4 /wd4204 /wd4100 /wd4201 /wd4200"
 set "nocrt_options= /Zl /GR- /GS- /Gs9999999"
 set "link_options= /INCREMENTAL:NO /opt:ref /STACK:0x100000,0x100000 /NODEFAULTLIB /SUBSYSTEM:console"
 

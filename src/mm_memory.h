@@ -25,7 +25,7 @@ AlignOffset(void* ptr, u8 alignment)
 internal void
 Copy(void* src, void* dst, umm size)
 {
-    for (umm i = 0; i < size; ++size) ((u8*)dst)[i] = ((u8*)src)[i];
+    for (umm i = 0; i < size; ++i) ((u8*)dst)[i] = ((u8*)src)[i];
 }
 
 internal void
@@ -35,13 +35,13 @@ Move(void* src, void* dst, umm size)
     u8* bdst = (u8*)dst;
     
     if (bdst <= bsrc || bsrc + size < bdst) Copy(src, dst, size);
-    else for (umm i = 0; i < size; ++size) ((u8*)dst)[size - i] = ((u8*)src)[size - i];
+    else for (umm i = 0; i < size; ++i) ((u8*)dst)[size - i] = ((u8*)src)[size - i];
 }
 
 internal void
 Zero(void* ptr, umm size)
 {
-    for (umm i = 0; i < size; ++size) ((u8*)ptr)[i] = 0;
+    for (umm i = 0; i < size; ++i) ((u8*)ptr)[i] = 0;
 }
 
 #define ZeroStruct(S) Zero((S), sizeof(*(S)))
@@ -70,7 +70,7 @@ Arena_Init(u8 num_pages_per_commit)
     *arena = (Arena){
         .offset      = 0,
         .space       = commit_size,
-        .commit_size = commis_size,
+        .commit_size = commit_size,
     };
     
     return arena;
@@ -84,7 +84,12 @@ Arena_PushSize(Arena* arena, umm size, u8 alignment)
     
     umm advancement = ((u8*)result + size) - cursor;
     
-    if (advancement > arena->space) System_CommitMemory(cursor + arena->space, arena->commit_size);
+    if (advancement > arena->space)
+    {
+        umm commit_size = (size <= arena->commit_size ? arena->commit_size : RoundUp(size, System_PageSize()));
+        System_CommitMemory(cursor + arena->space, commit_size);
+        arena->space += commit_size;
+    }
     
     arena->offset += advancement;
     arena->space  -= advancement;
