@@ -95,43 +95,18 @@ void* System_ReserveMemory(umm size);
 void  System_CommitMemory(void* ptr, umm size);
 void  System_FreeMemory(void* ptr);
 
-typedef u64 Interned_String;
-#define INTERNED_STRING_NIL 0
-#define EMPTY_STRING 1
-#define BLANK_IDENTIFIER 2
-#define SPECIAL_STRING_COUNT 3
-
-typedef enum KEYWORD_KIND
+typedef struct Interned_String_Entry
 {
-    Keyword_Include = SPECIAL_STRING_COUNT,
-    Keyword_Proc,
-    Keyword_Struct,
-    Keyword_Union,
-    Keyword_Enum,
-    Keyword_True,
-    Keyword_False,
-    Keyword_As,
-    Keyword_If,
-    Keyword_Else,
-    Keyword_While,
-    Keyword_Break,
-    Keyword_Continue,
-    Keyword_Using,
-    Keyword_Defer,
-    Keyword_Return,
-    
-    KEYWORD_MAX
-} KEYWORD_KIND;
-
-#define KEYWORD_COUNT (KEYWORD_MAX - SPECIAL_STRING_COUNT)
+    struct Interned_String_Entry* next;
+    u64 hash;
+    u64 size;
+} Interned_String_Entry;
 
 typedef struct Workspace
 {
     struct Arena* workspace_arena;
-    struct Arena* string_arena;
-    u64 const_string_thresh;
-    String const_string_table[SPECIAL_STRING_COUNT + KEYWORD_COUNT];
-    struct Interned_String_Entry* intern_table[512];
+    struct Interned_String_Entry* intern_map[512];
+    Interned_String_Entry intern_array[];
 } Workspace;
 
 internal u64
@@ -154,20 +129,70 @@ String_Match(String s0, String s1)
     return result;
 }
 
-typedef struct Interned_String_Entry
-{
-    struct Interned_String_Entry* next;
-    u64 hash;
-    u64 size;
-    u8 data[];
-} Interned_String_Entry;
+typedef u64 Interned_String;
 
+#define INTERNED_STRING_NIL 0
+
+#define LIST_KEYWORDS()             \
+X(EMPTY_STRING,     "")         \
+X(BLANK_IDENTIFIER, "_")        \
+X(Keyword_Include,  "include")  \
+X(Keyword_Proc,     "proc")     \
+X(Keyword_Struct,   "struct")   \
+X(Keyword_Union,    "union")    \
+X(Keyword_Enum,     "enum")     \
+X(Keyword_True,     "true")     \
+X(Keyword_False,    "false")    \
+X(Keyword_As,       "as")       \
+X(Keyword_If,       "if")       \
+X(Keyword_Else,     "else")     \
+X(Keyword_While,    "while")    \
+X(Keyword_Break,    "break")    \
+X(Keyword_Continue, "continue") \
+X(Keyword_Using,    "using")    \
+X(Keyword_Defer,    "defer")    \
+X(Keyword_Return,   "return")   \
+
+enum
+{
+    Keyword_Dummy_Acc_Sentinel = sizeof(Interned_String_Entry),
+    
+#define X(e, s)                                                                                                     \
+Keyword_Dummy_Acc_##e,                                                                                          \
+e = ((Keyword_Dummy_Acc_##e - 1) + (sizeof(Interned_String_Entry) - 1)) & ~(sizeof(Interned_String_Entry) - 1), \
+Keyword_Dummy_Pad_##e = e + sizeof(s) - 1,
+    
+    LIST_KEYWORDS()
+        
+#undef X
+    
+    Keyword_Dummy_Pad_Sentinel,
+};
+
+#if 0
 internal Interned_String_Entry**
 InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
 {
-    Interned_String_Entry** entry = &workspace->intern_table[hash % ARRAY_SIZE(workspace->intern_table)];
+    Interned_String_Entry** entry = &workspace->intern_map[hash % ARRAY_SIZE(workspace->intern_map)];
     
-#if 1
+#if 0
+    for (; *entry != 0; entry = &(*entry)->next)
+    {
+        if ((*entry)->hash == hash && String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })) break;
+    }
+#else
+    for (; *entry != 0 && !((*entry)->hash == hash && String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })); entry = &(*entry)->next);
+#endif
+    
+    return entry;
+}
+#else
+internal Interned_String_Entry**
+InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
+{
+    Interned_String_Entry** entry = &workspace->intern_map[hash % ARRAY_SIZE(workspace->intern_map)];
+    
+#if 0
     for (; *entry != 0; entry = &(*entry)->next)
     {
         if ((*entry)->hash != hash) continue;
@@ -182,96 +207,73 @@ InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
         }
     }
 #else
-    for (; *entry != 0 && ((*entry)->hash != hash || !String_Match(string, (String){ .data = (*entry)->data, .size = (*entry)->size })); entry = &(*entry)->next);
+    for (; *entry != 0 && ((*entry)->hash != hash || !String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })); entry = &(*entry)->next);
 #endif
     
     return entry;
 }
+#endif
+
 
 internal Interned_String
-InternedString_GetFromString(Workspace* workspace, String string)
+InternedString__FromInternedStringEntry(Workspace* workspace, Interned_String_Entry* entry)
 {
-    u64 hash = String_Hash(string);
-    Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, string);
+    return (Interned_String)(entry - workspace->intern_array);
+}
+
+internal Interned_String
+InternedString_FromString(Workspace* workspace, String string)
+{
+    Interned_String_Entry** entry = InternedString__FindSpot(workspace, String_Hash(string), string);
     
-    Interned_String result = (Interned_String)*entry;
-    if (*entry != 0 && (umm)*entry < workspace->const_string_thresh)
-    {
-        ASSERT((umm)workspace->string_arena <= (umm)*entry);
-        
-        result = (Interned_String)(*entry)->data[(*entry)->size];
-        
-        ASSERT((umm)result < KEYWORD_MAX);
-    }
+    return (*entry == 0 ? INTERNED_STRING_NIL : *entry - workspace->intern_array);
+}
+
+internal String
+InternedString_ToString(Workspace* workspace, Interned_String string)
+{
+    Interned_String_Entry* entry = workspace->intern_array + string;
     
-    return result;
+    return (String){ .data = (u8*)(entry + 1), .size = entry->size };
 }
 
 internal bool
 InternedString_IsKeyword(Interned_String string)
 {
-    return ((umm)string >= SPECIAL_STRING_COUNT && (umm)string < KEYWORD_MAX);
+    return (string >= Keyword_Dummy_Acc_Sentinel && string < Keyword_Dummy_Pad_Sentinel);
 }
+
 
 #include "mm_bignum.h"
 #include "mm_memory.h"
-#include "mm_lexer.h"
+//#include "mm_lexer.h"
 
 Workspace*
 Workspace_Open()
 {
     Arena* workspace_arena = Arena_Init(1);
-    Arena* string_arena    = Arena_Init(2);
     
     Workspace* workspace = Arena_PushSize(workspace_arena, sizeof(Workspace), ALIGNOF(Workspace));
     ZeroStruct(workspace);
     
     *workspace = (Workspace){
         .workspace_arena = workspace_arena,
-        .string_arena    = string_arena,
-        .const_string_table = {
-            [INTERNED_STRING_NIL] = {0},
-            [EMPTY_STRING]        = STRING(""),
-            [BLANK_IDENTIFIER]    = STRING("_"),
-            [Keyword_Include]     = STRING("include"),
-            [Keyword_Proc]        = STRING("proc"),
-            [Keyword_Struct]      = STRING("struct"),
-            [Keyword_Union]       = STRING("union"),
-            [Keyword_Enum]        = STRING("enum"),
-            [Keyword_True]        = STRING("true"),
-            [Keyword_False]       = STRING("false"),
-            [Keyword_As]          = STRING("as"),
-            [Keyword_If]          = STRING("if"),
-            [Keyword_Else]        = STRING("else"),
-            [Keyword_While]       = STRING("while"),
-            [Keyword_Break]       = STRING("break"),
-            [Keyword_Continue]    = STRING("continue"),
-            [Keyword_Using]       = STRING("using"),
-            [Keyword_Defer]       = STRING("defer"),
-            [Keyword_Return]      = STRING("return"),
-        },
     };
     
-    for (umm i = 1; // NOTE: skip nil string
-         i < ARRAY_SIZE(workspace->const_string_table);
-         ++i)
-    {
-        String string = workspace->const_string_table[i];
-        u64 hash      = String_Hash(string);
-        Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, string);
-        
-        *entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + string.size + 1, ALIGNOF(Interned_String_Entry));
-        **entry = (Interned_String_Entry){
-            .next   = 0,
-            .hash   = hash,
-            .size   = string.size,
-        };
-        
-        Copy(string.data, (*entry)->data, string.size);
-        (*entry)->data[string.size] = (u8)i; // NOTE: Const strings store their id in a byte right after the string
-    }
+    Interned_String_Entry* nil_entry = Arena_PushSize(workspace->workspace_arena, sizeof(Interned_String_Entry), ALIGNOF(Interned_String_Entry));
+    ZeroStruct(nil_entry);
     
-    workspace->const_string_thresh = (u64)((u8*)(string_arena + 1) + string_arena->offset);
+#define X(e, s) Interned_String_Entry* e##_entry = Arena_PushSize(workspace->workspace_arena, sizeof(Interned_String_Entry) + sizeof(s) - 1, ALIGNOF(Interned_String_Entry)); \
+u64 e##_hash = String_Hash(STRING(s));                                                                                                                                    \
+Interned_String_Entry** e##_spot = InternedString__FindSpot(workspace, e##_hash, STRING(s));                                                                              \
+ASSERT(*e##_spot == 0);                                                                                                                                                   \
+*e##_spot = e##_entry;                                                                                                                                                    \
+*e##_entry = (Interned_String_Entry){ .hash = e##_hash, .size = sizeof(s) - 1 };                                                                                          \
+Copy(s, (u8*)(e##_entry + 1), sizeof(s) - 1);                                                                                                                             \
+    
+    LIST_KEYWORDS()
+        
+#undef X
     
     return workspace;
 }
@@ -279,8 +281,6 @@ Workspace_Open()
 void
 Workspace_Close(Workspace* workspace)
 {
-    Arena_Free(workspace->string_arena);
-    
     Arena_Free(workspace->workspace_arena);
 }
 
