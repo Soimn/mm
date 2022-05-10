@@ -152,6 +152,12 @@ typedef struct AST_Node
         
         struct
         {
+            struct AST_Node* expr;
+            Interned_String member;
+        } member_expr;
+        
+        struct
+        {
             struct AST_Node* array;
             struct AST_Node* index;
         } subscript_expr;

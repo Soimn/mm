@@ -31,6 +31,38 @@ PushNode(Parser* parser, AST_NODE_KIND kind)
     return 0;
 }
 
+internal bool ParseExpression(Parser* parser, AST_Node** expression);
+
+internal bool
+ParseNamedValueList(Parser* parser, AST_Node** list)
+{
+    bool encountered_errors = false;
+    
+    AST_Node** next = list;
+    while (!encountered_errors)
+    {
+        AST_Node* entry = PushNode(parser, AST_NamedValue);
+        *next = entry;
+        if (!ParseExpression(parser, &entry->named_value.value)) encountered_errors = true;
+        else
+        {
+            if (EatToken(parser, Token_Equals))
+            {
+                entry->named_value.name = entry->named_value.value;
+                if (!ParseExpression(parser, &entry->named_value.value)) encountered_errors = true;
+            }
+            
+            if (!encountered_errors)
+            {
+                if (EatToken(parser, Token_Comma)) continue;
+                else                               break;
+            }
+        }
+    }
+    
+    return !encountered_errors;
+}
+
 internal bool
 ParsePrimaryExpression(Parser* parser, AST_Node** expression)
 {
@@ -49,46 +81,187 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
     if (!ParsePrimaryExpression(parser, expression)) encountered_errors = true;
     else
     {
-        NOT_IMPLEMENTED;
+        while (!encountered_errors)
+        {
+            if (EatToken(parser, Token_Hat))
+            {
+                AST_Node* operand = *expression;
+                
+                *expression = PushNode(parser, AST_Dereference);
+                (*expression)->unary_expr = operand;
+            }
+            else if (EatToken(parser, Token_Period))
+            {
+                AST_Node* expr = *expression;
+                
+                Token token = GetToken(parser);
+                
+                if (token.kind != Token_Identifier)
+                {
+                    //// ERROR: Missing name of member to access
+                    encountered_errors = true;
+                }
+                else if (!InternedString_IsNonBlankIdentifier(token.string))
+                {
+                    //// ERROR: Member name must be a non blank identifier
+                    encountered_errors = true;
+                }
+                else
+                {
+                    NextToken(parser);
+                    
+                    *expression = PushNode(parser, AST_Member);
+                    (*expression)->member_expr.expr   = expr;
+                    (*expression)->member_expr.member = token.string;
+                }
+            }
+            else if (EatToken(parser, Token_OpenBracket))
+            {
+                AST_Node* array = *expression;
+                AST_Node* first = 0;
+                
+                if (GetToken(parser).kind != Token_Colon && !ParseExpression(parser, &first)) encountered_errors = true;
+                else
+                {
+                    if (!EatToken(parser, Token_Colon))
+                    {
+                        *expression = PushNode(parser, AST_Subscript);
+                        (*expression)->subscript_expr.array = array;
+                        (*expression)->subscript_expr.index = first;
+                    }
+                    else
+                    {
+                        AST_Node* start    = first;
+                        AST_Node* past_end = 0;
+                        
+                        if (GetToken(parser).kind != Token_CloseBracket && !ParseExpression(parser, &past_end)) encountered_errors = true;
+                        else
+                        {
+                            *expression = PushNode(parser, AST_Slice);
+                            (*expression)->slice_expr.array    = array;
+                            (*expression)->slice_expr.start    = start;
+                            (*expression)->slice_expr.past_end = past_end;
+                        }
+                    }
+                }
+                
+                if (!encountered_errors && !EatToken(parser, Token_CloseBracket))
+                {
+                    //// ERROR: Missing closing bracket after x
+                    encountered_errors = true;
+                }
+            }
+            else if (EatToken(parser, Token_OpenParen))
+            {
+                AST_Node* proc = *expression;
+                AST_Node* args = 0;
+                
+                if (!EatToken(parser, Token_CloseParen))
+                {
+                    if (!ParseNamedValueList(parser, &args)) encountered_errors = true;
+                    else if (!EatToken(parser, Token_CloseParen))
+                    {
+                        //// ERROR: Missing closing paren after arguments to call expr
+                        encountered_errors = true;
+                    }
+                }
+                
+                if (!encountered_errors)
+                {
+                    *expression = PushNode(parser, AST_Call);
+                    (*expression)->call_expr.proc = proc;
+                    (*expression)->call_expr.args = args;
+                }
+            }
+            else if (EatToken(parser, Token_PeriodOpenBrace))
+            {
+                AST_Node* type = *expression;
+                AST_Node* args = 0;
+                
+                if (!EatToken(parser, Token_CloseBrace))
+                {
+                    if (!ParseNamedValueList(parser, &args)) encountered_errors = true;
+                    else if (!EatToken(parser, Token_CloseBrace))
+                    {
+                        //// ERROR: Missing closing brace after arguments to struct literal
+                        encountered_errors = true;
+                    }
+                }
+                
+                if (!encountered_errors)
+                {
+                    *expression = PushNode(parser, AST_StructLiteral);
+                    (*expression)->struct_literal.type = type;
+                    (*expression)->struct_literal.args = args;
+                }
+            }
+            else if (EatToken(parser, Token_PeriodOpenBracket))
+            {
+                AST_Node* type = *expression;
+                AST_Node* args = 0;
+                
+                if (!EatToken(parser, Token_CloseBracket))
+                {
+                    if (!ParseNamedValueList(parser, &args)) encountered_errors = true;
+                    else if (!EatToken(parser, Token_CloseBracket))
+                    {
+                        //// ERROR: Missing closing bracket after arguments to array literal
+                        encountered_errors = true;
+                    }
+                }
+                
+                if (!encountered_errors)
+                {
+                    *expression = PushNode(parser, AST_ArrayLiteral);
+                    (*expression)->array_literal.type = type;
+                    (*expression)->array_literal.args = args;
+                }
+            }
+            else break;
+        }
     }
     
     return !encountered_errors;
 }
 
 internal bool
-ParseQualifierExpression(Parser* parser, AST_Node** expression)
+ParsePrefixExpression(Parser* parser, AST_Node** expression)
 {
     bool encountered_errors = false;
     
-    NOT_IMPLEMENTED;
-    
-    return !encountered_errors;
-}
-
-internal bool
-ParseLiteralExpression(Parser* parser, AST_Node** expression)
-{
-    bool encountered_errors = false;
-    
-    if (!ParsePrimaryExpression(parser, expression)) encountered_errors = true;
-    else if (EatToken(parser, Token_PeriodOpenBrace))
+    while (!encountered_errors)
     {
-        NOT_IMPLEMENTED;
+        if      (EatToken(parser, Token_Plus));
+        else if (EatToken(parser, Token_Minus)) expression = &(*expression = PushNode(parser, AST_Neg))->unary_expr;
+        else if (EatToken(parser, Token_Bang))  expression = &(*expression = PushNode(parser, AST_Not))->unary_expr;
+        else if (EatToken(parser, Token_Not))   expression = &(*expression = PushNode(parser, AST_BitNot))->unary_expr;
+        else if (EatToken(parser, Token_Hat))   expression = &(*expression = PushNode(parser, AST_Reference))->unary_expr;
+        else if (EatToken(parser, Token_OpenBracket))
+        {
+            if (EatToken(parser, Token_CloseBracket)) expression = &(*expression = PushNode(parser, AST_SliceType))->unary_expr;
+            else
+            {
+                AST_Node* size;
+                if (ParseExpression(parser, &size)) encountered_errors = true;
+                else if (!EatToken(parser, Token_CloseBracket))
+                {
+                    //// ERROR: Missing closing bracket after size in array type qualifier
+                    encountered_errors = true;
+                }
+                else
+                {
+                    AST_Node* array_type = PushNode(parser, AST_ArrayType);
+                    array_type->array_type.size = size;
+                    expression                  = &array_type->array_type.elem_type;
+                }
+            }
+        }
+        else
+        {
+            encountered_errors = !ParsePostfixExpression(parser, expression);
+            break;
+        }
     }
-    else if (EatToken(parser, Token_PeriodOpenBrace))
-    {
-        NOT_IMPLEMENTED;
-    }
-    
-    return !encountered_errors;
-}
-
-internal bool
-ParseUnaryExpression(Parser* parser, AST_Node** expression)
-{
-    bool encountered_errors = false;
-    
-    NOT_IMPLEMENTED;
     
     return !encountered_errors;
 }
@@ -98,7 +271,7 @@ ParseBinaryExpression(Parser* parser, AST_Node** expression)
 {
     bool encountered_errors = false;
     
-    if (!ParseUnaryExpression(parser, expression)) encountered_errors = true;
+    if (!ParsePrefixExpression(parser, expression)) encountered_errors = true;
     else
     {
         while (!encountered_errors)
@@ -110,7 +283,7 @@ ParseBinaryExpression(Parser* parser, AST_Node** expression)
             AST_Node** left = expression;
             AST_Node* right;
             
-            if (!ParseUnaryExpression(parser, &right)) encountered_errors = true;
+            if (!ParsePrefixExpression(parser, &right)) encountered_errors = true;
             else
             {
                 umm precedence = token.kind >> 4;
@@ -138,8 +311,8 @@ ParseExpression(Parser* parser, AST_Node** expression)
     else if (EatToken(parser, Token_QuestionMark))
     {
         AST_Node* condition  = *expression;
-        AST_Node* true_expr  = 0;
-        AST_Node* false_expr = 0;
+        AST_Node* true_expr;
+        AST_Node* false_expr;
         
         if (!ParseBinaryExpression(parser, &true_expr)) encountered_errors = true;
         else if (!EatToken(parser, Token_Colon))

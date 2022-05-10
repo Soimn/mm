@@ -212,6 +212,12 @@ InternedString_IsKeyword(Interned_String string)
     return (string >= Keyword_Dummy_Acc_Sentinel && string < Keyword_Dummy_Pad_Sentinel);
 }
 
+internal bool
+InternedString_IsNonBlankIdentifier(Interned_String string)
+{
+    return (string >= Keyword_Dummy_Pad_Sentinel);
+}
+
 
 #include "mm_bignum.h"
 #include "mm_memory.h"
