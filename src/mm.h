@@ -133,25 +133,27 @@ typedef u64 Interned_String;
 
 #define INTERNED_STRING_NIL 0
 
-#define LIST_KEYWORDS()             \
-X(EMPTY_STRING,     "")         \
-X(BLANK_IDENTIFIER, "_")        \
-X(Keyword_Include,  "include")  \
-X(Keyword_Proc,     "proc")     \
-X(Keyword_Struct,   "struct")   \
-X(Keyword_Union,    "union")    \
-X(Keyword_Enum,     "enum")     \
-X(Keyword_True,     "true")     \
-X(Keyword_False,    "false")    \
-X(Keyword_As,       "as")       \
-X(Keyword_If,       "if")       \
-X(Keyword_Else,     "else")     \
-X(Keyword_While,    "while")    \
-X(Keyword_Break,    "break")    \
-X(Keyword_Continue, "continue") \
-X(Keyword_Using,    "using")    \
-X(Keyword_Defer,    "defer")    \
-X(Keyword_Return,   "return")   \
+#define LIST_KEYWORDS()               \
+X(EMPTY_STRING,      "")          \
+X(BLANK_IDENTIFIER,  "_")         \
+X(Keyword_Include,   "include")   \
+X(Keyword_Proc,      "proc")      \
+X(Keyword_Struct,    "struct")    \
+X(Keyword_Union,     "union")     \
+X(Keyword_Enum,      "enum")      \
+X(Keyword_True,      "true")      \
+X(Keyword_False,     "false")     \
+X(Keyword_As,        "as")        \
+X(Keyword_If,        "if")        \
+X(Keyword_Else,      "else")      \
+X(Keyword_While,     "while")     \
+X(Keyword_Break,     "break")     \
+X(Keyword_Continue,  "continue")  \
+X(Keyword_Using,     "using")     \
+X(Keyword_Defer,     "defer")     \
+X(Keyword_Return,    "return")    \
+X(Keyword_Cast,      "cast")      \
+X(Keyword_Transmute, "transmute") \
 
 enum
 {
@@ -213,7 +215,9 @@ InternedString_IsKeyword(Interned_String string)
 
 #include "mm_bignum.h"
 #include "mm_memory.h"
-//#include "mm_lexer.h"
+#include "mm_lexer.h"
+#include "mm_ast.h"
+#include "mm_parser.h"
 
 Workspace*
 Workspace_Open()

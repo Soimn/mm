@@ -20,11 +20,16 @@ typedef enum TOKEN_KIND
     Token_Arrow,
     Token_TripleMinus,
     Token_Period,
+    Token_PeriodOpenParen,
+    Token_PeriodOpenBrace,
+    Token_PeriodOpenBracket,
     Token_Identifier,
     Token_String,
     Token_Character,
     Token_Int,
     Token_Float,
+    Token_Equals,
+    Token_Bang,
     
     Token_FirstAssignment = 3*16,
     Token_FirstMulLevelAssignment = Token_FirstAssignment,
@@ -44,19 +49,13 @@ typedef enum TOKEN_KIND
     Token_PlusEquals,
     Token_LastAddLevelAssignment = Token_PlusEquals,
     
-    Token_FirstCmpLevelAssignment = 5*16,
-    Token_GreaterEquals = Token_FirstCmpLevelAssignment,
-    Token_LessEquals,
-    Token_EqualsEquals,
-    Token_BangEquals,
-    Token_LastCmpLevelAssignment = Token_BangEquals,
-    
     Token_AndAndEquals = 6*16,
     
     Token_OrOrEquals = 7*16,
     Token_LastAssignment = Token_OrOrEquals,
     
-    Token_FirstMulLevel = 8*16,
+    Token_FirstBinary = 8*16,
+    Token_FirstMulLevel = Token_FirstBinary,
     Token_Star = Token_FirstMulLevel,
     Token_Slash,
     Token_Percent,
@@ -75,14 +74,17 @@ typedef enum TOKEN_KIND
     
     Token_FirstCmpLevel = 10*16,
     Token_Greater = Token_FirstCmpLevel,
+    Token_GreaterEquals,
     Token_Less,
-    Token_Equals,
-    Token_Bang,
-    Token_LastCmpLevel = Token_Bang,
+    Token_LessEquals,
+    Token_EqualsEquals,
+    Token_BangEquals,
+    Token_LastCmpLevel = Token_BangEquals,
     
     Token_AndAnd = 11*16,
     
     Token_OrOr = 12*16,
+    Token_LastBinary = Token_OrOr,
 } TOKEN_KIND;
 
 typedef struct Token
@@ -188,7 +190,6 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
         case '}': token.kind = Token_CloseBrace;   break;
         case ':': token.kind = Token_Colon;        break;
         case ',': token.kind = Token_Comma;        break;
-        case '.': token.kind = Token_Period;       break;
         case ';': token.kind = Token_Semicolon;    break;
         case '?': token.kind = Token_QuestionMark; break;
         case '^': token.kind = Token_Hat;          break;
@@ -261,6 +262,14 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
             else token.kind = Token_Less;
         } break;
         
+        case '.':
+        {
+            if      (*lexer->cursor == '(') ++lexer->cursor, token.kind = Token_PeriodOpenParen;
+            else if (*lexer->cursor == '{') ++lexer->cursor, token.kind = Token_PeriodOpenBrace;
+            else if (*lexer->cursor == '[') ++lexer->cursor, token.kind = Token_PeriodOpenBracket;
+            else                                             token.kind = Token_Period;
+        } break;
+        
         default:
         {
             if (c >= 'a' && c <= 'z' ||
@@ -286,18 +295,18 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 
                 if (*entry == 0)
                 {
-                    *entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + identifier.size, ALIGNOF(Interned_String_Entry));
+                    *entry = Arena_PushSize(workspace->workspace_arena, sizeof(Interned_String_Entry) + identifier.size, ALIGNOF(Interned_String_Entry));
                     **entry = (Interned_String_Entry){
                         .next = 0,
                         .hash = hash,
                         .size = identifier.size,
                     };
                     
-                    Copy(identifier.data, (*entry)->data, identifier.size);
+                    Copy(identifier.data, *entry + 1, identifier.size);
                 }
                 
                 token.kind   = Token_Identifier;
-                token.string = (Interned_String)*entry;
+                token.string = InternedString__FromInternedStringEntry(workspace, *entry);
             }
             else if (c >= '0' && c <= '9')
             {
@@ -505,9 +514,9 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     }
                     else
                     {
-                        Arena_Marker marker = Arena_BeginTemp(workspace->string_arena);
+                        Arena_Marker marker = Arena_BeginTemp(workspace->workspace_arena);
                         
-                        Interned_String_Entry* new_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
+                        Interned_String_Entry* new_entry = Arena_PushSize(workspace->workspace_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
                         
                         u8* raw_string_cursor = raw_string.data;
                         String string = {
@@ -524,16 +533,16 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             }
                         }
                         
-                        if (encountered_errors) Arena_EndTemp(workspace->string_arena, marker);
+                        if (encountered_errors) Arena_EndTemp(workspace->workspace_arena, marker);
                         else
                         {
                             u64 hash                      = String_Hash(string);
                             Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, string);
                             
-                            if (*entry != 0) Arena_EndTemp(workspace->string_arena, marker);
+                            if (*entry != 0) Arena_EndTemp(workspace->workspace_arena, marker);
                             else
                             {
-                                Arena_ReifyTemp(workspace->string_arena, marker);
+                                Arena_ReifyTemp(workspace->workspace_arena, marker);
                                 
                                 **entry = (Interned_String_Entry){
                                     .next = 0,
@@ -542,7 +551,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                 };
                             }
                             
-                            interned_string = (Interned_String)*entry;
+                            interned_string = InternedString__FromInternedStringEntry(workspace, *entry);
                         }
                     }
                 }
