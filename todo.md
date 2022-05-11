@@ -1,1 +1,9 @@
 * preserve comments and whitespace information in AST
+
+
+
+
+* todo for next devlog
+- changes to operator precedence
+- removal of .()
+- adding aliasing to using

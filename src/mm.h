@@ -60,7 +60,7 @@ typedef struct String
 #if MM_DEBUG
 #define ASSERT(EX) ((EX) ? 1 : (*(volatile int*)0 = 0))
 #else
-#define ASSERT(EX)
+#define ASSERT(EX) (void)(EX)
 #endif
 
 #define NOT_IMPLEMENTED ASSERT(!"NOT_IMPLEMENTED")
@@ -154,6 +154,7 @@ X(Keyword_Defer,     "defer")     \
 X(Keyword_Return,    "return")    \
 X(Keyword_Cast,      "cast")      \
 X(Keyword_Transmute, "transmute") \
+X(Keyword_Where, "where")         \
 
 enum
 {
@@ -210,6 +211,12 @@ internal bool
 InternedString_IsKeyword(Interned_String string)
 {
     return (string >= Keyword_Dummy_Acc_Sentinel && string < Keyword_Dummy_Pad_Sentinel);
+}
+
+internal bool
+InternedString_IsIdentifier(Interned_String string)
+{
+    return (string >= Keyword_Dummy_Pad_Sentinel || string == BLANK_IDENTIFIER);
 }
 
 internal bool

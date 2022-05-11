@@ -20,7 +20,6 @@ typedef enum TOKEN_KIND
     Token_Arrow,
     Token_TripleMinus,
     Token_Period,
-    Token_PeriodOpenParen,
     Token_PeriodOpenBrace,
     Token_PeriodOpenBracket,
     Token_Identifier,
@@ -99,6 +98,7 @@ typedef struct Token
     union
     {
         Interned_String string;
+        u32 character;
         
         struct
         {
@@ -264,8 +264,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
         
         case '.':
         {
-            if      (*lexer->cursor == '(') ++lexer->cursor, token.kind = Token_PeriodOpenParen;
-            else if (*lexer->cursor == '{') ++lexer->cursor, token.kind = Token_PeriodOpenBrace;
+            if      (*lexer->cursor == '{') ++lexer->cursor, token.kind = Token_PeriodOpenBrace;
             else if (*lexer->cursor == '[') ++lexer->cursor, token.kind = Token_PeriodOpenBracket;
             else                                             token.kind = Token_Period;
         } break;
@@ -592,8 +591,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     else if (advancement == 3) codepoint = (u32)(bytes[0] & 0x0F) << 12 | (u32)(bytes[1] & 0x3F) << 6  | (u32)(bytes[2] & 0x3F);
                     else                       codepoint = (u32)(bytes[0] & 0x07) << 18 | (u32)(bytes[1] & 0x3F) << 12 | (u32)(bytes[2] & 0x3F) << 6 | (u32)(bytes[3] & 0x3F);
                     
-                    token.kind    = Token_Character;
-                    token.integer = BigInt_FromU64(codepoint);
+                    token.kind      = Token_Character;
+                    token.character = codepoint;
                 }
             }
         } break;

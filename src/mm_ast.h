@@ -19,6 +19,7 @@ typedef enum AST_NODE_KIND
     AST_Compound,
     AST_Selector,
     AST_PolymorphicName,
+    AST_IntrinsicCall,
     
     AST_Dereference,
     AST_Member,
@@ -32,8 +33,6 @@ typedef enum AST_NODE_KIND
     
     AST_StructLiteral,
     AST_ArrayLiteral,
-    AST_Cast,
-    AST_Transmute,
     
     AST_Neg,
     AST_BitNot,
@@ -152,6 +151,12 @@ typedef struct AST_Node
         
         struct
         {
+            Interned_String proc;
+            struct AST_Node* args; // NOTE: 0 means no arguments
+        } intrinsic_call_expr;
+        
+        struct
+        {
             struct AST_Node* expr;
             Interned_String member;
         } member_expr;
@@ -198,18 +203,6 @@ typedef struct AST_Node
             struct AST_Node* args; // NOTE: 0 means all default values
         } array_literal;
         
-        struct
-        {
-            struct AST_Node* type; // NOTE: 0 means infered type
-            struct AST_Node* expr;
-        } cast_expr;
-        
-        struct
-        {
-            struct AST_Node* type; // NOTE: 0 means infered type
-            struct AST_Node* expr;
-        } transmute_expr;
-        
         struct AST_Node* unary_expr;
         
         struct
@@ -249,8 +242,7 @@ typedef struct AST_Node
             Interned_String label;      // NOTE: 0 means no label
         } while_statement;
         
-        Interned_String break_label;    // NOTE: 0 means no label
-        Interned_String continue_label; // NOTE: 0 means no label
+        Interned_String jump_label;    // NOTE: 0 means no label
         
         struct AST_Node* defer_statement; // NOTE: can only be a statement, or an expression with side effects
         
