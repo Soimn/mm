@@ -77,14 +77,217 @@ ParseNamedValueList(Parser* parser, AST_Node** list)
 internal bool
 ParseParameterList(Parser* parser, AST_Node** params)
 {
-    NOT_IMPLEMENTED;
+    AST_Node** next_param = params;
+    while (true)
+    {
+        AST_Node* name  = 0;
+        AST_Node* type  = 0;
+        AST_Node* value = 0;
+        bool is_using = false;
+        
+        Token token = GetToken(parser);
+        if (token.kind == Token_Identifier && token.string == Keyword_Using)
+        {
+            NextToken(parser);
+            is_using = true;
+        }
+        
+        if (!ParseExpression(parser, &type)) return false;
+        
+        if (EatToken(parser, Token_Colon))
+        {
+            name = type;
+            type = 0;
+            if (GetToken(parser).kind != Token_Equals && !ParseExpression(parser, &type)) return false;
+        }
+        
+        if (EatToken(parser, Token_Equals) && !ParseExpression(parser, &type)) return false;
+        
+        *next_param = PushNode(parser, AST_Parameter);
+        (*next_param)->parameter.name     = name;
+        (*next_param)->parameter.type     = type;
+        (*next_param)->parameter.value    = value;
+        (*next_param)->parameter.is_using = is_using;
+        
+        next_param = &(*next_param)->next;
+        
+        if (EatToken(parser, Token_Comma)) continue;
+        else                               break;
+    }
+    
     return true;
 }
 
 internal bool
 ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
 {
-    NOT_IMPLEMENTED;
+    bool is_using = false;
+    
+    Token token = GetToken(parser);
+    if (token.kind == Token_Identifier && token.string == Keyword_Using)
+    {
+        NextToken(parser);
+        is_using = true;
+    }
+    
+    AST_Node* expressions      = 0;
+    AST_Node** next_expression = &expressions;
+    while (true)
+    {
+        if (!ParseExpression(parser, next_expression)) return false;
+        
+        next_expression = &(*next_expression)->next;
+        
+        if (EatToken(parser, Token_Comma)) continue;
+        else                               break;
+    }
+    
+    if (EatToken(parser, Token_Colon))
+    {
+        bool is_const = false;
+        AST_Node* names       = expressions;
+        AST_Node* type        = 0;
+        AST_Node* values      = 0;
+        bool is_uninitialized = false;
+        
+        token = GetToken(parser);
+        if (token.kind != Token_Equals && token.kind != Token_Colon)
+        {
+            if (!ParseExpression(parser, &type)) return false;
+            
+            if (GetToken(parser).kind == Token_Comma)
+            {
+                //// ERROR: Multiple types are illegal
+                return false;
+            }
+        }
+        
+        token = GetToken(parser);
+        if (token.kind == Token_Equals || token.kind == Token_Colon)
+        {
+            is_const = (token.kind == Token_Colon);
+            NextToken(parser);
+            
+            if (EatToken(parser, Token_TripleMinus))
+            {
+                if (!is_const) is_uninitialized = true;
+                else
+                {
+                    //// ERROR: Constants must be initialized
+                    return false;
+                }
+            }
+            else
+            {
+                next_expression = &values;
+                while (true)
+                {
+                    if (!ParseExpression(parser, next_expression)) return false;
+                    
+                    next_expression = &(*next_expression)->next;
+                    
+                    if (EatToken(parser, Token_Comma)) continue;
+                    else                               break;
+                }
+            }
+        }
+        
+        if (is_const)
+        {
+            *statement = PushNode(parser, AST_Constant);
+            (*statement)->constant_decl.names    = names;
+            (*statement)->constant_decl.type     = type;
+            (*statement)->constant_decl.values   = values;
+            (*statement)->constant_decl.is_using = is_using;
+        }
+        else
+        {
+            *statement = PushNode(parser, AST_Variable);
+            (*statement)->variable_decl.names            = names;
+            (*statement)->variable_decl.type             = type;
+            (*statement)->variable_decl.values           = values;
+            (*statement)->variable_decl.is_using         = is_using;
+            (*statement)->variable_decl.is_uninitialized = is_uninitialized;
+        }
+    }
+    else
+    {
+        token = GetToken(parser);
+        
+        if (token.kind >= Token_FirstAssignment && token.kind <= Token_LastAssignment)
+        {
+            AST_NODE_KIND op = (token.kind == Token_Equals ? AST_Nil : token.kind + (Token_FirstMulLevel - Token_FirstMulLevelAssignment));
+            AST_Node* lhs = expressions;
+            AST_Node* rhs = 0;
+            
+            NextToken(parser);
+            
+            next_expression = &rhs;
+            while (true)
+            {
+                if (!ParseExpression(parser, next_expression)) return false;
+                
+                next_expression = &(*next_expression)->next;
+                
+                if (EatToken(parser, Token_Comma)) continue;
+                else                               break;
+            }
+            
+            *statement = PushNode(parser, AST_Assignment);
+            (*statement)->assignment_statement.lhs = lhs;
+            (*statement)->assignment_statement.rhs = rhs;
+            (*statement)->assignment_statement.op  = op;
+        }
+        else if (is_using)
+        {
+            AST_Node* symbol_paths = expressions;
+            Interned_String alias  = INTERNED_STRING_NIL;
+            
+            if (token.kind == Token_Identifier && token.string == Keyword_As)
+            {
+                token = NextToken(parser);
+                
+                if (token.kind != Token_Identifier)
+                {
+                    //// ERROR: Missing name of alias after 'as' keyword in using declaration
+                    return false;
+                }
+                else if (InternedString_IsKeyword(token.string))
+                {
+                    //// ERROR: Illegal use of keyword as alias
+                    return false;
+                }
+                else if (token.string == BLANK_IDENTIFIER)
+                {
+                    //// ERROR: Illegal use of keyword as alias
+                    return false;
+                }
+                else if (symbol_paths->next != 0)
+                {
+                    //// ERROR: Cannot alias multiple symbols under the same alias
+                    return false;
+                }
+                
+                alias = token.string;
+                NextToken(parser);
+            }
+            
+            *statement = PushNode(parser, AST_Using);
+            (*statement)->using_decl.symbol_paths = symbol_paths;
+            (*statement)->using_decl.alias        = alias;
+        }
+        else
+        {
+            if (expressions->next != 0)
+            {
+                //// ERROR: A list of expressions cannot be used by itself
+                return false;
+            }
+            
+            *statement = expressions;
+        }
+    }
+    
     return true;
 }
 
@@ -370,6 +573,21 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
         
         *expression = PushNode(parser, AST_Selector);
         (*expression)->selector_expr = enum_name;
+    }
+    else if (EatToken(parser, Token_Cash))
+    {
+        token = GetToken(parser);
+        if (token.kind != Token_Identifier)
+        {
+            //// ERROR: Missing name of polymorphic value
+            return false;
+        }
+        
+        Interned_String poly_name = token.string;
+        NextToken(parser);
+        
+        *expression = PushNode(parser, AST_PolymorphicName);
+        (*expression)->poly_name = poly_name;
     }
     else
     {
@@ -727,12 +945,8 @@ ParseStatement(Parser* parser, AST_Node** statement)
         {
             init = condition;
             
-            token = GetToken(parser);
-            if (token.kind != Token_Semicolon && !ParseAssignmentDeclarationOrExpression(parser, &condition)) return false;
-            else if (EatToken(parser, Token_Semicolon))
-            {
-                if (token.kind != Token_Semicolon && !ParseAssignmentDeclarationOrExpression(parser, &step)) return false;
-            }
+            if      (!ParseAssignmentDeclarationOrExpression(parser, &condition))                                 return false;
+            else if (EatToken(parser, Token_Semicolon) && !ParseAssignmentDeclarationOrExpression(parser, &step)) return false;
         }
         
         if (!EatToken(parser, Token_CloseParen))

@@ -28,10 +28,11 @@ typedef enum TOKEN_KIND
     Token_Int,
     Token_Float,
     Token_Equals,
-    Token_Bang,
     
-    Token_FirstAssignment = 3*16,
-    Token_FirstMulLevelAssignment = Token_FirstAssignment,
+    Token_FirstAssignment,
+    Token_Bang = Token_FirstAssignment,
+    
+    Token_FirstMulLevelAssignment = 3*16,
     Token_StarEquals = Token_FirstMulLevelAssignment,
     Token_SlashEquals,
     Token_PercentEquals,

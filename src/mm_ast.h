@@ -3,6 +3,7 @@ typedef enum AST_NODE_KIND
     AST_Nil = 0,
     
     AST_NamedValue,
+    AST_Parameter,
     
     AST_FirstExpression,
     AST_Identifier = AST_FirstExpression,
@@ -100,9 +101,17 @@ typedef struct AST_Node
     {
         struct
         {
-            struct AST_Node* name;  // NOTE: 0 means no name
+            struct AST_Node* name;  // NOTE: 0 means no name, this is not valid for enum members
             struct AST_Node* value;
         } named_value;
+        
+        struct
+        {
+            struct AST_Node* name;
+            struct AST_Node* type;  // NOTE: 0 means infered type
+            struct AST_Node* value; // NOTE: 0 means no value
+            bool is_using;
+        } parameter;
         
         Interned_String string;  // NOTE: 0 means ""
         u32 character;           // NOTE: 0 means '\x00'
@@ -259,8 +268,9 @@ typedef struct AST_Node
         {
             struct AST_Node* names;
             struct AST_Node* type;   // NOTE: 0 means infered type
-            struct AST_Node* values; // NOTE: 0 means uninitialized
+            struct AST_Node* values; // NOTE: 0 means default initialized
             bool is_using;
+            bool is_uninitialized;
         } variable_decl;
         
         struct
@@ -273,7 +283,7 @@ typedef struct AST_Node
         
         struct
         {
-            struct AST_Node* symbol_path;
+            struct AST_Node* symbol_paths;
             Interned_String alias; // NOTE: 0 means no alias
         } using_decl;
     };
