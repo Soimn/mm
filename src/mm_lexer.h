@@ -19,15 +19,17 @@ X(16, LexError_MissingUTF8SeqByte,       "Missing sequence byte in UTF-8 codepoi
 
 typedef enum LEXER_ERROR_CODE
 {
-#define X(i, e, s) e = i,
+    LEXER_ERROR_CODE_BASE_SENTINEL = LEXER_ERROR_CODE_BASE,
+    
+#define X(i, e, s) e = LEXER_ERROR_CODE_BASE_SENTINEL + i,
     LIST_LEXER_ERROR_CODES()
 #undef X
     
-    LEXER_ERROR_CODE_COUNT
+    LEXER_ERROR_CODE_MAX
 } LEXER_ERROR_CODE;
 
-char* LexerErrorCodeMessages[LEXER_ERROR_CODE_COUNT] = {
-#define X(i, e, s) [e] = s,
+char* LexerErrorCodeMessages[LEXER_ERROR_CODE_MAX - LEXER_ERROR_CODE_BASE_SENTINEL] = {
+#define X(i, e, s) [e - LEXER_ERROR_CODE_BASE_SENTINEL] = s,
     LIST_LEXER_ERROR_CODES()
 #undef X
 };
@@ -125,20 +127,14 @@ typedef struct Token
 {
     TOKEN_KIND kind;
     u32 offset_raw;
-    u32 offset;
-    u32 line;
-    u32 column;
-    u32 size;
+    Text_Interval text;
     
     union
     {
-        LEXER_ERROR_CODE error_code;
-        
         struct
         {
-            char* message;
-            u32 offset;
-            u32 size;
+            LEXER_ERROR_CODE code;
+            Text_Interval text;
         } error;
         
         Interned_String string;
@@ -166,12 +162,6 @@ typedef struct Lexer
     u32 line;
 } Lexer;
 
-internal void
-LexerError(LEXER_ERROR_CODE code)
-{
-    NOT_IMPLEMENTED;
-}
-
 internal Lexer
 Lexer_Init(Workspace* workspace, u8* content)
 {
@@ -183,7 +173,8 @@ Lexer_Init(Workspace* workspace, u8* content)
     };
 }
 
-internal bool Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement);
+internal bool Lexer__DecodeCharacter(Lexer* lexer, Token* token, u8** cursor, u8* result, umm* advancement);
+internal void Lexer__Error(Lexer* lexer, Token* token, LEXER_ERROR_CODE code, u8* start, u8* end);
 
 internal Token
 Lexer_Advance(Workspace* workspace, Lexer* lexer)
@@ -223,9 +214,9 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
         else break;
     }
     
-    token.offset = (u32)(lexer->cursor - lexer->content);
-    token.column = token.offset - lexer->offset_to_line;
-    token.line   = lexer->line;
+    token.text.offset = (u32)(lexer->cursor - lexer->content);
+    token.text.column = token.text.offset - lexer->offset_to_line;
+    token.text.line   = lexer->line;
     // NOTE: defer token.size = (u32)(lexer->cursor - lexer->content) - token.offset;
     
     u8 c = *lexer->cursor;
@@ -363,6 +354,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
             {
                 bool encountered_errors = false;
                 
+                u8* start       = lexer->cursor - 1;
                 imm is_float    = -1; // NOTE: is_float is ternary: -1 undecided, 0 false, 1 true
                 u8 base         = 0;
                 umm digit_count = 0;
@@ -417,8 +409,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     
                     if (digit >= (umm)parse_base)
                     {
-                        LexerError(LexError_DigitTooLarge);
-                        
+                        Lexer__Error(lexer, &token, LexError_DigitTooLarge, lexer->cursor, lexer->cursor + 1);
                         encountered_errors = true;
                     }
                     else
@@ -434,8 +425,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 {
                     if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
                     {
-                        LexerError(LexError_TooManyDigits);
-                        
+                        Lexer__Error(lexer, &token, LexError_TooManyDigits, start, lexer->cursor);
                         encountered_errors = true;
                     }
                     else
@@ -470,8 +460,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                 }
                                 else
                                 {
-                                    LexerError(LexError_NumDigitsInHexFloat);
-                                    
+                                    Lexer__Error(lexer, &token, LexError_NumDigitsInHexFloat, start, lexer->cursor);
                                     encountered_errors = true;
                                 }
                             }
@@ -479,8 +468,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             {
                                 if (*lexer->cursor < '0' || *lexer->cursor > '9')
                                 {
-                                    LexerError(LexError_MissingFraction);
-                                    
+                                    Lexer__Error(lexer, &token, LexError_MissingFraction, start, lexer->cursor);
                                     encountered_errors = true;
                                 }
                                 else
@@ -496,8 +484,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                     
                                     if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
                                     {
-                                        LexerError(LexError_TooManyDigitsInFraction);
-                                        
+                                        Lexer__Error(lexer, &token, LexError_TooManyDigitsInFraction, start, lexer->cursor);
                                         encountered_errors = true;
                                     }
                                     else if (*lexer->cursor == 'e')
@@ -510,8 +497,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                         
                                         if (*lexer->cursor < '0' || *lexer->cursor > '9')
                                         {
-                                            LexerError(LexError_MissingExponent);
-                                            
+                                            Lexer__Error(lexer, &token, LexError_MissingExponent, start, lexer->cursor);
                                             encountered_errors = true;
                                         }
                                         else while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
@@ -522,8 +508,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                         
                                         if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
                                         {
-                                            LexerError(LexError_TooManyDigitsInExponent);
-                                            
+                                            Lexer__Error(lexer, &token, LexError_TooManyDigitsInExponent, start, lexer->cursor);
                                             encountered_errors = true;
                                         }
                                     }
@@ -552,6 +537,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 
                 Interned_String interned_string = EMPTY_STRING;
                 
+                u8* start = lexer->cursor - 1;
                 if (*lexer->cursor != '"')
                 {
                     String raw_string = {
@@ -567,8 +553,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     
                     if (*lexer->cursor != '"')
                     {
-                        LexerError(LexError_MissingDoubleQuote);
-                        
+                        Lexer__Error(lexer, &token, LexError_MissingDoubleQuote, start, lexer->cursor);
                         encountered_errors = true;
                     }
                     else
@@ -583,10 +568,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             .size = 0,
                         };
                         
-                        while (!encountered_errors && *raw_string_cursor != '"')
-                        {
-                            if (!Lexer__DecodeCharacter(&raw_string_cursor, string.data, &string.size)) encountered_errors = true;
-                        }
+                        while (!encountered_errors && *raw_string_cursor != '"') encountered_errors = !Lexer__DecodeCharacter(lexer, &token, &raw_string_cursor, string.data, &string.size);
                         
                         if (encountered_errors) Arena_EndTemp(workspace->workspace_arena, marker);
                         else
@@ -625,17 +607,10 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 u8 bytes[4];
                 umm advancement = 0;
                 
-                if (c == '\'')
-                {
-                    LexerError(LexError_MissingCharInLit);
-                    
-                }
-                else if (!Lexer__DecodeCharacter(&lexer->cursor, bytes, &advancement));
-                else if (c != '\'')
-                {
-                    LexerError(LexError_MissingSingleQuote);
-                    
-                }
+                u8* start = lexer->cursor - 1;
+                if      (c == '\'') Lexer__Error(lexer, &token, LexError_MissingCharInLit, start, lexer->cursor);
+                else if (!Lexer__DecodeCharacter(lexer, &token, &lexer->cursor, bytes, &advancement));
+                else if (c != '\'') Lexer__Error(lexer, &token, LexError_MissingSingleQuote, start, lexer->cursor);
                 else
                 {
                     ++lexer->cursor;
@@ -653,19 +628,20 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
         } break;
     }
     
-    token.size = (u32)(lexer->cursor - lexer->content) - token.offset;
+    token.text.size = (u32)(lexer->cursor - lexer->content) - token.text.offset;
     
     return token;
 }
 
 internal bool
-Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
+Lexer__DecodeCharacter(Lexer* lexer, Token* token, u8** cursor, u8* result, umm* advancement)
 {
     bool encountered_errors = false;
     
     *advancement += 1; // NOTE: assume one byte char length, is corrected for multibyte codepoints
     if (**cursor == '\\')
     {
+        u8* start = *cursor;
         *cursor += 1;
         
         switch (**cursor)
@@ -694,8 +670,7 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
                     else if ((*cursor)[1] >= 'A' && (*cursor)[1] <= 'F') codepoint = codepoint << 4 | ((*cursor)[1] & 0x0F + 9);
                     else
                     {
-                        LexerError(LexError_MissingDigitsInCodepoint);
-                        
+                        Lexer__Error(lexer, token, LexError_MissingDigitsInCodepoint, start, *cursor);
                         encountered_errors = true;
                     }
                 }
@@ -726,8 +701,7 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
                     }
                     else
                     {
-                        LexerError(LexError_CodepointOutOfRange);
-                        
+                        Lexer__Error(lexer, token, LexError_CodepointOutOfRange, start, *cursor);
                         encountered_errors = true;
                     }
                 }
@@ -737,14 +711,12 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
             {
                 if (**cursor == 0)
                 {
-                    LexerError(LexError_MissingEscSeqAfterSlash);
-                    
+                    Lexer__Error(lexer, token, LexError_MissingEscSeqAfterSlash, start, *cursor);
                     encountered_errors = true;
                 }
                 else
                 {
-                    LexerError(LexError_IllegalEscSeq);
-                    
+                    Lexer__Error(lexer, token, LexError_IllegalEscSeq, start, *cursor);
                     encountered_errors = true;
                 }
             } break;
@@ -752,14 +724,15 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
     }
     else if ((**cursor & 0x80) != 0)
     {
+        u8* start = *cursor;
+        
         umm length = 1;
         if      ((**cursor & 0xF8) == 0xF0) length = 4;
         else if ((**cursor & 0xF0) == 0xE0) length = 3;
         else if ((**cursor & 0xE0) == 0xC0) length = 2;
         else
         {
-            LexerError(LexError_IllegalUTF8Byte);
-            
+            Lexer__Error(lexer, token, LexError_IllegalUTF8Byte, start, lexer->cursor);
             encountered_errors = true;
         }
         
@@ -774,8 +747,7 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
                 if ((**cursor & 0xC0) == 0x80) *result++ = **cursor;
                 else
                 {
-                    LexerError(LexError_MissingUTF8SeqByte);
-                    
+                    Lexer__Error(lexer, token, LexError_MissingUTF8SeqByte, start, lexer->cursor);
                     encountered_errors = true;
                 }
             }
@@ -786,4 +758,17 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
     *cursor += 1;
     
     return !encountered_errors;
+}
+
+internal void
+Lexer__Error(Lexer* lexer, Token* token, LEXER_ERROR_CODE code, u8* start, u8* end)
+{
+    token->kind       = Token_Invalid;
+    token->error.code = code;
+    token->error.text = (Text_Interval){
+        .offset = (u32)(start - lexer->content),
+        .line   = token->text.line,
+        .column = (u32)((start - lexer->content) - token->text.offset) + token->text.column,
+        .size   = (u32)(end - start),
+    };
 }

@@ -95,16 +95,72 @@ typedef String ZString; // NOTE: Zero terminated String (null is not included in
 TYPEDEF_FUNC(void*, system_reserve_memory_func, umm size);
 TYPEDEF_FUNC(void, system_commit_memory_func, void* ptr, umm size);
 TYPEDEF_FUNC(void, system_free_memory_func, void* ptr);
-TYPEDEF_FUNC(void, system_print_func, String string);
+TYPEDEF_FUNC(void, system_print_func, ZString string);
 
 typedef u64 File_ID;
 
 typedef struct File
 {
     File_ID id;
+    String path;
     ZString content;
     // path
 } File;
+
+typedef struct Text_Pos
+{
+    u32 offset;
+    u32 line;
+    u32 column;
+} Text_Pos;
+
+typedef struct Text_Interval
+{
+    struct Text_Pos;
+    u32 size;
+} Text_Interval;
+
+internal Text_Interval
+TextInterval_BetweenStartPoints(Text_Interval included, Text_Interval excluded)
+{
+    ASSERT(included.line == excluded.line);
+    ASSERT(included.offset + included.column + included.size < excluded.offset);
+    
+    return (Text_Interval){
+        .offset = included.offset,
+        .line   = included.line,
+        .column = included.column,
+        .size   = (excluded.offset + excluded.column) - (included.offset - included.column),
+    };
+}
+
+internal Text_Interval
+TextInterval_ContainingBoth(Text_Interval a, Text_Interval b)
+{
+    ASSERT(a.line == b.line);
+    ASSERT(a.offset + a.column + a.size < b.offset);
+    
+    return (Text_Interval){
+        .offset = a.offset,
+        .line   = a.line,
+        .column = a.column,
+        .size   = (b.offset + b.column + b.size) - (a.offset - a.column),
+    };
+}
+
+#define ERROR_CODE_NIL 0
+#define LEXER_ERROR_CODE_BASE  (1 << 10)
+#define PARSER_ERROR_CODE_BASE (1 << 11)
+
+typedef u32 Error_Code;
+
+typedef struct Error_Report
+{
+    Error_Code code;
+    String message;
+    Text_Interval text;
+    File_ID file_id;
+} Error_Report;
 
 typedef struct Workspace
 {
@@ -117,6 +173,8 @@ typedef struct Workspace
     struct File* files;
     struct AST_Node* head_ast;
     struct AST_Node** tail_ast;
+    
+    Error_Report report;
 } Workspace;
 
 internal File*
@@ -137,7 +195,6 @@ typedef struct Workspace_Options
     system_reserve_memory_func ReserveMemory;
     system_commit_memory_func CommitMemory;
     system_free_memory_func FreeMemory;
-    system_print_func Print;
     u64 page_size;
 } Workspace_Options;
 
@@ -172,6 +229,28 @@ void
 Workspace_Close(Workspace* workspace)
 {
     Arena_Free(workspace->workspace_arena);
+}
+
+bool
+Workspace_HasErrors(Workspace* workspace)
+{
+    return workspace->report.code != 0;
+}
+
+void
+Workspace_PrintErrors(Workspace* workspace, system_print_func Print)
+{
+    Arena_Marker marker = Arena_BeginTemp(workspace->workspace_arena);
+    
+    Error_Report* report = &workspace->report;
+    File* file           = File_FromFileID(workspace, report->file_id);
+    
+    if (report->code != 0)
+    {
+        Print(String_Printf(workspace->workspace_arena, "%S(%u,%u): error C%u: %S\n\0", file->path, report->text.line, report->text.column, report->code, report->message));
+    }
+    
+    Arena_EndTemp(workspace->workspace_arena, marker);
 }
 
 #endif

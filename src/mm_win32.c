@@ -49,6 +49,8 @@ int _fltused;
 
 #include "mm.h"
 
+global Arena* Win32_Arena;
+
 void*
 System_ReserveMemory(umm size)
 {
@@ -71,11 +73,20 @@ System_FreeMemory(void* ptr)
     VirtualFree(ptr, 0, MEM_RELEASE);
 }
 
+void
+System_Print(ZString string)
+{
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), string.data, (DWORD)string.size, 0, 0);
+    OutputDebugStringA((LPCSTR)string.data);
+}
+
 void __stdcall
 WinMainCRTStartup()
 {
     SYSTEM_INFO sys_info;
     GetSystemInfo(&sys_info);
+    
+    Win32_Arena = Arena_Init(System_ReserveMemory, System_CommitMemory, System_FreeMemory, sys_info.dwPageSize);
     
     Workspace_Options ws_options = {
         .ReserveMemory  = System_ReserveMemory,
@@ -93,6 +104,9 @@ WinMainCRTStartup()
     String ss0 = InternedString_ToString(workspace, s0);
     //String ss1 = InternedString_ToString(workspace, s1);
     String ss2 = InternedString_ToString(workspace, s2);
+    
+    System_Print(ss2);
+    Workspace_PrintErrors(workspace, System_Print);
     
     Workspace_Close(workspace);
     

@@ -6,6 +6,7 @@ typedef struct Parser
     Lexer lexer;
     Token peek[1 + PARSER_PEEK_MAX];
     u8 peek_cursor;
+    File_ID file_id;
 } Parser;
 
 internal Token
@@ -24,7 +25,7 @@ PeekToken(Parser* parser, umm index)
 internal Token
 NextToken(Parser* parser, Whitespace_Info* ws)
 {
-    *ws = WhitespaceInfo_FromToken(parser->peek[parser->peek_cursor]);
+    *ws = WhitespaceInfo_FromToken(parser->file_id, parser->peek[parser->peek_cursor]);
     
     parser->peek_cursor = (parser->peek_cursor + 1) % ARRAY_SIZE(parser->peek);
     parser->peek[parser->peek_cursor] = Lexer_Advance(parser->workspace, &parser->lexer);
@@ -100,23 +101,30 @@ X(39, ParseError_MissingSemicolon,                 "Missing terminating semicolo
 
 typedef enum PARSER_ERROR_CODE
 {
-#define X(i, e, s) e = i,
+    PARSER_ERROR_CODE_BASE_SENTINEL = PARSER_ERROR_CODE_BASE,
+    
+#define X(i, e, s) e = PARSER_ERROR_CODE_BASE_SENTINEL + i,
     LIST_PARSE_ERROR_CODES()
 #undef X
     
-    PARSER_ERROR_CODE_COUNT
+    PARSER_ERROR_CODE_MAX
 } PARSER_ERROR_CODE;
 
-char* ParserErrorCodeMessages[PARSER_ERROR_CODE_COUNT] = {
-#define X(i, e, s) [e] = s,
+char* ParserErrorCodeMessages[PARSER_ERROR_CODE_MAX - LEXER_ERROR_CODE_BASE_SENTINEL] = {
+#define X(i, e, s) [e - PARSER_ERROR_CODE_BASE_SENTINEL] = s,
     LIST_PARSE_ERROR_CODES()
 #undef X
 };
 
 internal void
-ParserError(Parser* parser, PARSER_ERROR_CODE code, char* message)
+ParserError(Parser* parser, PARSER_ERROR_CODE code, Text_Interval text)
 {
-    NOT_IMPLEMENTED;
+    parser->workspace->report = (Error_Report){
+        .code    = code,
+        .message = String_WrapCString(ParserErrorCodeMessages[code]),
+        .text    = text,
+        .file_id = parser->file_id,
+    };
 }
 
 internal bool ParseExpression(Parser* parser, AST_Node** expression);
@@ -131,9 +139,9 @@ ParseNamedValueList(Parser* parser, AST_Node** list)
     while (should_continue)
     {
         Token token = GetToken(parser);
-        u32 line = token.line;
-        u32 col  = token.column;
-        AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(token) };
+        u32 line = token.text.line;
+        u32 col  = token.text.column;
+        AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
         
         AST_Node* name  = 0;
         AST_Node* value = 0;
@@ -162,9 +170,9 @@ internal bool
 ParseParameter(Parser* parser, AST_Node** param)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
-    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(token) };
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
+    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
     
     AST_Node* name  = 0;
     AST_Node* type  = 0;
@@ -187,7 +195,7 @@ ParseParameter(Parser* parser, AST_Node** param)
     }
     else
     {
-        ParserError(parser, ParseError_UsingUnnamedParam, "Illegal use of 'using' on unnamed parameter");
+        ParserError(parser, ParseError_UsingUnnamedParam, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
         return false;
     }
     
@@ -225,9 +233,11 @@ internal bool
 ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
-    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(token) };
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
+    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
+    
+    Text_Interval first_token_text = token.text;
     
     bool is_using = false;
     
@@ -267,7 +277,7 @@ ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
             
             if (GetToken(parser).kind == Token_Comma)
             {
-                ParserError(parser, ParseError_MultipleTypesParam, "Multiple types are illegal");
+                ParserError(parser, ParseError_MultipleTypesParam, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
                 return false;
             }
         }
@@ -276,14 +286,16 @@ ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
         if (token.kind == Token_Equals || token.kind == Token_Colon)
         {
             is_const = (token.kind == Token_Colon);
-            NextToken(parser, (is_const ? &whitespace_info.constant_info.ws_colon_1 : &whitespace_info.variable_info.ws_equals));
+            token = NextToken(parser, (is_const ? &whitespace_info.constant_info.ws_colon_1 : &whitespace_info.variable_info.ws_equals));
             
-            if (EatToken(parser, Token_TripleMinus, &whitespace_info.variable_info.ws_uninit))
+            if (token.kind == Token_TripleMinus)
             {
+                NextToken(parser, &whitespace_info.variable_info.ws_uninit);
+                
                 if (!is_const) is_uninitialized = true;
                 else
                 {
-                    ParserError(parser, ParseError_UninitConstant, "Constants must be initialized");
+                    ParserError(parser, ParseError_UninitConstant, token.text);
                     return false;
                 }
             }
@@ -369,22 +381,22 @@ ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
                 
                 if (token.kind != Token_Identifier)
                 {
-                    ParserError(parser, ParseError_MissingAlias, "Missing name of alias after 'as' keyword in using declaration");
+                    ParserError(parser, ParseError_MissingAlias, TextInterval_BetweenStartPoints(first_token_text, token.text));
                     return false;
                 }
                 else if (InternedString_IsKeyword(token.string))
                 {
-                    ParserError(parser, ParseError_KeywordAsAlias, "Illegal use of keyword as alias");
+                    ParserError(parser, ParseError_KeywordAsAlias, token.text);
                     return false;
                 }
                 else if (token.string == BLANK_IDENTIFIER)
                 {
-                    ParserError(parser, ParseError_BlankAsAlias, "Illegal use of blank identifier as alias");
+                    ParserError(parser, ParseError_BlankAsAlias, token.text);
                     return false;
                 }
                 else if (symbol_paths->next != 0)
                 {
-                    ParserError(parser, ParseError_MultipleSymSameAlias, "Cannot alias multiple symbols under the same alias");
+                    ParserError(parser, ParseError_MultipleSymSameAlias, TextInterval_ContainingBoth(first_token_text, token.text));
                     return false;
                 }
                 
@@ -400,7 +412,7 @@ ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
         {
             if (expressions->next != 0)
             {
-                ParserError(parser, ParseError_IsolatedExprList, "A list of expressions cannot be used by itself");
+                ParserError(parser, ParseError_IsolatedExprList, TextInterval_BetweenStartPoints(first_token_text, GetToken(parser).text));
                 return false;
             }
             
@@ -415,8 +427,8 @@ internal bool
 ParsePrimaryExpression(Parser* parser, AST_Node** expression)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
     AST_Whitespace_Info whitespace_info = {0};
     
     NextToken(parser, &whitespace_info.ws_before);
@@ -471,7 +483,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                     if      (!ParseParameterList(parser, &params)) return false;
                     else if (!EatToken(parser, Token_CloseParen, &whitespace_info.proc_info.ws_close_paren))
                     {
-                        ParserError(parser, ParseError_MissingParenAfterParams, "Missing closing paren after parameters");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingParenAfterParams, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                 }
@@ -496,7 +509,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                     
                     if (is_multi && !EatToken(parser, Token_CloseParen, &whitespace_info.proc_info.ws_close_paren_ret))
                     {
-                        ParserError(parser, ParseError_MissingParenAfterRetTypes, "Missing closing paren after return type list");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingParenAfterRetTypes, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                 }
@@ -540,15 +554,17 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                     if      (!ParseParameterList(parser, &params)) return false;
                     else if (!EatToken(parser, Token_CloseParen, &whitespace_info.struct_info.ws_close_paren))
                     {
-                        ParserError(parser, ParseError_MissingParenAfterParams, "Missing closing paren after parameter list");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingParenAfterParams, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                 }
                 
                 if (!EatToken(parser, Token_OpenBrace, &whitespace_info.struct_info.ws_open_brace))
                 {
-                    if (is_union) ParserError(parser, ParseError_MissingUnionBody, "Missing body of union");
-                    else          ParserError(parser, ParseError_MissingStructBody, "Missing body of struct");
+                    token = GetToken(parser);
+                    if (is_union) ParserError(parser, ParseError_MissingUnionBody, TextInterval_BetweenStartPoints(token.text, token.text));
+                    else          ParserError(parser, ParseError_MissingStructBody, TextInterval_BetweenStartPoints(token.text, token.text));
                     return false;
                 }
                 else
@@ -583,7 +599,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                 if (token.kind != Token_OpenBrace && !ParseExpression(parser, &type)) return false;
                 else if (!EatToken(parser, Token_OpenBrace, &whitespace_info.enum_info.ws_open_brace))
                 {
-                    ParserError(parser, ParseError_MissingEnumBody, "Missing body of enum");
+                    token = GetToken(parser);
+                    ParserError(parser, ParseError_MissingEnumBody, TextInterval_BetweenStartPoints(token.text, token.text));
                     return false;
                 }
                 
@@ -591,8 +608,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                 while (true)
                 {
                     token = GetToken(parser);
-                    u32 member_line = token.line;
-                    u32 member_col  = token.column;
+                    u32 member_line = token.text.line;
+                    u32 member_col  = token.text.column;
                     AST_Whitespace_Info member_whitespace_info = {0};
                     
                     AST_Node* name  = 0;
@@ -616,7 +633,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                 
                 if (!EatToken(parser, Token_CloseBrace, &whitespace_info.enum_info.ws_close_brace))
                 {
-                    ParserError(parser, ParseError_MissingBraceAfterEnumBody, "Missing closing brace after body of enum");
+                    token = GetToken(parser);
+                    ParserError(parser, ParseError_MissingBraceAfterEnumBody, TextInterval_BetweenStartPoints(token.text, token.text));
                     return false;
                 }
                 
@@ -630,7 +648,7 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                 
                 if (!EatToken(parser, Token_OpenParen, &whitespace_info.call_info.ws_open_paren))
                 {
-                    ParserError(parser, ParseError_MissingArgsToCall, "Missing arguments to call");
+                    ParserError(parser, ParseError_MissingArgsToCall, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
                     return false;
                 }
                 
@@ -639,7 +657,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
                 
                 if (!EatToken(parser, Token_OpenParen, &whitespace_info.call_info.ws_close_paren))
                 {
-                    ParserError(parser, ParseError_MissingParenAfterCallArgs, "Missing closing paren after arguments to call");
+                    token = GetToken(parser);
+                    ParserError(parser, ParseError_MissingParenAfterCallArgs, TextInterval_BetweenStartPoints(token.text, token.text));
                     return false;
                 }
                 
@@ -649,7 +668,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
             }
             else
             {
-                ParserError(parser, ParseError_IllegalKeywordInExpr, "Illegal use of keyword in expression");
+                token = GetToken(parser);
+                ParserError(parser, ParseError_IllegalKeywordInExpr, TextInterval_BetweenStartPoints(token.text, token.text));
                 return false;
             }
         }
@@ -663,7 +683,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
             if      (!ParseNamedValueList(parser, &args)) return false;
             else if (!EatToken(parser, Token_CloseBrace, &whitespace_info.struct_literal_info.ws_close_brace))
             {
-                ParserError(parser, ParseError_MissingBraceAfterStructLitArgs, "Missing closing brace after arguments to struct literal");
+                token = GetToken(parser);
+                ParserError(parser, ParseError_MissingBraceAfterStructLitArgs, TextInterval_BetweenStartPoints(token.text, token.text));
                 return false;
             }
         }
@@ -681,7 +702,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
             if      (!ParseNamedValueList(parser, &args)) return false;
             else if (!EatToken(parser, Token_CloseBracket, &whitespace_info.array_literal_info.ws_close_bracket))
             {
-                ParserError(parser, ParseError_MissingBraceAfterArrayLitArgs, "Missing closing bracket after arguments to array literal");
+                token = GetToken(parser);
+                ParserError(parser, ParseError_MissingBraceAfterArrayLitArgs, TextInterval_BetweenStartPoints(token.text, token.text));
                 return false;
             }
         }
@@ -696,7 +718,8 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
         if      (!ParseExpression(parser, &compound)) return false;
         else if (!EatToken(parser, Token_CloseParen, &whitespace_info.compound_info.ws_close_paren))
         {
-            ParserError(parser, ParseError_MissingParenAfterCompound, "Missing closing paren after compound expression body");
+            token = GetToken(parser);
+            ParserError(parser, ParseError_MissingParenAfterCompound, TextInterval_BetweenStartPoints(token.text, token.text));
             return false;
         }
         
@@ -705,12 +728,12 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
     }
     else if (token.kind == Token_Period)
     {
-        token = GetToken(parser);
-        if (token.kind != Token_Identifier)
+        if (GetToken(parser).kind != Token_Identifier)
         {
-            ParserError(parser, ParseError_MissingEnumSelectorName, "Missing name of enum in enum selector expression");
+            ParserError(parser, ParseError_MissingEnumSelectorName, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
             return false;
         }
+        else token = GetToken(parser);
         
         Interned_String enum_name = token.string;
         NextToken(parser, &whitespace_info.selector_info.ws_name);
@@ -720,12 +743,12 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
     }
     else if (token.kind == Token_Cash)
     {
-        token = GetToken(parser);
-        if (token.kind != Token_Identifier)
+        if (GetToken(parser).kind != Token_Identifier)
         {
-            ParserError(parser, ParseError_MissingPolyName, "Missing name of polymorphic value");
+            ParserError(parser, ParseError_MissingPolyName, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
             return false;
         }
+        else token = GetToken(parser);
         
         Interned_String poly_name = token.string;
         NextToken(parser, &whitespace_info.poly_name_info.ws_name);
@@ -735,10 +758,19 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
     }
     else
     {
-        if (token.kind != Token_Invalid) ParserError(parser, ParseError_MissingPrimaryExpr, "Missing primary expression");
+        if (token.kind == Token_Invalid)
+        {
+            parser->workspace->report = (Error_Report){
+                .code    = token.error.code,
+                .message = String_WrapCString(LexerErrorCodeMessages[token.error.code]),
+                .text    = token.error.text,
+                .file_id = parser->file_id,
+            };
+        }
         else
         {
-            NOT_IMPLEMENTED;
+            token = GetToken(parser);
+            ParserError(parser, ParseError_MissingPrimaryExpr, TextInterval_BetweenStartPoints(token.text, token.text));
         }
         return false;
     }
@@ -750,8 +782,8 @@ internal bool
 ParsePostfixExpression(Parser* parser, AST_Node** expression)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
     AST_Whitespace_Info whitespace_info = {0};
     
     if (!ParsePrimaryExpression(parser, expression)) return false;
@@ -759,6 +791,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
     {
         while (true)
         {
+            Text_Interval start_text = GetToken(parser).text;
+            
             if (EatToken(parser, Token_Hat, &whitespace_info.deref_info.ws_hat))
             {
                 AST_Node* operand = *expression;
@@ -774,12 +808,12 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
                 
                 if (token.kind != Token_Identifier)
                 {
-                    ParserError(parser, ParseError_MissingMemberAccessName, "Missing name of member to access");
+                    ParserError(parser, ParseError_MissingMemberAccessName, TextInterval_BetweenStartPoints(start_text, token.text));
                     return false;
                 }
                 else if (!InternedString_IsNonBlankIdentifier(token.string))
                 {
-                    ParserError(parser, ParseError_MemberAccessBlank, "Member name must be a non blank identifier");
+                    ParserError(parser, ParseError_MemberAccessBlank, token.text);
                     return false;
                 }
                 
@@ -803,7 +837,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
                 {
                     if (!EatToken(parser, Token_CloseBracket, &whitespace_info.subscript_info.ws_close_bracket))
                     {
-                        ParserError(parser, ParseError_MissingBracketAfterSusbcript, "Missing closing bracket after subscript index");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingBracketAfterSusbcript, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                     
@@ -821,7 +856,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
                     
                     if (!EatToken(parser, Token_CloseBracket, &whitespace_info.subscript_info.ws_close_bracket))
                     {
-                        ParserError(parser, ParseError_MissingBracketAfterSlice, "Missing closing bracket after slice arguments");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingBracketAfterSlice, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                     
@@ -842,7 +878,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
                     if      (!ParseNamedValueList(parser, &args)) return false;
                     else if (!EatToken(parser, Token_CloseParen, &whitespace_info.call_info.ws_close_paren))
                     {
-                        ParserError(parser, ParseError_MissingParenAfterCallArgs, "Missing closing paren after arguments to call expr");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingParenAfterCallArgs, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                 }
@@ -861,7 +898,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
                     if      (!ParseNamedValueList(parser, &args)) return false;
                     else if (!EatToken(parser, Token_CloseBrace, &whitespace_info.struct_literal_info.ws_close_brace))
                     {
-                        ParserError(parser, ParseError_MissingBraceAfterStructLitArgs, "Missing closing brace after arguments to struct literal");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingBraceAfterStructLitArgs, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                 }
@@ -880,7 +918,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
                     if      (!ParseNamedValueList(parser, &args)) return false;
                     else if (!EatToken(parser, Token_CloseBracket, &whitespace_info.array_literal_info.ws_close_bracket))
                     {
-                        ParserError(parser, ParseError_MissingBraceAfterArrayLitArgs, "Missing closing bracket after arguments to array literal");
+                        token = GetToken(parser);
+                        ParserError(parser, ParseError_MissingBraceAfterArrayLitArgs, TextInterval_BetweenStartPoints(token.text, token.text));
                         return false;
                     }
                 }
@@ -892,8 +931,8 @@ ParsePostfixExpression(Parser* parser, AST_Node** expression)
             else break;
             
             token = GetToken(parser);
-            line  = token.line;
-            col   = token.column;
+            line  = token.text.line;
+            col   = token.text.column;
             ZeroStruct(&whitespace_info);
         }
     }
@@ -907,8 +946,8 @@ ParsePrefixExpression(Parser* parser, AST_Node** expression)
     while (true)
     {
         Token token = GetToken(parser);
-        u32 line = token.line;
-        u32 col  = token.column;
+        u32 line = token.text.line;
+        u32 col  = token.text.column;
         AST_Whitespace_Info whitespace_info = {0};
         
         if      (EatToken(parser, Token_Plus, &whitespace_info.ws_before));
@@ -928,7 +967,8 @@ ParsePrefixExpression(Parser* parser, AST_Node** expression)
                 if      (ParseExpression(parser, &size)) return false;
                 else if (!EatToken(parser, Token_CloseBracket, &whitespace_info.array_type_info.ws_close_bracket))
                 {
-                    ParserError(parser, ParseError_MissingBracketAfterArrayTypeSize, "Missing closing bracket after size in array type qualifier");
+                    token = GetToken(parser);
+                    ParserError(parser, ParseError_MissingBracketAfterArrayTypeSize, TextInterval_BetweenStartPoints(token.text, token.text));
                     return false;
                 }
                 
@@ -947,9 +987,9 @@ internal bool
 ParseBinaryExpression(Parser* parser, AST_Node** expression)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
-    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(token) };
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
+    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
     
     if (!ParsePrefixExpression(parser, expression)) return false;
     else
@@ -977,9 +1017,9 @@ ParseBinaryExpression(Parser* parser, AST_Node** expression)
             *left = new_expression;
             
             token = GetToken(parser);
-            line = token.line;
-            col  = token.column;
-            whitespace_info = (AST_Whitespace_Info){ .ws_before = WhitespaceInfo_FromToken(token) };
+            line = token.text.line;
+            col  = token.text.column;
+            whitespace_info = (AST_Whitespace_Info){ .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
         }
     }
     
@@ -990,9 +1030,9 @@ internal bool
 ParseExpression(Parser* parser, AST_Node** expression)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
-    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(token) };
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
+    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
     
     if      (!ParseBinaryExpression(parser, expression)) return false;
     else if (EatToken(parser, Token_QuestionMark, &whitespace_info.conditional_info.ws_qmark))
@@ -1004,7 +1044,7 @@ ParseExpression(Parser* parser, AST_Node** expression)
         if      (!ParseBinaryExpression(parser, &true_expr)) return false;
         else if (!EatToken(parser, Token_Colon, &whitespace_info.conditional_info.ws_colon))
         {
-            ParserError(parser, ParseError_MissingConditionalFalseExpr, "Missing false expr");
+            ParserError(parser, ParseError_MissingConditionalFalseExpr, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
             return false;
         }
         else if (!ParseBinaryExpression(parser, &false_expr)) return false;
@@ -1022,9 +1062,9 @@ internal bool
 ParseStatement(Parser* parser, AST_Node** statement)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
-    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(token) };
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
+    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
     
     Token peek      = PeekToken(parser, 1);
     Token peek_next = PeekToken(parser, 2);
@@ -1033,7 +1073,7 @@ ParseStatement(Parser* parser, AST_Node** statement)
     
     if (token.kind == Token_Semicolon)
     {
-        ParserError(parser, ParseError_MissingStatement, "Missing statement before semicolon");
+        ParserError(parser, ParseError_MissingStatement, TextInterval_BetweenStartPoints(token.text, token.text));
         return false;
     }
     else if (token.kind == Token_OpenBrace)
@@ -1046,17 +1086,17 @@ ParseStatement(Parser* parser, AST_Node** statement)
     {
         if (InternedString_IsKeyword(token.string))
         {
-            ParserError(parser, ParseError_KeywordAsLabel, "Illegal use of keyword as label name");
+            ParserError(parser, ParseError_KeywordAsLabel, token.text);
             return false;
         }
         else if (token.string == BLANK_IDENTIFIER)
         {
-            ParserError(parser, ParseError_BlankLabel, "Label name cannot be blank");
+            ParserError(parser, ParseError_BlankLabel, token.text);
             return false;
         }
         else if (peek_next.kind == Token_Identifier && peek_next.string == Keyword_Else)
         {
-            ParserError(parser, ParseError_LabelElse, "Illegal use of label on else statement");
+            ParserError(parser, ParseError_LabelElse, peek_next.text);
             return false;
         }
         
@@ -1096,7 +1136,8 @@ ParseStatement(Parser* parser, AST_Node** statement)
         
         if (!EatToken(parser, Token_OpenParen, &whitespace_info.if_info.ws_open_paren))
         {
-            ParserError(parser, ParseError_MissingIfCondition, "Missing condition of if statement");
+            token = GetToken(parser);
+            ParserError(parser, ParseError_MissingIfCondition, TextInterval_BetweenStartPoints(token.text, token.text));
             return false;
         }
         
@@ -1115,7 +1156,8 @@ ParseStatement(Parser* parser, AST_Node** statement)
         
         if (!EatToken(parser, Token_CloseParen, &whitespace_info.if_info.ws_close_paren))
         {
-            ParserError(parser, ParseError_MissingParenAfterIfCondition, "Missing closing paren after if condition");
+            token = GetToken(parser);
+            ParserError(parser, ParseError_MissingParenAfterIfCondition, TextInterval_BetweenStartPoints(token.text, token.text));
             return false;
         }
         
@@ -1137,7 +1179,7 @@ ParseStatement(Parser* parser, AST_Node** statement)
     }
     else if (token_is_identifier && token.string == Keyword_Else)
     {
-        ParserError(parser, ParseError_IsolatedElse, "Illegal else without matching if");
+        ParserError(parser, ParseError_IsolatedElse, token.text);
         return false;
     }
     else if (token_is_identifier && token.string == Keyword_While)
@@ -1146,7 +1188,8 @@ ParseStatement(Parser* parser, AST_Node** statement)
         
         if (!EatToken(parser, Token_OpenParen, &whitespace_info.while_info.ws_open_paren))
         {
-            ParserError(parser, ParseError_MissingWhileCondition, "Missing condition of while statement");
+            token = GetToken(parser);
+            ParserError(parser, ParseError_MissingWhileCondition, TextInterval_BetweenStartPoints(token.text, token.text));
             return false;
         }
         
@@ -1167,7 +1210,8 @@ ParseStatement(Parser* parser, AST_Node** statement)
         
         if (!EatToken(parser, Token_CloseParen, &whitespace_info.while_info.ws_close_paren))
         {
-            ParserError(parser, ParseError_MissingParenAfterWhileHeader, "Missing closing paren after while header");
+            token = GetToken(parser);
+            ParserError(parser, ParseError_MissingParenAfterWhileHeader, TextInterval_BetweenStartPoints(token.text, token.text));
             return false;
         }
         else if (!EatToken(parser, Token_Semicolon, &whitespace_info.while_info.ws_body_semi) && !ParseStatement(parser, &body)) return false;
@@ -1189,7 +1233,7 @@ ParseStatement(Parser* parser, AST_Node** statement)
         {
             if (!InternedString_IsNonBlankIdentifier(token.string))
             {
-                ParserError(parser, ParseError_IllegalLabel, "Illegal label");
+                ParserError(parser, ParseError_IllegalLabel, token.text);
                 return false;
             }
             
@@ -1224,7 +1268,8 @@ ParseStatement(Parser* parser, AST_Node** statement)
     
     if (AST_StatementNeedsSemicolon(*statement) && !EatToken(parser, Token_Semicolon, &(*statement)->info->ws_terminator))
     {
-        ParserError(parser, ParseError_MissingSemicolon, "Missing terminating semicolon after statement");
+        token = GetToken(parser);
+        ParserError(parser, ParseError_MissingSemicolon, TextInterval_BetweenStartPoints(token.text, token.text));
         return false;
     }
     
@@ -1236,8 +1281,8 @@ internal bool
 ParseBlock(Parser* parser, AST_Node** block)
 {
     Token token = GetToken(parser);
-    u32 line = token.line;
-    u32 col  = token.column;
+    u32 line = token.text.line;
+    u32 col  = token.text.column;
     AST_Whitespace_Info whitespace_info = {0};
     
     ASSERT(token.kind == Token_OpenBrace);
@@ -1265,6 +1310,7 @@ ParseFile(Workspace* workspace, File* file)
     Parser parser = {
         .workspace = workspace,
         .lexer = Lexer_Init(workspace, file->content.data), // NOTE: Files guarantee a null terminated string
+        .file_id = file->id,
     };
     
     parser.peek[parser.peek_cursor + 0] = Lexer_Advance(workspace, &parser.lexer);

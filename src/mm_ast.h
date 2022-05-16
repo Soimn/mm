@@ -314,6 +314,7 @@ typedef struct AST_Node
 
 typedef struct Whitespace_Info
 {
+    File_ID file_id;
     u32 offset;
     u32 size;
 } Whitespace_Info;
@@ -519,9 +520,9 @@ typedef struct AST_Node_Info
 } AST_Node_Info;
 
 internal Whitespace_Info
-WhitespaceInfo_FromToken(Token token)
+WhitespaceInfo_FromToken(File_ID file_id, Token token)
 {
-    return (Whitespace_Info){ .offset = token.offset_raw, .size = token.offset - token.offset_raw };
+    return (Whitespace_Info){ .offset = token.offset_raw, .size = token.text.offset - token.offset_raw, .file_id = file_id, };
 }
 
 internal String

@@ -28,9 +28,11 @@ String_Match(String s0, String s1)
     return result;
 }
 
-internal void
+internal String
 String_Printf(Arena* arena, char* format, ...)
 {
+    String result = { .data = Arena_OffsetPointer(arena) };
+    
     va_list args;
     va_start(args, format);
     
@@ -185,6 +187,9 @@ String_Printf(Arena* arena, char* format, ...)
     }
     
     va_end(args);
+    
+    result.size = (u8*)Arena_OffsetPointer(arena) - result.data;
+    return result;
 }
 
 #define INTERNED_STRING_NIL 0

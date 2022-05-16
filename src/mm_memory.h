@@ -133,7 +133,7 @@ Arena_BeginTemp(Arena* arena)
 internal void
 Arena_EndTemp(Arena* arena, Arena_Marker marker)
 {
-    ASSERT(marker < arena->offset);
+    ASSERT(marker <= arena->offset);
     
     arena->space += arena->offset - marker;
     arena->offset = marker;
