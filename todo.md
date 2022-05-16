@@ -1,5 +1,4 @@
-* preserve comments and whitespace information in AST
-
+* replacing ast nodes will lose whitespace information in some cases (e.g. replacing true_expr in condition_expr will lose whitespace information after ?)
 
 
 

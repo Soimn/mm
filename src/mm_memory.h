@@ -45,11 +45,15 @@ Zero(void* ptr, umm size)
 }
 
 #define ZeroStruct(S) Zero((S), sizeof(*(S)))
+#define ZeroArray(A, C) Zero((A), sizeof(*(A)) * (C))
 
-#define ARENA_RESERVE_SIZE GB(10)
+#define ARENA_PREFERRED_RESERVE_SIZE GB(10)
+#define ARENA_PREFERRED_COMMIT_SIZE KB(8)
 
 typedef struct Arena
 {
+    system_commit_memory_func CommitMemory;
+    system_free_memory_func FreeMemory;
     u64 offset;
     u64 space;
     u64 commit_size;
@@ -58,19 +62,20 @@ typedef struct Arena
 typedef u64 Arena_Marker;
 
 internal Arena*
-Arena_Init(u8 num_pages_per_commit)
+Arena_Init(system_reserve_memory_func ReserveMemory, system_commit_memory_func CommitMemory, system_free_memory_func FreeMemory, u64 page_size)
 {
-    umm page_size    = System_PageSize();
-    umm reserve_size = RoundUp(ARENA_RESERVE_SIZE, page_size);
-    umm commit_size  = page_size * num_pages_per_commit;
+    umm reserve_size = RoundUp(ARENA_PREFERRED_RESERVE_SIZE, page_size);
+    umm commit_size  = RoundUp(ARENA_PREFERRED_COMMIT_SIZE, page_size);
     
-    Arena* arena = System_ReserveMemory(reserve_size);
-    System_CommitMemory(arena, commit_size);
+    Arena* arena = ReserveMemory(reserve_size);
+    CommitMemory(arena, commit_size);
     
     *arena = (Arena){
-        .offset      = 0,
-        .space       = commit_size,
-        .commit_size = commit_size,
+        .CommitMemory  = CommitMemory,
+        .FreeMemory    = FreeMemory,
+        .offset        = 0,
+        .space         = commit_size,
+        .commit_size   = commit_size,
     };
     
     return arena;
@@ -86,8 +91,9 @@ Arena_PushSize(Arena* arena, umm size, u8 alignment)
     
     if (advancement > arena->space)
     {
-        umm commit_size = (size <= arena->commit_size ? arena->commit_size : RoundUp(size, System_PageSize()));
-        System_CommitMemory(cursor + arena->space, commit_size);
+        umm commit_size = RoundUp(size, arena->commit_size);
+        
+        arena->CommitMemory(cursor + arena->space, commit_size);
         arena->space += commit_size;
     }
     
@@ -95,6 +101,14 @@ Arena_PushSize(Arena* arena, umm size, u8 alignment)
     arena->space  -= advancement;
     
     return result;
+}
+
+internal void*
+Arena_PushCopy(Arena* arena, void* ptr, umm size, u8 alignment)
+{
+    void* memory = Arena_PushSize(arena, size, alignment);
+    Copy(ptr, memory, size);
+    return memory;
 }
 
 internal void
@@ -107,7 +121,7 @@ Arena_Clear(Arena* arena)
 internal void
 Arena_Free(Arena* arena)
 {
-    System_FreeMemory(arena);
+    arena->FreeMemory(arena);
 }
 
 internal Arena_Marker
@@ -139,4 +153,16 @@ Arena_ReifyPartialTemp(Arena* arena, Arena_Marker marker, umm size)
     umm end = marker + size;
     arena->space += end - arena->offset;
     arena->offset = end;
+}
+
+internal inline void*
+Arena_BasePointer(Arena* arena)
+{
+    return arena + 1;
+}
+
+internal inline void*
+Arena_OffsetPointer(Arena* arena)
+{
+    return (u8*)(arena + 1) + arena->offset;
 }

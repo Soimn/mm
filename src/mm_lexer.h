@@ -1,3 +1,37 @@
+#define LIST_LEXER_ERROR_CODES()                                                                                                            \
+X(0,  LexError_UnknownSymbol,            "Unknown symbol")                                                                              \
+X(1,  LexError_DigitTooLarge,            "digit is too large for current base in numeric literal")                                      \
+X(2,  LexError_TooManyDigits,            "Numeric literal contains too many digits to be representable by any type")                    \
+X(3,  LexError_NumDigitsInHexFloat,      "Invalid number of digits in hexadecimal floating point literal")                              \
+X(4,  LexError_MissingFraction,          "Missing fractional part after decimal point in floating point numeric literal")               \
+X(5,  LexError_TooManyDigitsInFraction,  "Fractional part of numeric literal contains too many digits to be representable by any type") \
+X(6,  LexError_MissingExponent,          "Missing exponent")                                                                            \
+X(7,  LexError_TooManyDigitsInExponent,  "Exponent part of numeric literal contains too many digits to be representable by any type")   \
+X(8,  LexError_MissingDoubleQuote,       "Missing terminating \" after string contents in string literal")                              \
+X(9,  LexError_MissingCharInLit,         "Missing character in character literal")                                                      \
+X(10, LexError_MissingSingleQuote,       "Missing terminating ' after character in character literal")                                  \
+X(11, LexError_MissingDigitsInCodepoint, "Missing digits in codepoint escape sequence")                                                 \
+X(12, LexError_CodepointOutOfRange,      "Codepoint out of UTF-8 range")                                                                \
+X(13, LexError_MissingEscSeqAfterSlash,  "Missing escape sequence after backslash")                                                     \
+X(14, LexError_IllegalEscSeq,            "Illegal escape sequence")                                                                     \
+X(15, LexError_IllegalUTF8Byte,          "Illegal UTF-8 byte")                                                                          \
+X(16, LexError_MissingUTF8SeqByte,       "Missing sequence byte in UTF-8 codepoint")                                                    \
+
+typedef enum LEXER_ERROR_CODE
+{
+#define X(i, e, s) e = i,
+    LIST_LEXER_ERROR_CODES()
+#undef X
+    
+    LEXER_ERROR_CODE_COUNT
+} LEXER_ERROR_CODE;
+
+char* LexerErrorCodeMessages[LEXER_ERROR_CODE_COUNT] = {
+#define X(i, e, s) [e] = s,
+    LIST_LEXER_ERROR_CODES()
+#undef X
+};
+
 typedef enum TOKEN_KIND
 {
     Token_Invalid = 0,
@@ -98,18 +132,29 @@ typedef struct Token
     
     union
     {
+        LEXER_ERROR_CODE error_code;
+        
+        struct
+        {
+            char* message;
+            u32 offset;
+            u32 size;
+        } error;
+        
         Interned_String string;
         u32 character;
         
         struct
         {
-            union
-            {
-                Big_Int integer;
-                Big_Float floating;
-            };
-            i8 base;
-        };
+            Big_Int big_int;
+            u8 base;
+        } integer;
+        
+        struct
+        {
+            Big_Float big_float;
+            u8 byte_size;
+        } floating;
     };
 } Token;
 
@@ -120,6 +165,12 @@ typedef struct Lexer
     u32 offset_to_line;
     u32 line;
 } Lexer;
+
+internal void
+LexerError(LEXER_ERROR_CODE code)
+{
+    NOT_IMPLEMENTED;
+}
 
 internal Lexer
 Lexer_Init(Workspace* workspace, u8* content)
@@ -306,14 +357,14 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 }
                 
                 token.kind   = Token_Identifier;
-                token.string = InternedString__FromInternedStringEntry(workspace, *entry);
+                token.string = InternedString__FromEntry(workspace, *entry);
             }
             else if (c >= '0' && c <= '9')
             {
                 bool encountered_errors = false;
                 
                 imm is_float    = -1; // NOTE: is_float is ternary: -1 undecided, 0 false, 1 true
-                imm base        = -1;
+                u8 base         = 0;
                 umm digit_count = 0;
                 Big_Int integer;
                 BIGNUM_STATUS status = BigNumStatus_None;
@@ -329,7 +380,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     else if (*lexer->cursor == 'y') base = 32;
                     else if (*lexer->cursor == 'z') base = 60;
                     
-                    if (base != -1)
+                    if (base != 0)
                     {
                         is_float = (*lexer->cursor == 'h');
                         ++lexer->cursor;
@@ -364,9 +415,10 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     }
                     else break;
                     
-                    if (digit >= (umm)base)
+                    if (digit >= (umm)parse_base)
                     {
-                        //// ERROR: digit is too large for current base in numeric literal
+                        LexerError(LexError_DigitTooLarge);
+                        
                         encountered_errors = true;
                     }
                     else
@@ -382,7 +434,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 {
                     if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
                     {
-                        //// ERROR: Numeric literal contains too many digits to be representable by any type
+                        LexerError(LexError_TooManyDigits);
+                        
                         encountered_errors = true;
                     }
                     else
@@ -393,31 +446,32 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             {
                                 if (digit_count == 2)
                                 {
-                                    token.kind     = Token_Float;
-                                    token.floating = BigFloat_FromBits(integer, 16);
-                                    token.base     = (i8)base;
+                                    token.kind               = Token_Float;
+                                    token.floating.big_float = BigFloat_FromBits(integer, 16);
+                                    token.floating.byte_size = 2;
                                 }
                                 else if (digit_count == 4)
                                 {
-                                    token.kind     = Token_Float;
-                                    token.floating = BigFloat_FromBits(integer, 32);
-                                    token.base     = (i8)base;
+                                    token.kind               = Token_Float;
+                                    token.floating.big_float = BigFloat_FromBits(integer, 32);
+                                    token.floating.byte_size = 4;
                                 }
                                 else if (digit_count == 8)
                                 {
-                                    token.kind     = Token_Float;
-                                    token.floating = BigFloat_FromBits(integer, 64);
-                                    token.base     = (i8)base;
+                                    token.kind               = Token_Float;
+                                    token.floating.big_float = BigFloat_FromBits(integer, 64);
+                                    token.floating.byte_size = 8;
                                 }
                                 else if (digit_count == 16)
                                 {
-                                    token.kind     = Token_Float;
-                                    token.floating = BigFloat_FromBits(integer, 128);
-                                    token.base     = (i8)base;
+                                    token.kind               = Token_Float;
+                                    token.floating.big_float = BigFloat_FromBits(integer, 128);
+                                    token.floating.byte_size = 16;
                                 }
                                 else
                                 {
-                                    //// ERROR: Invalid number of digits in hexadecimal floating point literal
+                                    LexerError(LexError_NumDigitsInHexFloat);
+                                    
                                     encountered_errors = true;
                                 }
                             }
@@ -425,7 +479,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             {
                                 if (*lexer->cursor < '0' || *lexer->cursor > '9')
                                 {
-                                    //// ERROR: Missing fractional part after decimal point in floating point numeric literal
+                                    LexerError(LexError_MissingFraction);
+                                    
                                     encountered_errors = true;
                                 }
                                 else
@@ -441,7 +496,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                     
                                     if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
                                     {
-                                        //// ERROR: Fractional part of numeric literal contains too many digits to be representable by any type
+                                        LexerError(LexError_TooManyDigitsInFraction);
+                                        
                                         encountered_errors = true;
                                     }
                                     else if (*lexer->cursor == 'e')
@@ -454,7 +510,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                         
                                         if (*lexer->cursor < '0' || *lexer->cursor > '9')
                                         {
-                                            //// ERROR: Missing exponent
+                                            LexerError(LexError_MissingExponent);
+                                            
                                             encountered_errors = true;
                                         }
                                         else while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
@@ -465,25 +522,26 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                         
                                         if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
                                         {
-                                            //// ERROR: Exponent part of numeric literal contains too many digits to be representable by any type
+                                            LexerError(LexError_TooManyDigitsInExponent);
+                                            
                                             encountered_errors = true;
                                         }
                                     }
                                     
                                     if (!encountered_errors)
                                     {
-                                        token.kind     = Token_Float;
-                                        token.floating = BigFloat_FromScientificNotation(integer, fractional, exponent);
-                                        token.base     = (i8)base;
+                                        token.kind               = Token_Float;
+                                        token.floating.big_float = BigFloat_FromScientificNotation(integer, fractional, exponent);
+                                        token.floating.byte_size = 0;
                                     }
                                 }
                             }
                         }
                         else
                         {
-                            token.kind    = Token_Int;
-                            token.integer = integer;
-                            token.base    = (i8)base;
+                            token.kind            = Token_Int;
+                            token.integer.big_int = integer;
+                            token.integer.base    = (u8)base;
                         }
                     }
                 }
@@ -509,7 +567,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     
                     if (*lexer->cursor != '"')
                     {
-                        //// ERROR: Missing terminating " after string contents in string literal
+                        LexerError(LexError_MissingDoubleQuote);
+                        
                         encountered_errors = true;
                     }
                     else
@@ -526,11 +585,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                         
                         while (!encountered_errors && *raw_string_cursor != '"')
                         {
-                            if (!Lexer__DecodeCharacter(&raw_string_cursor, string.data, &string.size))
-                            {
-                                //// ERROR
-                                encountered_errors = true;
-                            }
+                            if (!Lexer__DecodeCharacter(&raw_string_cursor, string.data, &string.size)) encountered_errors = true;
                         }
                         
                         if (encountered_errors) Arena_EndTemp(workspace->workspace_arena, marker);
@@ -551,7 +606,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                 };
                             }
                             
-                            interned_string = InternedString__FromInternedStringEntry(workspace, *entry);
+                            interned_string = InternedString__FromEntry(workspace, *entry);
                         }
                     }
                 }
@@ -572,15 +627,14 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 
                 if (c == '\'')
                 {
-                    //// ERROR: Missing character in character literal
+                    LexerError(LexError_MissingCharInLit);
+                    
                 }
-                else if (!Lexer__DecodeCharacter(&lexer->cursor, bytes, &advancement))
-                {
-                    //// ERROR
-                }
+                else if (!Lexer__DecodeCharacter(&lexer->cursor, bytes, &advancement));
                 else if (c != '\'')
                 {
-                    //// ERROR: Missing terminating ' after character in character literal
+                    LexerError(LexError_MissingSingleQuote);
+                    
                 }
                 else
                 {
@@ -640,7 +694,8 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
                     else if ((*cursor)[1] >= 'A' && (*cursor)[1] <= 'F') codepoint = codepoint << 4 | ((*cursor)[1] & 0x0F + 9);
                     else
                     {
-                        //// ERROR: Missing digits of x escape sequence
+                        LexerError(LexError_MissingDigitsInCodepoint);
+                        
                         encountered_errors = true;
                     }
                 }
@@ -671,7 +726,8 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
                     }
                     else
                     {
-                        //// ERROR: Codepoint out of UTF-8 range
+                        LexerError(LexError_CodepointOutOfRange);
+                        
                         encountered_errors = true;
                     }
                 }
@@ -681,12 +737,14 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
             {
                 if (**cursor == 0)
                 {
-                    //// ERROR: Missing escape sequence after backslash
+                    LexerError(LexError_MissingEscSeqAfterSlash);
+                    
                     encountered_errors = true;
                 }
                 else
                 {
-                    //// ERROR: Illegal escape sequence
+                    LexerError(LexError_IllegalEscSeq);
+                    
                     encountered_errors = true;
                 }
             } break;
@@ -700,7 +758,8 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
         else if ((**cursor & 0xE0) == 0xC0) length = 2;
         else
         {
-            //// ERROR: Illegal UTF-8 byte
+            LexerError(LexError_IllegalUTF8Byte);
+            
             encountered_errors = true;
         }
         
@@ -715,7 +774,8 @@ Lexer__DecodeCharacter(u8** cursor, u8* result, umm* advancement)
                 if ((**cursor & 0xC0) == 0x80) *result++ = **cursor;
                 else
                 {
-                    //// ERROR: Missing sequence byte in UTF-8 codepoint
+                    LexerError(LexError_MissingUTF8SeqByte);
+                    
                     encountered_errors = true;
                 }
             }

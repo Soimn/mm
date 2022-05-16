@@ -49,21 +49,10 @@ int _fltused;
 
 #include "mm.h"
 
-umm
-System_PageSize()
-{
-    SYSTEM_INFO info;
-    GetSystemInfo(&info);
-    
-    return info.dwPageSize;
-}
-
 void*
 System_ReserveMemory(umm size)
 {
     void* result = VirtualAlloc(0, size, MEM_RESERVE, PAGE_READWRITE);
-    
-    // TODO: handle OoM
     ASSERT(result);
     
     return result;
@@ -73,8 +62,6 @@ void
 System_CommitMemory(void* ptr, umm size)
 {
     void* result = VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
-    
-    // TODO: handle OoM
     ASSERT(result);
 }
 
@@ -87,7 +74,16 @@ System_FreeMemory(void* ptr)
 void __stdcall
 WinMainCRTStartup()
 {
-    Workspace* workspace = Workspace_Open();
+    SYSTEM_INFO sys_info;
+    GetSystemInfo(&sys_info);
+    
+    Workspace_Options ws_options = {
+        .ReserveMemory  = System_ReserveMemory,
+        .CommitMemory   = System_CommitMemory,
+        .FreeMemory     = System_FreeMemory,
+        .page_size      = sys_info.dwPageSize,
+    };
+    Workspace* workspace = Workspace_Open(ws_options);
     
     // TODO:
     Interned_String s0 = InternedString_FromString(workspace, STRING(""));
@@ -95,7 +91,7 @@ WinMainCRTStartup()
     Interned_String s2 = InternedString_FromString(workspace, STRING("defer"));
     
     String ss0 = InternedString_ToString(workspace, s0);
-    String ss1 = InternedString_ToString(workspace, s1);
+    //String ss1 = InternedString_ToString(workspace, s1);
     String ss2 = InternedString_ToString(workspace, s2);
     
     Workspace_Close(workspace);
