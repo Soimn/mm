@@ -96,16 +96,6 @@ WinMainCRTStartup()
     };
     Workspace* workspace = Workspace_Open(ws_options);
     
-    // TODO:
-    Interned_String s0 = InternedString_FromString(workspace, STRING(""));
-    Interned_String s1 = InternedString_FromString(workspace, STRING("s"));
-    Interned_String s2 = InternedString_FromString(workspace, STRING("defer"));
-    
-    String ss0 = InternedString_ToString(workspace, s0);
-    //String ss1 = InternedString_ToString(workspace, s1);
-    String ss2 = InternedString_ToString(workspace, s2);
-    
-    System_Print(ss2);
     Workspace_PrintErrors(workspace, System_Print);
     
     Workspace_Close(workspace);

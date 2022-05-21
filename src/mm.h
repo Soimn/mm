@@ -5,10 +5,11 @@
 #define MM_DEBUG 0
 #endif
 
-#ifdef _WIN32
 #ifndef _WIN64
 #error 32 bit is not supported
 #endif
+
+#include <intrin.h>
 
 typedef signed __int8  i8;
 typedef signed __int16 i16;
@@ -22,9 +23,6 @@ typedef unsigned __int64 u64;
 
 typedef float  f32;
 typedef double f64;
-#else
-#error platform is not supported
-#endif
 
 typedef i64 imm;
 typedef u64 umm;
@@ -49,10 +47,10 @@ typedef String ZString; // NOTE: Zero terminated String (null is not included in
 #define U32_MAX 0xFFFFFFFF
 #define U64_MAX 0xFFFFFFFFFFFFFFFF
 
-#define I8_MIN  0xFF
-#define I16_MIN 0xFFFF
-#define I32_MIN 0xFFFFFFFF
-#define I64_MIN 0xFFFFFFFFFFFFFFFF
+#define I8_MIN  0x80
+#define I16_MIN 0x8000
+#define I32_MIN 0x80000000
+#define I64_MIN 0x8000000000000000
 
 #define I8_MAX  0x7F
 #define I16_MAX 0x7FFF

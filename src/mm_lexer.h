@@ -123,6 +123,8 @@ typedef enum TOKEN_KIND
     Token_LastBinary = Token_OrOr,
 } TOKEN_KIND;
 
+#define TOKEN_KIND_BLOCK_SIZE 16
+
 typedef struct Token
 {
     TOKEN_KIND kind;
@@ -142,14 +144,14 @@ typedef struct Token
         
         struct
         {
-            Big_Int big_int;
+            I256 i256;
             u8 base;
         } integer;
         
         struct
         {
-            Big_Float big_float;
-            u8 byte_size;
+            f64 float64;
+            u8 hex_byte_size;
         } floating;
     };
 } Token;
@@ -358,8 +360,8 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 imm is_float    = -1; // NOTE: is_float is ternary: -1 undecided, 0 false, 1 true
                 u8 base         = 0;
                 umm digit_count = 0;
-                Big_Int integer;
-                BIGNUM_STATUS status = BigNumStatus_None;
+                I256 integer    = I256_0;
+                bool overflow   = false;
                 
                 if (c == '0')
                 {
@@ -379,20 +381,19 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     }
                 }
                 
-                umm parse_base = (umm)base;
+                u8 parse_base = (umm)base;
                 if (base == -1)
                 {
-                    integer      = BigInt_FromU64(c - '0');
+                    integer      = I256_FromU64(c - '0');
                     parse_base   = 10;
                     digit_count += 1;
                 }
-                else integer = BigInt_FromU64(0);
                 
                 while (!encountered_errors)
                 {
-                    umm digit;
+                    u8 digit;
                     if      (*lexer->cursor >= '0' && *lexer->cursor <= '9') digit = *lexer->cursor & 0x0F;
-                    else if (*lexer->cursor >= 'A' && *lexer->cursor <= 'z') digit = *lexer->cursor & 0x1F + 9;
+                    else if (*lexer->cursor >= 'A' && *lexer->cursor <= 'Z') digit = *lexer->cursor & 0x1F + 9;
                     else if (*lexer->cursor >= 'a' && *lexer->cursor <= 'x') digit = *lexer->cursor & 0x1F + 25;
                     else if (*lexer->cursor == '_')
                     {
@@ -414,7 +415,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     }
                     else
                     {
-                        integer      = BigInt_MulAddU64(integer, parse_base, digit, &status);
+                        overflow = (overflow || I256_AppendDigit(&integer, parse_base, digit));
                         digit_count += 1;
                         
                         ++lexer->cursor;
@@ -423,7 +424,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 
                 if (!encountered_errors)
                 {
-                    if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
+                    if (overflow)
                     {
                         Lexer__Error(lexer, &token, LexError_TooManyDigits, start, lexer->cursor);
                         encountered_errors = true;
@@ -436,27 +437,21 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                             {
                                 if (digit_count == 2)
                                 {
-                                    token.kind               = Token_Float;
-                                    token.floating.big_float = BigFloat_FromBits(integer, 16);
-                                    token.floating.byte_size = 2;
+                                    token.kind                   = Token_Float;
+                                    token.floating.float64       = F64_FromF16(F16_FromBits((u16)I256_ChopToU64(integer, 2)));
+                                    token.floating.hex_byte_size = 2;
                                 }
                                 else if (digit_count == 4)
                                 {
-                                    token.kind               = Token_Float;
-                                    token.floating.big_float = BigFloat_FromBits(integer, 32);
-                                    token.floating.byte_size = 4;
+                                    token.kind                   = Token_Float;
+                                    token.floating.float64       = (f64)(F32_Bits){ .bits = (u32)I256_ChopToU64(integer, 4) }.f;
+                                    token.floating.hex_byte_size = 4;
                                 }
                                 else if (digit_count == 8)
                                 {
-                                    token.kind               = Token_Float;
-                                    token.floating.big_float = BigFloat_FromBits(integer, 64);
-                                    token.floating.byte_size = 8;
-                                }
-                                else if (digit_count == 16)
-                                {
-                                    token.kind               = Token_Float;
-                                    token.floating.big_float = BigFloat_FromBits(integer, 128);
-                                    token.floating.byte_size = 16;
+                                    token.kind                   = Token_Float;
+                                    token.floating.float64       = (F64_Bits){ .bits = I256_ChopToU64(integer, 8) }.f;
+                                    token.floating.hex_byte_size = 8;
                                 }
                                 else
                                 {
@@ -473,16 +468,16 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                 }
                                 else
                                 {
-                                    Big_Int fractional = BigInt_FromU64(0);
-                                    Big_Int exponent = BigInt_FromU64(0);
+                                    I256 fractional = I256_0;
+                                    I256 exponent   = I256_0;
                                     
                                     while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
                                     {
-                                        fractional = BigInt_MulAddU64(fractional, 10, *lexer->cursor & 0xF, &status);
+                                        overflow = (overflow || I256_AppendDigit(&fractional, 10, *lexer->cursor & 0xF));
                                         ++lexer->cursor;
                                     }
                                     
-                                    if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
+                                    if (overflow)
                                     {
                                         Lexer__Error(lexer, &token, LexError_TooManyDigitsInFraction, start, lexer->cursor);
                                         encountered_errors = true;
@@ -502,11 +497,11 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                         }
                                         else while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
                                         {
-                                            exponent = BigInt_MulAddU64(exponent, 10, *lexer->cursor & 0xF, &status);
+                                            overflow = (overflow || I256_AppendDigit(&exponent, 10, *lexer->cursor & 0xF));
                                             ++lexer->cursor;
                                         }
                                         
-                                        if ((status & BigNumStatus_Carry) != 0 || (status & BigNumStatus_Overflow) != 0)
+                                        if (overflow)
                                         {
                                             Lexer__Error(lexer, &token, LexError_TooManyDigitsInExponent, start, lexer->cursor);
                                             encountered_errors = true;
@@ -515,18 +510,18 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                     
                                     if (!encountered_errors)
                                     {
-                                        token.kind               = Token_Float;
-                                        token.floating.big_float = BigFloat_FromScientificNotation(integer, fractional, exponent);
-                                        token.floating.byte_size = 0;
+                                        token.kind                   = Token_Float;
+                                        token.floating.float64       = F64_FromParts(integer, fractional, exponent);
+                                        token.floating.hex_byte_size = 0;
                                     }
                                 }
                             }
                         }
                         else
                         {
-                            token.kind            = Token_Int;
-                            token.integer.big_int = integer;
-                            token.integer.base    = (u8)base;
+                            token.kind         = Token_Int;
+                            token.integer.i256 = integer;
+                            token.integer.base = (u8)base;
                         }
                     }
                 }

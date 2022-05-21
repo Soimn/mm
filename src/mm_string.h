@@ -126,61 +126,33 @@ String_Printf(Arena* arena, char* format, ...)
                 f64 fnum = (c == 'F' ? va_arg(args, f64) : va_arg(args, f32));
                 NOT_IMPLEMENTED;
             }
-            else if (c == 'B' && *scan == 'F')
-            {
-                ++scan;
-                
-                Big_Float num = va_arg(args, Big_Float);
-                u8 byte_size  = va_arg(args, u8);
-                
-                if (byte_size == 0)
-                {
-                    NOT_IMPLEMENTED;
-                }
-                else if (byte_size == 2)
-                {
-                    NOT_IMPLEMENTED;
-                }
-                else if (byte_size == 4)
-                {
-                    NOT_IMPLEMENTED;
-                }
-                else if (byte_size == 8)
-                {
-                    NOT_IMPLEMENTED;
-                }
-                else if (byte_size == 16)
-                {
-                    NOT_IMPLEMENTED;
-                }
-                else INVALID_CODE_PATH;
-            }
             else if (c == 'X' || c == 'x' || c == 'B' && *scan == 'X')
             {
                 scan += (c == 'B');
                 
-                Big_Int num = (c == 'B' ? va_arg(args, Big_Int) : BigInt_FromU64(c == 'X' ? va_arg(args, u64) : va_arg(args, u32)));
-                u8 base     = va_arg(args, u8);
+                I256 num = (c == 'B' ? va_arg(args, I256) : I256_FromU64(c == 'X' ? va_arg(args, u64) : va_arg(args, u32)));
+                u8 base  = va_arg(args, u8);
+                I256 base_256 = I256_FromU64(base);
                 
-                Big_Int place  = BigInt_FromU64(1);
+                I256 place     = I256_FromU64(1);
                 umm size       = 1;
-                for (Big_Int copy = BigInt_DivU64(num, base); !BigInt_IsZero(copy); copy = BigInt_DivU64(copy, base)) place = BigInt_MulU64(place, base), size += 1;
+                for (I256 copy = I256_Div(num, base_256, &(I256){0}); !I256_IsZero(copy); copy = I256_Div(copy, base_256, &(I256){0})) place = I256_Mul(place, base_256), size += 1;
                 
-                bool is_negative = (base == 0 && BigInt_IsLessU64(num, 0));
+                bool is_negative = (base == 0 && I256_IsLess(num, I256_0));
                 char* cursor = Arena_PushSize(arena, size + is_negative, ALIGNOF(u8));
                 
                 if (is_negative)
                 {
                     *cursor++ = '-';
-                    num = BigInt_Neg(num);
+                    num = I256_Neg(num);
                 }
                 
-                base = (base == 0 ? 10 : base);
+                if (base == 0) base_256 = I256_FromU64(base = 10);
                 do
                 {
-                    *cursor++ = BigInt_ChopToU64(BigInt_Div(num, place), sizeof(u64)) % base;
-                    place = BigInt_DivU64(place, base);
-                } while (!BigInt_IsZero(place));
+                    *cursor++ = I256_ChopToU64(I256_Div(num, place, &(I256){0}), sizeof(u64)) % base;
+                    place = I256_Div(place, base_256, &(I256){0});
+                } while (!I256_IsZero(place));
             }
             else INVALID_CODE_PATH;
         }

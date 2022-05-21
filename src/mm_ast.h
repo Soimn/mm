@@ -134,14 +134,14 @@ typedef struct AST_Node
         
         struct
         {
-            Big_Int big_int;     // NOTE: 0 means 0
+            I256 i256;           // NOTE: 0 means 0
             u8 base;             // NOTE: 0 means implicit base 10, else explicit base (e.g. 0x0 or 0b0)
         } integer;
         
         struct
         {
-            Big_Float big_float; // NOTE: 0 means 0
-            u8 byte_size;        // NOTE: 0 means normal float, else it is the size of the hex float in bytes
+            f64 float64;         // NOTE: 0 means 0
+            u8 hex_byte_size;    // NOTE: 0 means normal float, else it is the size of the hex float in bytes
         } floating;
         
         struct Proc_Header
@@ -1034,12 +1034,12 @@ DEBUG_AST_Print(Workspace* workspace, Arena* arena, AST_Node* node)
     {
         switch (node->kind)
         {
-            case AST_Identifier: String_Printf(arena, "%S", InternedString_ToString(workspace, node->string));     break;
-            case AST_String:     String_Printf(arena, "\"%S\"", InternedString_ToString(workspace, node->string)); break;
-            case AST_Char:       String_Printf(arena, "'%c'", node->character);                                    break;
-            case AST_Bool:       String_Printf(arena, "%S", (node->boolean ? STRING("true") : STRING("false")));   break;
-            case AST_Int:        String_Printf(arena, "%BX", node->integer.big_int, node->integer.base);           break;
-            case AST_Float:      String_Printf(arena, "%BF", node->floating.big_float, node->floating.byte_size);  break;
+            case AST_Identifier: String_Printf(arena, "%S", InternedString_ToString(workspace, node->string));      break;
+            case AST_String:     String_Printf(arena, "\"%S\"", InternedString_ToString(workspace, node->string));  break;
+            case AST_Char:       String_Printf(arena, "'%c'", node->character);                                     break;
+            case AST_Bool:       String_Printf(arena, "%S", (node->boolean ? STRING("true") : STRING("false")));    break;
+            case AST_Int:        String_Printf(arena, "%BX", node->integer.i256, node->integer.base);               break;
+            case AST_Float:      String_Printf(arena, "%BF", node->floating.float64, node->floating.hex_byte_size); break;
             INVALID_DEFAULT_CASE;
         }
     }

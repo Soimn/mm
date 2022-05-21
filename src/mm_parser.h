@@ -441,14 +441,14 @@ ParsePrimaryExpression(Parser* parser, AST_Node** expression)
     else if (token.kind == Token_Int)
     {
         *expression = PushNode(parser, AST_Int, line, col, whitespace_info);
-        (*expression)->integer.big_int = token.integer.big_int;
-        (*expression)->integer.base    = token.integer.base;
+        (*expression)->integer.i256 = token.integer.i256;
+        (*expression)->integer.base = token.integer.base;
     }
     else if (token.kind == Token_Float)
     {
         *expression = PushNode(parser, AST_Float, line, col, whitespace_info);
-        (*expression)->floating.big_float = token.floating.big_float;
-        (*expression)->floating.byte_size = token.floating.byte_size;
+        (*expression)->floating.float64       = token.floating.float64;
+        (*expression)->floating.hex_byte_size = token.floating.hex_byte_size;
     }
     else if (token.kind == Token_Character)
     {
@@ -1006,9 +1006,9 @@ ParseBinaryExpression(Parser* parser, AST_Node** expression)
             
             if (!ParsePrefixExpression(parser, &right)) return false;
             
-            umm precedence = token.kind >> 4;
+            umm precedence = token.kind / TOKEN_KIND_BLOCK_SIZE;
             
-            while ((*left)->kind >> 4 > precedence) left = &(*left)->binary_expr.right;
+            while ((*left)->kind / TOKEN_KIND_BLOCK_SIZE > precedence) left = &(*left)->binary_expr.right;
             
             AST_Node* new_expression = PushNode(parser, token.kind, line, col, whitespace_info);
             new_expression->binary_expr.left  = *left;
@@ -1199,7 +1199,7 @@ ParseStatement(Parser* parser, AST_Node** statement)
         AST_Node* body      = 0;
         
         token = GetToken(parser);
-        if (token.kind != Token_Semicolon && !ParseAssignmentDeclarationOrExpression(parser, &condition)) return false;
+        if      (token.kind != Token_Semicolon && !ParseAssignmentDeclarationOrExpression(parser, &condition)) return false;
         else if (EatToken(parser, Token_Semicolon, &whitespace_info.while_info.ws_init_semi))
         {
             init = condition;
