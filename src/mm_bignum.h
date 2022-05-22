@@ -539,8 +539,10 @@ I256_AppendDigit(I256* n, u8 base, u8 digit)
     return _addcarry_u64(c2, n3*b, n2b_hi, &n->pieces[3]);
 }
 
-#define F16_EXP_BIAS 15
 #define F16_SIGNIFICAND_SIZE 10
+#define F16_SIGNIFICAND_MASK 0x3FF
+#define F16_EXP_SIZE 5
+#define F16_EXP_BIAS 15
 
 typedef struct f16
 {
@@ -549,13 +551,15 @@ typedef struct f16
     struct
     {
         u16 significand : F16_SIGNIFICAND_SIZE;
-        u16 exp         : 5;
+        u16 exp         : F16_EXP_SIZE;
         u16 sign        : 1;
     };
 } f16;
 
-#define F32_EXP_BIAS 127
 #define F32_SIGNIFICAND_SIZE 23
+#define F32_SIGNIFICAND_MASK 0x7FFFFF
+#define F32_EXP_SIZE 8
+#define F32_EXP_BIAS 127
 
 typedef union F32_Bits
 {
@@ -565,13 +569,15 @@ typedef union F32_Bits
     struct
     {
         u32 significand : F32_SIGNIFICAND_SIZE;
-        u32 exp         : 8;
+        u32 exp         : F32_EXP_SIZE;
         u32 sign        : 1;
     };
 } F32_Bits;
 
-#define F64_EXP_BIAS 1023
 #define F64_SIGNIFICAND_SIZE 52
+#define F64_SIGNIFICAND_MASK 0xFFFFFFFFFFFFF
+#define F64_EXP_SIZE 11
+#define F64_EXP_BIAS 1023
 
 typedef union F64_Bits
 {
@@ -581,7 +587,7 @@ typedef union F64_Bits
     struct
     {
         u64 significand : F64_SIGNIFICAND_SIZE;
-        u64 exp         : 11;
+        u64 exp         : F64_EXP_SIZE;
         u64 sign        : 1;
     };
 } F64_Bits;
@@ -592,28 +598,141 @@ F16_FromBits(u16 bits)
     return (f16){ .bits = bits };
 }
 
+// NOTE: It took me 4+ hours of understanding and adapting Fabien Giesen's code,
+//       fortunately making me understand how float conversion works, but it was
+//       only after the fact that I realized there are intrinsics for this...
+//       The final version will probably use the intrinsics, but this might
+//       be useful later, if I feel like going through the absolute hell that is
+//       implementing 128-bit IEEE 754 floating point
+
+// NOTE: https://gist.github.com/rygorous/2144712 used as reference
 internal f64
 F64_FromF16(f16 f)
 {
-    F64_Bits bits;
+    // NOTE: Signed 0 by default
+    F64_Bits bits = { .sign = f.sign };
     
-    bits.significand = (u64)f.significand << (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE);
-    bits.exp         = ((i64)f.exp - F16_EXP_BIAS) + F64_EXP_BIAS;
-    bits.sign        = f.sign;
+    // NOTE: denormal or signed 0
+    if (f.exp == 0)
+    {
+        // NOTE: denormal
+        if (f.significand != 0)
+        {
+            u16 significand = f.significand;
+            imm exp         = -14;
+            
+            // NOTE: denormal numbers are not normalized, normalize and keep track of change to exponent
+            while ((significand & ((u16)1 << F16_SIGNIFICAND_SIZE)) == 0)
+            {
+                exp          -= 1;
+                significand <<= 1;
+            }
+            
+            bits.exp         = exp + F64_EXP_BIAS;
+            bits.significand = (u64)(significand & F16_SIGNIFICAND_MASK) << (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE);
+        }
+    }
+    // NOTE: signed inf or NaN
+    else if (f.exp == ((umm)1 << F16_EXP_SIZE) - 1)
+    {
+        // NOTE: significand == 0 => signed inf, significand != 0 => sNaN/qNaN
+        //       NaN and qNaN are typically distinguished by the most significant bit
+        //       in the significand (1 for sNaN), according to comments in the reference
+        //       it is safe to truncate the lower bits of a NaNs significand by shifting
+        //       it up to the "binary point" of a single precision float. I assume this also
+        //       holds true for half to double.
+        bits.exp         = ((umm)1 << F64_EXP_SIZE) - 1;
+        bits.significand = (u64)f.significand << (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE);
+    }
+    else
+    {
+        bits.exp         = ((i64)f.exp - F16_EXP_BIAS) + F64_EXP_BIAS;
+        bits.significand = (u64)f.significand << (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE);
+    }
     
-    // TODO: special: subnormal, inf, nan
-    NOT_IMPLEMENTED;
+    return bits.f;
 }
 
+// NOTE: https://gist.github.com/rygorous/2144712 used as reference
 internal f16
-F64_ToF16(f64 f)
+F64_ToF16(f64 float64)
 {
-    F64_Bits bits = { .f = f };
-    NOT_IMPLEMENTED;
-}
-
-internal f64
-F64_FromParts(I256 integeral, I256 fractional, I256 exponent)
-{
-    NOT_IMPLEMENTED;
+    F64_Bits bits = { .f = float64 };
+    
+    // NOTE: Signed 0 by default
+    f16 f = { .sign = (u16)bits.sign };
+    
+    // NOTE: Signed inf and NaN
+    if (bits.exp == ((umm)1 << F64_EXP_SIZE) - 1)
+    {
+        // NOTE: NaN is converted to qNaN, signed inf is kept as is
+        f.significand = (bits.significand == 0 ? 0 : 0x200);
+        f.exp         = ((umm)1 << F16_EXP_SIZE) - 1;
+    }
+    // NOTE: Normal double numbers
+    else
+    {
+        imm exponent = (bits.exp - F64_EXP_BIAS) + F16_EXP_BIAS;
+        
+        // NOTE: exponent might be too large (float overflow), return signed inf if this is true
+        if (exponent >= 2 * F16_EXP_BIAS + 1)
+        {
+            f.significand = 0;
+            f.exp         = ((umm)1 << F16_EXP_SIZE) - 1;
+        }
+        // NOTE: exponent might be too small (float underflow), adjust if the normalized value is representable, else return 0
+        else if (exponent <= 0)
+        {
+            // NOTE: check if the significand will be non zero by checking if the number of digits shifted out is less than the
+            //       number of digits in the significand (this includes the implicit 1)
+            umm num_digits_shifted_out = (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE) + 1;
+            if ((num_digits_shifted_out + (umm)-exponent) <= F64_SIGNIFICAND_SIZE + 1)
+            {
+                u64 significand  = bits.significand | (u64)1 << F64_SIGNIFICAND_SIZE;
+                umm shift_amount = num_digits_shifted_out + (umm)-exponent;
+                
+                f.significand = (u16)(significand >> shift_amount);
+                // NOTE: f.exp is left as 0 to make the number denormal
+                
+                u64 significand_shifted_out            = (u16)(significand & (((u64)1 << shift_amount) - 1));
+                u64 most_significant_shifted_out_digit = (u64)1 << (shift_amount - 1);
+                
+                // NOTE: This is the same rounding procedure as the one for normal numbers below (the big comment, if not outdated).
+                //       The gist is that if the most significant digit that was shifted out is set, the shifted out part is larger
+                //       or equal to half the least significant digit in the f16 significand. If the shifted out part is larger
+                //       (i.e. more bits that were shifted out are set) or the shifted out part consists only of that set bit and
+                //       the f16 significand is odd, the f16 bits are incremented to round up to the nearest even. This increment
+                //       might overflow from the significand into the exponent, turning the f16 from a denormal number to a normal
+                //       number.
+                if (significand_shifted_out > most_significant_shifted_out_digit || significand_shifted_out ==  most_significant_shifted_out_digit && (f.significand & 1) != 0)
+                {
+                    f.bits += 1;
+                }
+            }
+        }
+        else
+        {
+            f.significand = (u16)(bits.significand >> (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE));
+            f.exp         = (u16)exponent;
+            
+            // NOTE: If the shifted out bits have the most significant bit set and the remaining bits are either non zero,
+            //       or the least significant bit that __was not__ shifted out (i.e. f.significand & 1) is set, then
+            //       the bits of the result (f) is incremented as an unsigned 16 bit integer. This will round up to the
+            //       nearest even if that value is representable as an f16 (which may involve overflowing the significand).
+            //       Otherwise, if the value is not representable as an f16, the overflow of the significand will increment
+            //       the exponent (which must be 0x1E, otherwise the value is representable) from 0x1E to the max value 0x1F,
+            //       producing a signed inf. (What I mean by representable is that there is a non inf/NaN f16 value that is as
+            //       close to the actual value as possible. Increasing the significand by 1 might not always increase the f16
+            //       value by 1. This means the "nearest representable even" is kind of misleading, since the value is the
+            //       nearest non inf/NaN value that is even, but it might not be a multiple of 2)
+            u64 shifted_out_mask     = F64_SIGNIFICAND_MASK >> (F64_SIGNIFICAND_SIZE - F16_SIGNIFICAND_SIZE);
+            u64 most_significant_bit = (shifted_out_mask >> 1) + 1;
+            if ((bits.significand & shifted_out_mask) > most_significant_bit || bits.significand == most_significant_bit && (f.significand & 1) != 0)
+            {
+                f.bits += 1;
+            }
+        }
+    }
+    
+    return f;
 }

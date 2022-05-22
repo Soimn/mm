@@ -510,8 +510,12 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                                     
                                     if (!encountered_errors)
                                     {
+                                        NOT_IMPLEMENTED;
+                                        
+                                        // TODO: convert integer, fractional, exponent to a float
+                                        
                                         token.kind                   = Token_Float;
-                                        token.floating.float64       = F64_FromParts(integer, fractional, exponent);
+                                        token.floating.float64; NOT_IMPLEMENTED;
                                         token.floating.hex_byte_size = 0;
                                     }
                                 }
