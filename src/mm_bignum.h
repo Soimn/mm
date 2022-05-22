@@ -222,6 +222,68 @@ X128_ChopToU64(X128 n, umm byte_size)
     return (byte_size == 8 ? n.lo : n.lo & ~(U64_MAX >> (byte_size*8)));
 }
 
+internal U128
+U128_DivU64(U128 a, u64 b, u64* remainder)
+{
+    return (U128){
+        .hi = a.hi / b,
+        .lo = _udiv128(a.hi % b, a.lo, b, remainder),
+    };
+}
+
+internal U128
+U128_Div(U128 a, U128 b, U128* remainder)
+{
+    if (U128_IsLess(a, b))
+    {
+        *remainder = a;
+        return (U128){0};
+    }
+    else if (b.hi == 0)
+    {
+        remainder->hi = 0;
+        return U128_DivU64(a, b.lo, &remainder->lo);
+    }
+    
+    U128 quotient = {0};
+    
+    // NOTE: Derived from http://www.hackersdelight.org/hdcodetxt/divmnu64.c.txt
+    //       the permissions for which are stated in https://web.archive.org/web/20190408122508/http://hackersdelight.org/permissions.htm
+    NOT_IMPLEMENTED;
+    
+    return quotient;
+}
+
+internal U128
+U128_Div(U128 a, U128 b, U128* remainder)
+{
+    U128 quotient;
+    
+    NOT_IMPLEMENTED;
+    
+    return quotient;
+}
+
+internal I128
+I128_Div(I128 a, I128 b, I128* remainder)
+{
+    I128 quotient;
+    
+    NOT_IMPLEMENTED;
+    
+    return quotient;
+}
+
+internal I256
+I256_Div(I256 a, I256 b, I256* remainder)
+{
+    I256 quotient;
+    
+    NOT_IMPLEMENTED;
+    
+    return quotient;
+}
+
 internal I128
 I128_FromI64(i64 n)
 {
