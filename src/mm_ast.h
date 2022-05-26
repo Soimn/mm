@@ -101,9 +101,6 @@ typedef struct AST_Node
     AST_NODE_KIND kind;
     
     struct AST_Node* next; // NOTE: 0 means no next
-    File_ID file_id;
-    u32 offset;
-    u32 size;
     struct AST_Node_Info* info;
     
     union
@@ -513,8 +510,11 @@ typedef union AST_Whitespace_Info
 
 typedef struct AST_Node_Info
 {
+    File_ID file_id;
+    u32 offset;
     u32 line;
     u32 col;
+    u32 size;
     
     union AST_Whitespace_Info;
 } AST_Node_Info;
@@ -551,7 +551,7 @@ AST_StatementNeedsSemicolon(AST_Node* node)
 internal void
 DEBUG_AST_Print(Workspace* workspace, Arena* arena, AST_Node* node)
 {
-    File* file          = File_FromFileID(workspace, node->file_id);
+    File* file          = File_FromFileID(workspace, node->info->file_id);
     AST_Node_Info* info = node->info;
     
     String_Printf(arena, "%S", WhitespaceInfo_ToString(file, info->ws_before));
@@ -737,7 +737,7 @@ DEBUG_AST_Print(Workspace* workspace, Arena* arena, AST_Node* node)
             
             if (node->variable_decl.type != 0) DEBUG_AST_Print(workspace, arena, node->variable_decl.type);
             
-            String_Printf(arena, "%S=", WhitespaceInfo_ToString(file, info->variable_info.ws_equals));
+            String_Printf(arena, "%S:", WhitespaceInfo_ToString(file, info->variable_info.ws_equals));
             
             for (AST_Node* scan = node->variable_decl.values; scan != 0; scan = scan->next)
             {
@@ -1038,11 +1038,48 @@ DEBUG_AST_Print(Workspace* workspace, Arena* arena, AST_Node* node)
             case AST_String:     String_Printf(arena, "\"%S\"", InternedString_ToString(workspace, node->string));  break;
             case AST_Char:       String_Printf(arena, "'%c'", node->character);                                     break;
             case AST_Bool:       String_Printf(arena, "%S", (node->boolean ? STRING("true") : STRING("false")));    break;
-            case AST_Int:        String_Printf(arena, "%BX", node->integer.i256, node->integer.base);               break;
-            case AST_Float:      String_Printf(arena, "%BF", node->floating.float64, node->floating.hex_byte_size); break;
+            
+            case AST_Float:
+            {
+                if      (node->floating.hex_byte_size == 0) String_Printf(arena, "%F", node->floating.float64);
+                else if (node->floating.hex_byte_size == 2) String_Printf(arena, "0h%x", F64_ToF16(node->floating.float64), 16);
+                else if (node->floating.hex_byte_size == 4) String_Printf(arena, "0h%x", (f32)node->floating.float64, 16);
+                else if (node->floating.hex_byte_size == 8) String_Printf(arena, "0h%X", node->floating.float64, 16);
+                else INVALID_CODE_PATH;
+            } break;
+            
+            case AST_Int:
+            {
+                String base_string;
+                switch (node->integer.base)
+                {
+                    case 2:  base_string = STRING("0b"); break;
+                    case 3:  base_string = STRING("0t"); break;
+                    case 8:  base_string = STRING("0o"); break;
+                    case 10: base_string = STRING("0d"); break;
+                    case 12: base_string = STRING("0z"); break;
+                    case 16: base_string = STRING("0x"); break;
+                    case 32: base_string = STRING("0y"); break;
+                    case 60: base_string = STRING("0s"); break;
+                    default: base_string = (String){0};  break;
+                }
+                
+                String_Printf(arena, "%s%BX", base_string, node->integer.i256, node->integer.base);
+            } break;
+            
             INVALID_DEFAULT_CASE;
         }
     }
     
     String_Printf(arena, "%S", WhitespaceInfo_ToString(file, info->ws_terminator));
+}
+
+internal void
+DEBUG_AST_Print_All_Nodes(Workspace* workspace, Arena* arena)
+{
+    for (AST_Node* scan = workspace->head_ast; scan != 0; scan = scan->next)
+    {
+        DEBUG_AST_Print(workspace, arena, scan);
+        if (AST_StatementNeedsSemicolon(scan)) String_Printf(arena, ";");
+    }
 }

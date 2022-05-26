@@ -102,7 +102,6 @@ typedef struct File
     File_ID id;
     String path;
     ZString content;
-    // path
 } File;
 
 typedef struct Text_Pos
@@ -122,7 +121,7 @@ internal Text_Interval
 TextInterval_BetweenStartPoints(Text_Interval included, Text_Interval excluded)
 {
     ASSERT(included.line == excluded.line);
-    ASSERT(included.offset + included.column + included.size < excluded.offset);
+    ASSERT(included.offset + included.column <= excluded.offset + excluded.column);
     
     return (Text_Interval){
         .offset = included.offset,
@@ -168,7 +167,6 @@ typedef struct Workspace
     struct Arena* string_arena;
     struct Arena* file_arena;
     
-    struct File* files;
     struct AST_Node* head_ast;
     struct AST_Node** tail_ast;
     
@@ -178,7 +176,7 @@ typedef struct Workspace
 internal File*
 File_FromFileID(Workspace* workspace, File_ID file_id)
 {
-    return workspace->files + file_id;
+    return (File*)file_id;
 }
 
 #include "mm_bignum.h"
@@ -218,7 +216,7 @@ Workspace_Open(Workspace_Options options)
     
     workspace->tail_ast = &workspace->head_ast;
     
-    InternedString__InitMapAndArray(workspace);
+    InternedString__Init(workspace);
     
     return workspace;
 }

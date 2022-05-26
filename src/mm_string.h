@@ -117,28 +117,66 @@ String_Printf(Arena* arena, char* format, ...)
                 
                 do
                 {
-                    *cursor++ = (num / place) % 10;
+                    *cursor++ = (num / place) % 10 + '0';
                     place /= 10;
                 } while (place != 0);
             }
             else if (c == 'F' || c == 'f')
             {
                 f64 fnum = (c == 'F' ? va_arg(args, f64) : va_arg(args, f32));
-                NOT_IMPLEMENTED;
+                f64 abs_fnum = (fnum < 0 ? -fnum : fnum);
+                
+                // TODO: replace this
+                umm num = (umm)abs_fnum;
+                umm place = 1;
+                umm size  = 1;
+                for (umm copy = num / 10; copy != 0; copy /= 10) place *= 10, size += 1;
+                
+                char* cursor = Arena_PushSize(arena, size + (fnum < 0), ALIGNOF(u8));
+                if (fnum < 0) *cursor++ = '-';
+                
+                do
+                {
+                    *cursor++ = (num / place) % 10 + '0';
+                    place /= 10;
+                } while (place != 0);
+                
+                while ((umm)(abs_fnum * 2) != (umm)abs_fnum * 2) abs_fnum *= 2;
+                
+                num = (umm)abs_fnum;
+                place = 1;
+                size  = 1;
+                for (umm copy = num / 10; copy != 0; copy /= 10) place *= 10, size += 1;
+                
+                cursor = Arena_PushSize(arena, size + 1, ALIGNOF(u8));
+                *cursor++ = '.';
+                
+                do
+                {
+                    *cursor++ = (num / place) % 10 + '0';
+                    place /= 10;
+                } while (place != 0);
             }
             else if (c == 'X' || c == 'x' || c == 'B' && *scan == 'X')
             {
                 scan += (c == 'B');
                 
-                I256 num = (c == 'B' ? va_arg(args, I256) : I256_FromU64(c == 'X' ? va_arg(args, u64) : va_arg(args, u32)));
-                u8 base  = va_arg(args, u8);
-                I256 base_256 = I256_FromU64(base);
+                I256 num         = (c == 'B' ? va_arg(args, I256) : I256_FromU64(c == 'X' ? va_arg(args, u64) : va_arg(args, u32)));
+                u8 base          = va_arg(args, u8);
+                I256 base_256    = I256_FromU64(base);
+                bool is_negative = false;
+                
+                if (base == 0)
+                {
+                    base        = 10;
+                    base_256    = I256_FromU64(base);
+                    is_negative = I256_IsLess(num, I256_0);
+                }
                 
                 I256 place     = I256_FromU64(1);
                 umm size       = 1;
                 for (I256 copy = I256_Div(num, base_256, &(I256){0}); !I256_IsZero(copy); copy = I256_Div(copy, base_256, &(I256){0})) place = I256_Mul(place, base_256), size += 1;
                 
-                bool is_negative = (base == 0 && I256_IsLess(num, I256_0));
                 char* cursor = Arena_PushSize(arena, size + is_negative, ALIGNOF(u8));
                 
                 if (is_negative)
@@ -147,10 +185,9 @@ String_Printf(Arena* arena, char* format, ...)
                     num = I256_Neg(num);
                 }
                 
-                if (base == 0) base_256 = I256_FromU64(base = 10);
                 do
                 {
-                    *cursor++ = I256_ChopToU64(I256_Div(num, place, &(I256){0}), sizeof(u64)) % base;
+                    *cursor++ = I256_ChopToU64(I256_Div(num, place, &(I256){0}), sizeof(u64)) % base + '0';
                     place = I256_Div(place, base_256, &(I256){0});
                 } while (!I256_IsZero(place));
             }
@@ -164,9 +201,6 @@ String_Printf(Arena* arena, char* format, ...)
     return result;
 }
 
-#define INTERNED_STRING_NIL 0
-#define INTERN_MAP_SIZE 512
-
 typedef u64 Interned_String;
 
 typedef struct Interned_String_Entry
@@ -174,11 +208,17 @@ typedef struct Interned_String_Entry
     struct Interned_String_Entry* next;
     u64 hash;
     u64 size;
+    u8 data[];
 } Interned_String_Entry;
 
+#define INTERN_MAP_SIZE 512
+
+#define INTERNED_STRING_NIL 0
+#define EMPTY_STRING (sizeof(Interned_String_Entry*)*INTERN_MAP_SIZE)
+#define BLANK_IDENTIFIER EMPTY_STRING + sizeof(Interned_String_Entry)
+#define KEYWORD_OFFSET BLANK_IDENTIFIER + sizeof(Interned_String_Entry) + (sizeof("_") - 1)
+
 #define LIST_KEYWORDS()               \
-X(EMPTY_STRING,      "")          \
-X(BLANK_IDENTIFIER,  "_")         \
 X(Keyword_Include,   "include")   \
 X(Keyword_Proc,      "proc")      \
 X(Keyword_Struct,    "struct")    \
@@ -201,98 +241,96 @@ X(Keyword_Where,     "where")     \
 
 enum
 {
-    Keyword_Dummy_Acc_Sentinel = sizeof(Interned_String_Entry),
+    Keyword_Dummy_Low_Sentinel = KEYWORD_OFFSET,
     
-#define X(e, s)                                                                                                     \
-Keyword_Dummy_Acc_##e,                                                                                          \
-e = ((Keyword_Dummy_Acc_##e - 1) + (sizeof(Interned_String_Entry) - 1)) & ~(sizeof(Interned_String_Entry) - 1), \
-Keyword_Dummy_Pad_##e = e + sizeof(s) - 1,
+#define X(e, s)                                                                                                        \
+Keyword_Dummy_Low_##e,                                                                                             \
+e = ((Keyword_Dummy_Low_##e - 1) +  (ALIGNOF(Interned_String_Entry) - 1)) & ~(ALIGNOF(Interned_String_Entry) - 1), \
+Keyword_Dummy_High_##e = e + sizeof(Interned_String_Entry) + sizeof(s) - 1,
     
     LIST_KEYWORDS()
-        
 #undef X
     
-    Keyword_Dummy_Pad_Sentinel,
+    Keyword_Dummy_High_Sentinel,
 };
+
+#define KEYWORD_MAX Keyword_Dummy_High_Sentinel - 1
 
 internal Interned_String_Entry**
 InternedString__FindSpot(Workspace* workspace, u64 hash, String string)
 {
-    Interned_String_Entry** entry = (Interned_String_Entry**)Arena_BasePointer(workspace->string_arena) + (hash % INTERN_MAP_SIZE);
+    Interned_String_Entry** map = Arena_BasePointer(workspace->string_arena);
     
+    Interned_String_Entry** entry = &map[hash % INTERN_MAP_SIZE];
     for (; *entry != 0; entry = &(*entry)->next)
     {
-        if ((*entry)->hash == hash && String_Match(string, (String){ .data = (u8*)(*entry + 1), .size = (*entry)->size })) break;
+        if (hash == (*entry)->hash && String_Match(string, (String){ .data = (*entry)->data, .size = (*entry)->size })) break;
+        else                                                                                                            continue;
     }
     
     return entry;
 }
 
-internal inline Interned_String
-InternedString__FromEntry(Workspace* workspace, Interned_String_Entry* entry)
-{
-    return (Interned_String)(entry - (Interned_String_Entry*)((u8*)Arena_BasePointer(workspace->string_arena) + sizeof(Interned_String_Entry*) * INTERN_MAP_SIZE));
-}
-
-internal inline Interned_String_Entry*
+internal Interned_String_Entry*
 InternedString__ToEntry(Workspace* workspace, Interned_String string)
 {
-    return (Interned_String_Entry*)((u8*)Arena_BasePointer(workspace->string_arena) + sizeof(Interned_String_Entry*) * INTERN_MAP_SIZE + sizeof(Interned_String_Entry) * string);
+    ASSERT(string != 0);
+    return (Interned_String_Entry*)((u8*)Arena_BasePointer(workspace->string_arena) + string);
+}
+
+internal Interned_String
+InternedString__FromEntry(Workspace* workspace, Interned_String_Entry* entry)
+{
+    return (Interned_String)((u8*)entry - (u8*)Arena_BasePointer(workspace->string_arena));
 }
 
 internal void
-InternedString__InitMapAndArray(Workspace* workspace)
+InternedString__Init(Workspace* workspace)
 {
-    Interned_String_Entry** intern_map = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry*) * INTERN_MAP_SIZE, ALIGNOF(Interned_String_Entry*));
-    ZeroArray(intern_map, INTERN_MAP_SIZE);
+    Interned_String_Entry** map = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry*)*INTERN_MAP_SIZE,
+                                                 ALIGNOF(Interned_String_Entry*));
+    ZeroArray(map, INTERN_MAP_SIZE);
     
-    Interned_String_Entry* nil_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry), ALIGNOF(Interned_String_Entry));
-    ZeroStruct(nil_entry);
+#define X(e, s)\
+Interned_String_Entry* e##_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry), ALIGNOF(Interned_String_Entry)); \
+String e##_string = STRING(s);                                                                                                             \
+u64 e##_hash      = String_Hash(e##_string);                                                                                               \
+e##_entry->next = 0;                                                                                                                       \
+e##_entry->hash = e##_hash;                                                                                                                \
+e##_entry->size = e##_string.size;                                                                                                         \
+Arena_PushCopy(workspace->string_arena, e##_string.data, e##_string.size, ALIGNOF(u8));                                                    \
+*InternedString__FindSpot(workspace, e##_hash, e##_string) = e##_entry;
     
-#define X(e, s) Interned_String_Entry* e##_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + sizeof(s) - 1, ALIGNOF(Interned_String_Entry)); \
-u64 e##_hash = String_Hash(STRING(s));                                                                                                                                    \
-Interned_String_Entry** e##_spot = InternedString__FindSpot(workspace, e##_hash, STRING(s));                                                                              \
-ASSERT(*e##_spot == 0);                                                                                                                                                   \
-*e##_spot = e##_entry;                                                                                                                                                    \
-*e##_entry = (Interned_String_Entry){ .hash = e##_hash, .size = sizeof(s) - 1 };                                                                                          \
-Copy(s, (u8*)(e##_entry + 1), sizeof(s) - 1);                                                                                                                             \
+    X(EMPTY_STRING, "");
+    X(BLANK_IDENTIFIER, "_");
     
     LIST_KEYWORDS()
-        
 #undef X
+}
+
+internal String
+InternedString_ToString(Workspace* workspace, Interned_String string)
+{
+    ASSERT(string != 0);
+    Interned_String_Entry* entry = InternedString__ToEntry(workspace, string);
+    return (String){ .data = entry->data, .size = entry->size };
 }
 
 internal Interned_String
 InternedString_FromString(Workspace* workspace, String string)
 {
     Interned_String_Entry** entry = InternedString__FindSpot(workspace, String_Hash(string), string);
-    
-    return (*entry == 0 ? INTERNED_STRING_NIL : InternedString__FromEntry(workspace, *entry));
-}
-
-internal String
-InternedString_ToString(Workspace* workspace, Interned_String string)
-{
-    ASSERT(string != INTERNED_STRING_NIL);
-    Interned_String_Entry* entry = InternedString__ToEntry(workspace, string);
-    
-    return (String){ .data = (u8*)(entry + 1), .size = entry->size };
+    return (*entry != 0 ? InternedString__FromEntry(workspace, *entry) : INTERNED_STRING_NIL);
 }
 
 internal bool
 InternedString_IsKeyword(Interned_String string)
 {
-    return (string >= Keyword_Dummy_Acc_Sentinel && string < Keyword_Dummy_Pad_Sentinel);
-}
-
-internal bool
-InternedString_IsIdentifier(Interned_String string)
-{
-    return (string >= Keyword_Dummy_Pad_Sentinel || string == BLANK_IDENTIFIER);
+    return (string >= KEYWORD_OFFSET && string <= KEYWORD_MAX);
 }
 
 internal bool
 InternedString_IsNonBlankIdentifier(Interned_String string)
 {
-    return (string >= Keyword_Dummy_Pad_Sentinel);
+    return (string > KEYWORD_MAX);
 }

@@ -231,13 +231,20 @@ U128_DivU64(U128 a, u64 b, u64* remainder)
     };
 }
 
+// NOTE: Derived from the explanations of "Extended Precision Division" and "Shift & Subtract Division"
+//       at https://skanthak.homepage.t-online.de/integer.html
 internal U128
 U128_Div(U128 a, U128 b, U128* remainder)
 {
-    if (U128_IsLess(a, b))
+    if (X128_IsLess(a, b))
     {
         *remainder = a;
         return (U128){0};
+    }
+    else if (X128_IsEqual(a, b))
+    {
+        *remainder = (U128){0};
+        return (U128){ .lo = 1, };
     }
     else if (b.hi == 0)
     {
@@ -247,39 +254,48 @@ U128_Div(U128 a, U128 b, U128* remainder)
     
     U128 quotient = {0};
     
-    // NOTE: Derived from http://www.hackersdelight.org/hdcodetxt/divmnu64.c.txt
-    //       the permissions for which are stated in https://web.archive.org/web/20190408122508/http://hackersdelight.org/permissions.htm
-    NOT_IMPLEMENTED;
+    for (imm i = __lzcnt64(a.hi) - __lzcnt64(b.hi); i >= 0; --i)
+    {
+        quotient = X128_BitShl(quotient, 1);
+        
+        U128 shifted_b = X128_BitShl(b, (umm)i);
+        
+        if (X128_IsLess(shifted_b, a))
+        {
+            a = X128_Sub(0, a, shifted_b, &(u8){0});
+            quotient.lo |= 1;
+        }
+    }
+    
+    *remainder = a;
     
     return quotient;
 }
 
-internal U128
-U128_Div(U128 a, U128 b, U128* remainder)
-{
-    U128 quotient;
-    
-    NOT_IMPLEMENTED;
-    
-    return quotient;
-}
-
+// NOTE: Derived from the explanations in Hacker's Delight on how to produce signed division unsigned division
+//       https://doc.lagout.org/security/Hackers%20Delight.pdf
 internal I128
 I128_Div(I128 a, I128 b, I128* remainder)
 {
-    I128 quotient;
+    bool opposite_signs  = false;
+    bool dividend_is_neg = false;
     
-    NOT_IMPLEMENTED;
+    if (a.hi > I64_MAX)
+    {
+        a = X128_Neg(a);
+        dividend_is_neg = true;
+    }
     
-    return quotient;
-}
-
-internal I256
-I256_Div(I256 a, I256 b, I256* remainder)
-{
-    I256 quotient;
+    if (b.hi > I64_MAX)
+    {
+        b = X128_Neg(a);
+        opposite_signs = !dividend_is_neg;
+    }
     
-    NOT_IMPLEMENTED;
+    X128 quotient = U128_Div(a, b, remainder);
+    
+    if (opposite_signs)   quotient  = X128_Neg(quotient);
+    if (dividend_is_neg) *remainder = X128_Neg(*remainder);
     
     return quotient;
 }
@@ -311,6 +327,12 @@ internal bool I128_IsZero(I128 n)                                          { ret
 internal bool I128_IsLess(I128 a, I128 b)                                  { return X128_IsLess(a, b);                     }
 internal bool I128_IsGreater(I128 a, I128 b)                               { return X128_IsGreater(a, b);                  }
 internal u64  I128_ChopToU64(I128 n, umm byte_size)                        { return X128_ChopToU64(n, byte_size);          }
+
+internal bool
+I128_IsNeg(I128 n)
+{
+    return (n.hi > I64_MAX);
+}
 
 internal U128
 U128_FromU64(u64 n)
@@ -599,6 +621,68 @@ I256_AppendDigit(I256* n, u8 base, u8 digit)
     u8 c2 = _addcarry_u64(c1, n1b_hi, n2b_lo, &n->pieces[2]);
     
     return _addcarry_u64(c2, n3*b, n2b_hi, &n->pieces[3]);
+}
+
+internal I256
+I256_Div(I256 a, I256 b, I256* remainder)
+{
+    I256 quotient = {0};
+    
+    bool dividend_is_neg = false;
+    bool opposite_signs  = false;
+    
+    if (I128_IsNeg(a.hi))
+    {
+        a = I256_Neg(a);
+        dividend_is_neg = true;
+    }
+    
+    if (I128_IsNeg(b.hi))
+    {
+        b = I256_Neg(a);
+        opposite_signs = !dividend_is_neg;
+    }
+    
+    if (I256_IsLess(a, b))
+    {
+        // NOTE: quotient is already 0
+        *remainder = a;
+    }
+    else if (I256_IsEqual(a, b))
+    {
+        quotient.lo = (U128){ .lo = 1 };
+        *remainder  = (I256){0};
+    }
+    else if (U128_IsZero(a.hi) && U128_IsZero(b.hi))
+    {
+        remainder->hi = (U128){0};
+        quotient.lo   = U128_Div(a.lo, b.lo, &remainder->lo);
+    }
+    else
+    {
+        umm lz_a = (a.hi.hi == 0 ? 64 + __lzcnt64(a.hi.lo) : __lzcnt64(a.hi.hi));
+        umm lz_b = (b.hi.hi == 0 ? 64 + __lzcnt64(b.hi.lo) : __lzcnt64(b.hi.hi));
+        
+        for (imm i = lz_a - lz_b; i >= 0; --i)
+        {
+            quotient = I256_BitShl(quotient, (I256){ .lo.lo = 1 });
+            
+            I256 shifted_b = I256_BitShl(b, (I256){ .lo.lo = i });
+            
+            if (I256_IsLess(shifted_b, a))
+            {
+                a = I256_Sub(a, shifted_b, &(u8){0});
+                quotient.lo.lo |= 1;
+            }
+        }
+        
+        *remainder = a;
+    }
+    
+    if (opposite_signs)   quotient  = I256_Neg(quotient);
+    if (dividend_is_neg) *remainder = I256_Neg(*remainder);
+    
+    return quotient;
 }
 
 #define F16_SIGNIFICAND_SIZE 10

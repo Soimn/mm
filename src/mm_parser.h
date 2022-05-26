@@ -18,7 +18,7 @@ GetToken(Parser* parser)
 internal Token
 PeekToken(Parser* parser, umm index)
 {
-    ASSERT(index + 1 < ARRAY_SIZE(parser->peek));
+    ASSERT(index <= PARSER_PEEK_MAX);
     return parser->peek[(parser->peek_cursor + index) % ARRAY_SIZE(parser->peek)];
 }
 
@@ -28,7 +28,7 @@ NextToken(Parser* parser, Whitespace_Info* ws)
     *ws = WhitespaceInfo_FromToken(parser->file_id, parser->peek[parser->peek_cursor]);
     
     parser->peek_cursor = (parser->peek_cursor + 1) % ARRAY_SIZE(parser->peek);
-    parser->peek[parser->peek_cursor] = Lexer_Advance(parser->workspace, &parser->lexer);
+    parser->peek[(parser->peek_cursor + PARSER_PEEK_MAX) % ARRAY_SIZE(parser->peek)] = Lexer_Advance(parser->workspace, &parser->lexer);
     
     return parser->peek[parser->peek_cursor];
 }
@@ -51,6 +51,7 @@ PushNode(Parser* parser, AST_NODE_KIND kind, u32 line, u32 col, AST_Whitespace_I
     result->kind = kind;
     result->info = info;
     
+    info->file_id = parser->file_id;
     info->line = line;
     info->col  = col;
     Copy(ws_info.ws, info->ws, sizeof(info->ws));
@@ -98,6 +99,7 @@ X(36, ParseError_MissingWhileCondition,            "Missing condition of while s
 X(37, ParseError_MissingParenAfterWhileHeader,     "Missing closing paren after while header")                      \
 X(38, ParseError_IllegalLabel,                     "Illegal label")                                                 \
 X(39, ParseError_MissingSemicolon,                 "Missing terminating semicolon after statement")                 \
+X(40, ParseError_DefaultValOnUnnamedParam,         "Default values cannot be used with unnamed parameters")         \
 
 typedef enum PARSER_ERROR_CODE
 {
@@ -121,7 +123,7 @@ ParserError(Parser* parser, PARSER_ERROR_CODE code, Text_Interval text)
 {
     parser->workspace->report = (Error_Report){
         .code    = code,
-        .message = String_WrapCString(ParserErrorCodeMessages[code]),
+        .message = String_WrapCString(ParserErrorCodeMessages[code - PARSER_ERROR_CODE_BASE]),
         .text    = text,
         .file_id = parser->file_id,
     };
@@ -141,7 +143,7 @@ ParseNamedValueList(Parser* parser, AST_Node** list)
         Token token = GetToken(parser);
         u32 line = token.text.line;
         u32 col  = token.text.column;
-        AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
+        AST_Whitespace_Info whitespace_info = {0};
         
         AST_Node* name  = 0;
         AST_Node* value = 0;
@@ -160,7 +162,6 @@ ParseNamedValueList(Parser* parser, AST_Node** list)
         (*next)->named_value.value = value;
         
         next = &(*next)->next;
-        
     }
     
     return true;
@@ -193,13 +194,21 @@ ParseParameter(Parser* parser, AST_Node** param)
         type = 0;
         if (GetToken(parser).kind != Token_Equals && !ParseExpression(parser, &type)) return false;
     }
-    else
+    else if (is_using)
     {
         ParserError(parser, ParseError_UsingUnnamedParam, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
         return false;
     }
     
-    if (EatToken(parser, Token_Equals, &whitespace_info.parameter_info.ws_equals) && !ParseExpression(parser, &value)) return false;
+    if (EatToken(parser, Token_Equals, &whitespace_info.parameter_info.ws_equals))
+    {
+        if (type != 0)
+        {
+            ParserError(parser, ParseError_DefaultValOnUnnamedParam, TextInterval_BetweenStartPoints(token.text, GetToken(parser).text));
+            return false;
+        }
+        else if (!ParseExpression(parser, &value)) return false;
+    }
     
     *param = PushNode(parser, AST_Parameter, line, col, whitespace_info);
     (*param)->parameter.name     = name;
@@ -235,7 +244,7 @@ ParseAssignmentDeclarationOrExpression(Parser* parser, AST_Node** statement)
     Token token = GetToken(parser);
     u32 line = token.text.line;
     u32 col  = token.text.column;
-    AST_Whitespace_Info whitespace_info = { .ws_before = WhitespaceInfo_FromToken(parser->file_id, token) };
+    AST_Whitespace_Info whitespace_info = {0};
     
     Text_Interval first_token_text = token.text;
     
@@ -1325,7 +1334,7 @@ ParseFile(Workspace* workspace, File* file)
         if (token.kind == Token_EndOfStream) break;
         else
         {
-            if (ParseStatement(&parser, next_statement)) return false;
+            if (!ParseStatement(&parser, next_statement)) return false;
             next_statement = &(*next_statement)->next;
         }
     }

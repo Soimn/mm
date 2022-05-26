@@ -96,7 +96,28 @@ WinMainCRTStartup()
     };
     Workspace* workspace = Workspace_Open(ws_options);
     
+    String content = STRING("// This is a test\n"
+                            "/* some constants */ A  , B : /* some comment        */                  : 1, 2;\n"
+                            "C :: proc(a: int, f: float) -> (i: int, float)\n"
+                            "{\n"
+                            "\treturn i = 0, a + f / 2;\n"
+                            "}\n"
+                            );
+    
+    File* file = Arena_PushSize(workspace->file_arena, sizeof(File), ALIGNOF(File));
+    file->id = (u64)file;
+    file->path = STRING("some path");
+    file->content.size = content.size;
+    file->content.data = Arena_PushCopy(workspace->file_arena, content.data, content.size, ALIGNOF(u8));
+    
+    bool pared_successfully = ParseFile(workspace, file);
     Workspace_PrintErrors(workspace, System_Print);
+    
+    Arena_Clear(Win32_Arena);
+    String_Printf(Win32_Arena, "Parsing %s\n", (pared_successfully ? "succeeded" : "failed"));
+    if (pared_successfully && workspace->head_ast != 0) DEBUG_AST_Print_All_Nodes(workspace, Win32_Arena);
+    Arena_PushCopy(Win32_Arena, "", 1, 1);
+    System_Print((ZString){ .data = Arena_BasePointer(Win32_Arena), .size = (u8*)Arena_OffsetPointer(Win32_Arena) - (u8*)Arena_BasePointer(Win32_Arena) });
     
     Workspace_Close(workspace);
     

@@ -339,7 +339,7 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                 
                 if (*entry == 0)
                 {
-                    *entry = Arena_PushSize(workspace->workspace_arena, sizeof(Interned_String_Entry) + identifier.size, ALIGNOF(Interned_String_Entry));
+                    *entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + identifier.size, ALIGNOF(Interned_String_Entry));
                     **entry = (Interned_String_Entry){
                         .next = 0,
                         .hash = hash,
@@ -369,10 +369,11 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     else if (*lexer->cursor == 't') base = 3;
                     else if (*lexer->cursor == 'o') base = 8;
                     else if (*lexer->cursor == 'd') base = 10;
+                    else if (*lexer->cursor == 'z') base = 12;
                     else if (*lexer->cursor == 'h') base = 16;
                     else if (*lexer->cursor == 'x') base = 16;
                     else if (*lexer->cursor == 'y') base = 32;
-                    else if (*lexer->cursor == 'z') base = 60;
+                    else if (*lexer->cursor == 's') base = 60;
                     
                     if (base != 0)
                     {
@@ -557,9 +558,9 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                     }
                     else
                     {
-                        Arena_Marker marker = Arena_BeginTemp(workspace->workspace_arena);
+                        Arena_Marker marker = Arena_BeginTemp(workspace->string_arena);
                         
-                        Interned_String_Entry* new_entry = Arena_PushSize(workspace->workspace_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
+                        Interned_String_Entry* new_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
                         
                         u8* raw_string_cursor = raw_string.data;
                         String string = {
@@ -569,16 +570,16 @@ Lexer_Advance(Workspace* workspace, Lexer* lexer)
                         
                         while (!encountered_errors && *raw_string_cursor != '"') encountered_errors = !Lexer__DecodeCharacter(lexer, &token, &raw_string_cursor, string.data, &string.size);
                         
-                        if (encountered_errors) Arena_EndTemp(workspace->workspace_arena, marker);
+                        if (encountered_errors) Arena_EndTemp(workspace->string_arena, marker);
                         else
                         {
                             u64 hash                      = String_Hash(string);
                             Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, string);
                             
-                            if (*entry != 0) Arena_EndTemp(workspace->workspace_arena, marker);
+                            if (*entry != 0) Arena_EndTemp(workspace->string_arena, marker);
                             else
                             {
-                                Arena_ReifyTemp(workspace->workspace_arena, marker);
+                                Arena_ReifyTemp(workspace->string_arena, marker);
                                 
                                 **entry = (Interned_String_Entry){
                                     .next = 0,
@@ -662,7 +663,7 @@ Lexer__DecodeCharacter(Lexer* lexer, Token* token, u8** cursor, u8* result, umm*
             {
                 umm digit_count = (**cursor == 'x' ? 2 : (**cursor == 'u' ? 4 : 8));
                 
-                umm codepoint;
+                umm codepoint = 0;
                 for (umm i = 0; i < digit_count; ++i)
                 {
                     if      ((*cursor)[1] >= '0' && (*cursor)[1] <= '9') codepoint = codepoint << 4 | ((*cursor)[1] & 0x0F);
