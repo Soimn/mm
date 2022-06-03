@@ -1,774 +1,798 @@
-#define LIST_LEXER_ERROR_CODES()                                                                                                            \
-X(0,  LexError_UnknownSymbol,            "Unknown symbol")                                                                              \
-X(1,  LexError_DigitTooLarge,            "digit is too large for current base in numeric literal")                                      \
-X(2,  LexError_TooManyDigits,            "Numeric literal contains too many digits to be representable by any type")                    \
-X(3,  LexError_NumDigitsInHexFloat,      "Invalid number of digits in hexadecimal floating point literal")                              \
-X(4,  LexError_MissingFraction,          "Missing fractional part after decimal point in floating point numeric literal")               \
-X(5,  LexError_TooManyDigitsInFraction,  "Fractional part of numeric literal contains too many digits to be representable by any type") \
-X(6,  LexError_MissingExponent,          "Missing exponent")                                                                            \
-X(7,  LexError_TooManyDigitsInExponent,  "Exponent part of numeric literal contains too many digits to be representable by any type")   \
-X(8,  LexError_MissingDoubleQuote,       "Missing terminating \" after string contents in string literal")                              \
-X(9,  LexError_MissingCharInLit,         "Missing character in character literal")                                                      \
-X(10, LexError_MissingSingleQuote,       "Missing terminating ' after character in character literal")                                  \
-X(11, LexError_MissingDigitsInCodepoint, "Missing digits in codepoint escape sequence")                                                 \
-X(12, LexError_CodepointOutOfRange,      "Codepoint out of UTF-8 range")                                                                \
-X(13, LexError_MissingEscSeqAfterSlash,  "Missing escape sequence after backslash")                                                     \
-X(14, LexError_IllegalEscSeq,            "Illegal escape sequence")                                                                     \
-X(15, LexError_IllegalUTF8Byte,          "Illegal UTF-8 byte")                                                                          \
-X(16, LexError_MissingUTF8SeqByte,       "Missing sequence byte in UTF-8 codepoint")                                                    \
+// NOTE: Token kinds are organized into blocks of max 16 in size. This is to get checking for binary operators and their
+//       precedence for free, as well as mapping binary assignment tokens to their operators
 
-typedef enum LEXER_ERROR_CODE
+#define MM_TOKEN_KIND_BLOCK_SIZE 16
+#define MM_TOKEN_BLOCK_INDEX_FROM_KIND(kind) ((kind) / MM_TOKEN_KIND_BLOCK_SIZE)
+#define MM_TOKEN_BLOCK_OFFSET_FROM_KIND(kind) ((kind) / MM_TOKEN_KIND_BLOCK_SIZE)
+#define MM_TOKEN_BINARY_ASSIGNMENT_TO_BINARY_KIND(kind) ((MM_TOKEN_BLOCK_INDEX_FROM_KIND(kind) + 5)*MM_TOKEN_KIND_BLOCK_SIZE + MM_TOKEN_BLOCK_OFFSET_FROM_KIND(kind))
+#define MM_TOKEN_BINARY_TO_BINARY_ASSIGNMENT_KIND(kind) ((MM_TOKEN_BLOCK_INDEX_FROM_KIND(kind) - 5)*MM_TOKEN_KIND_BLOCK_SIZE + MM_TOKEN_BLOCK_OFFSET_FROM_KIND(kind))
+
+typedef enum MM_TOKEN_KIND
 {
-    LEXER_ERROR_CODE_BASE_SENTINEL = LEXER_ERROR_CODE_BASE,
+    MM_Token_Invalid = 0,
+    MM_Token_EndOfStream,
     
-#define X(i, e, s) e = LEXER_ERROR_CODE_BASE_SENTINEL + i,
-    LIST_LEXER_ERROR_CODES()
-#undef X
+    MM_Token_Identifier,
+    MM_Token_BlankIdentifier,
+    MM_Token_Int,
+    MM_Token_Float,
+    MM_Token_String,
+    MM_Token_Codepoint,
     
-    LEXER_ERROR_CODE_MAX
-} LEXER_ERROR_CODE;
+    MM_Token_Comment,
+    MM_Token_BlockComment,
+    
+    MM_Token_FirstAssignment = 1*16,
+    MM_Token_FirstMulLevelAssignment = MM_Token_FirstAssignment,
+    MM_Token_StarEquals = MM_Token_FirstMulLevelAssignment,
+    MM_Token_SlashEquals,
+    MM_Token_PercentEquals,
+    MM_Token_AndEquals,
+    MM_Token_LessLessEquals,
+    MM_Token_GreaterGreaterEquals,
+    MM_Token_TripleGreaterEquals,
+    MM_Token_LastMulLevelAssignment = MM_Token_GreaterGreaterEquals,
+    
+    MM_Token_FirstAddLevelAssignment = 2*16,
+    MM_Token_TildeEquals = MM_Token_FirstAddLevelAssignment,
+    MM_Token_OrEquals,
+    MM_Token_MinusEquals,
+    MM_Token_PlusEquals,
+    MM_Token_LastAddLevelAssignment = MM_Token_PlusEquals,
+    
+    MM_Token_AndAndEquals = 4*16,
+    
+    MM_Token_OrOrEquals = 5*16,
+    MM_Token_LastAssignment = MM_Token_OrOrEquals,
+    
+    MM_Token_FirstBinary = 6*16,
+    MM_Token_FirstMulLevel = MM_Token_FirstBinary,
+    MM_Token_Star = MM_Token_FirstMulLevel,
+    MM_Token_Slash,
+    MM_Token_Percent,
+    MM_Token_And,
+    MM_Token_LessLess,
+    MM_Token_GreaterGreater,
+    MM_Token_TripleGreater,
+    MM_Token_LastMulLevel = MM_Token_TripleGreater,
+    
+    MM_Token_FirstAddLevel = 7*16,
+    MM_Token_Tilde = MM_Token_FirstAddLevel,
+    MM_Token_Or,
+    MM_Token_Minus,
+    MM_Token_Plus,
+    MM_Token_LastAddLevel = MM_Token_Plus,
+    
+    MM_Token_FirstCmpLevel = 8*16,
+    MM_Token_Greater = MM_Token_FirstCmpLevel,
+    MM_Token_GreaterEquals,
+    MM_Token_Less,
+    MM_Token_LessEquals,
+    MM_Token_EqualsEquals,
+    MM_Token_BangEquals,
+    MM_Token_LastCmpLevel = MM_Token_BangEquals,
+    
+    MM_Token_AndAnd = 9*16,
+    
+    MM_Token_OrOr = 10*16,
+    MM_Token_LastBinary = MM_Token_OrOr,
+    
+    MM_Token_Bang,
+    MM_Token_OpenParen,
+    MM_Token_CloseParen,
+    MM_Token_OpenBracket,
+    MM_Token_CloseBracket,
+    MM_Token_OpenBrace,
+    MM_Token_CloseBrace,
+    MM_Token_Colon,
+    MM_Token_Comma,
+    MM_Token_Semicolon,
+    MM_Token_QuestionMark,
+    MM_Token_Hat,
+    MM_Token_Arrow,
+    MM_Token_TripleMinus,
+    MM_Token_Period,
+    MM_Token_PeriodOpenBrace,
+    MM_Token_PeriodOpenBracket,
+    MM_Token_Equals,
+    
+    MM_Token_FirstKeyword,
+    MM_Token_Include = MM_Token_FirstKeyword,
+    MM_Token_Proc,
+    MM_Token_Struct,
+    MM_Token_Union,
+    MM_Token_Enum,
+    MM_Token_True,
+    MM_Token_False,
+    MM_Token_As,
+    MM_Token_If,
+    MM_Token_Else,
+    MM_Token_While,
+    MM_Token_Break,
+    MM_Token_Continue,
+    MM_Token_Using,
+    MM_Token_Defer,
+    MM_Token_Return,
+    MM_Token_Cast,
+    MM_Token_Transmute,
+    MM_Token_Where,
+    MM_Token_LastKeyword = MM_Token_Where,
+    
+} MM_TOKEN_KIND;
 
-char* LexerErrorCodeMessages[LEXER_ERROR_CODE_MAX - LEXER_ERROR_CODE_BASE_SENTINEL] = {
-#define X(i, e, s) [e - LEXER_ERROR_CODE_BASE_SENTINEL] = s,
-    LIST_LEXER_ERROR_CODES()
-#undef X
-};
-
-typedef enum TOKEN_KIND
+typedef struct MM_Text_Pos
 {
-    Token_Invalid = 0,
-    Token_EndOfStream,
-    
-    Token_OpenParen,
-    Token_CloseParen,
-    Token_OpenBracket,
-    Token_CloseBracket,
-    Token_OpenBrace,
-    Token_CloseBrace,
-    Token_Colon,
-    Token_Comma,
-    Token_Semicolon,
-    Token_QuestionMark,
-    Token_Hat,
-    Token_Cash,
-    Token_Pound,
-    Token_At,
-    Token_Arrow,
-    Token_TripleMinus,
-    Token_Period,
-    Token_PeriodOpenBrace,
-    Token_PeriodOpenBracket,
-    Token_Identifier,
-    Token_String,
-    Token_Character,
-    Token_Int,
-    Token_Float,
-    Token_Equals,
-    
-    Token_FirstAssignment,
-    Token_Bang = Token_FirstAssignment,
-    
-    Token_FirstMulLevelAssignment = 3*16,
-    Token_StarEquals = Token_FirstMulLevelAssignment,
-    Token_SlashEquals,
-    Token_PercentEquals,
-    Token_AndEquals,
-    Token_LessLessEquals,
-    Token_GreaterGreaterEquals,
-    Token_TripleGreaterEquals,
-    Token_LastMulLevelAssignment = Token_GreaterGreaterEquals,
-    
-    Token_FirstAddLevelAssignment = 4*16,
-    Token_NotEquals = Token_FirstAddLevelAssignment,
-    Token_OrEquals,
-    Token_MinusEquals,
-    Token_PlusEquals,
-    Token_LastAddLevelAssignment = Token_PlusEquals,
-    
-    Token_AndAndEquals = 6*16,
-    
-    Token_OrOrEquals = 7*16,
-    Token_LastAssignment = Token_OrOrEquals,
-    
-    Token_FirstBinary = 8*16,
-    Token_FirstMulLevel = Token_FirstBinary,
-    Token_Star = Token_FirstMulLevel,
-    Token_Slash,
-    Token_Percent,
-    Token_And,
-    Token_LessLess,
-    Token_GreaterGreater,
-    Token_TripleGreater,
-    Token_LastMulLevel = Token_TripleGreater,
-    
-    Token_FirstAddLevel = 9*16,
-    Token_Not = Token_FirstAddLevel,
-    Token_Or,
-    Token_Minus,
-    Token_Plus,
-    Token_LastAddLevel = Token_Plus,
-    
-    Token_FirstCmpLevel = 10*16,
-    Token_Greater = Token_FirstCmpLevel,
-    Token_GreaterEquals,
-    Token_Less,
-    Token_LessEquals,
-    Token_EqualsEquals,
-    Token_BangEquals,
-    Token_LastCmpLevel = Token_BangEquals,
-    
-    Token_AndAnd = 11*16,
-    
-    Token_OrOr = 12*16,
-    Token_LastBinary = Token_OrOr,
-} TOKEN_KIND;
+    MM_u32 offset;
+    MM_u32 line;
+    MM_u32 column;
+} MM_Text_Pos;
 
-#define TOKEN_KIND_BLOCK_SIZE 16
-
-typedef struct Token
+typedef struct MM_Text
 {
-    TOKEN_KIND kind;
-    u32 offset_raw;
-    Text_Interval text;
+    union
+    {
+        struct MM_Text_Pos;
+        MM_Text_Pos pos;
+    };
+    
+    MM_u32 length;
+} MM_Text;
+
+typedef struct MM_Token
+{
+    MM_TOKEN_KIND kind;
+    MM_u32 preceding_spacing;
     
     union
     {
-        struct
-        {
-            LEXER_ERROR_CODE code;
-            Text_Interval text;
-        } error;
-        
-        Interned_String string;
-        u32 character;
-        
-        struct
-        {
-            I256 i256;
-            u8 base;
-        } integer;
-        
-        struct
-        {
-            f64 float64;
-            u8 hex_byte_size;
-        } floating;
+        struct MM_Text;
+        MM_Text text;
     };
-} Token;
+} MM_Token;
 
-typedef struct Lexer
+typedef struct MM_Lexer
 {
-    u8* content;
-    u8* cursor;
-    u32 offset_to_line;
-    u32 line;
-} Lexer;
+    MM_String string;
+    MM_u64 offset;
+    MM_u32 offset_to_line;
+    MM_u32 line;
+} MM_Lexer;
 
-internal Lexer
-Lexer_Init(Workspace* workspace, u8* content)
+// NOTE: Helper functions
+MM_bool MM_Lexer__AdvanceCharacter(MM_Lexer* lexer);
+inline MM_String MM_Lexer__TokenString(MM_Lexer* lexer, MM_Token token);
+MM_u32 MM_Lexer__ParseCodepoint(MM_String string, MM_umm* offset);
+
+MM_Lexer
+MM_Lexer_Init(MM_String string)
 {
-    return (Lexer){
-        .content        = content,
-        .cursor         = content,
+    return (MM_Lexer){
+        .string         = string,
+        .offset         = 0,
         .offset_to_line = 0,
         .line           = 1,
     };
 }
 
-internal bool Lexer__DecodeCharacter(Lexer* lexer, Token* token, u8** cursor, u8* result, umm* advancement);
-internal void Lexer__Error(Lexer* lexer, Token* token, LEXER_ERROR_CODE code, u8* start, u8* end);
-
-internal Token
-Lexer_Advance(Workspace* workspace, Lexer* lexer)
+// NOTE: The lexer is designed to only verify the input, not parse it.
+//       This is not the best for performance, since verifying the input
+//       is a huge part of parsing it. However, lexing without full
+//       parsing to AST is not very useful outside of text editors.
+//       Therefore, the lexer that will be exposed by the compiler API
+//       is catered to text editors, and might be far from optimal for
+//       the general case (it might be neccessary to use another
+//       implementation for parsing in the compiler). This decision
+//       will probably be reconsidered later, but the lexer will stay
+//       this way for the time being.
+MM_umm
+MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm amount)
 {
-    Token token = { .kind = Token_Invalid, .offset_raw = (u32)(lexer->cursor - lexer->content) };
+    // NOTE: The maximum string size for lexing is 4GB, this is enforced by the MM_String type by limiting size
+    //       the range of MM_u32
+    // NOTE: lexer->offset is 64-bit to ensure offet + n does not overflow (for any reasonable lookahead)
     
-    imm comment_level = 0;
-    while (true)
+    MM_umm i = 0;
+    for (; i < amount; ++i)
     {
-        if (*lexer->cursor == '\n')
-        {
-            ++lexer->cursor;
-            ++lexer->line;
-            lexer->offset_to_line = (u32)(lexer->cursor - lexer->content);
-        }
-        else if (lexer->cursor[0] == '/' && lexer->cursor[1] == '*')
-        {
-            lexer->cursor += 2;
-            ++comment_level;
-        }
-        else if (comment_level > 0 && lexer->cursor[0] == '*' && lexer->cursor[1] == '/')
-        {
-            lexer->cursor += 2;
-            --comment_level;
-        }
-        else if (*lexer->cursor != 0 && comment_level > 0 || *lexer->cursor == ' '  ||
-                 *lexer->cursor == '\t'                   || *lexer->cursor == '\v' ||
-                 *lexer->cursor == '\f'                   || *lexer->cursor == '\r')
-        {
-            ++lexer->cursor;
-        }
-        else if (lexer->cursor[0] == '/' && lexer->cursor[1] == '/')
-        {
-            ASSERT(comment_level == 0);
-            while (*lexer->cursor != 0 && *lexer->cursor != '\n') ++lexer->cursor;
-        }
-        else break;
-    }
-    
-    token.text.offset = (u32)(lexer->cursor - lexer->content);
-    token.text.column = token.text.offset - lexer->offset_to_line;
-    token.text.line   = lexer->line;
-    // NOTE: defer token.size = (u32)(lexer->cursor - lexer->content) - token.offset;
-    
-    u8 c = *lexer->cursor;
-    lexer->cursor += (c != 0);
-    
-    switch (c)
-    {
-        case 0:   token.kind = Token_EndOfStream;  break;
-        case '(': token.kind = Token_OpenParen;    break;
-        case ')': token.kind = Token_CloseParen;   break;
-        case '[': token.kind = Token_OpenBracket;  break;
-        case ']': token.kind = Token_CloseBracket; break;
-        case '{': token.kind = Token_OpenBrace;    break;
-        case '}': token.kind = Token_CloseBrace;   break;
-        case ':': token.kind = Token_Colon;        break;
-        case ',': token.kind = Token_Comma;        break;
-        case ';': token.kind = Token_Semicolon;    break;
-        case '?': token.kind = Token_QuestionMark; break;
-        case '^': token.kind = Token_Hat;          break;
-        case '$': token.kind = Token_Cash;         break;
-        case '#': token.kind = Token_Pound;        break;
-        case '@': token.kind = Token_At;           break;
+        MM_u32 start_offset = lexer->offset;
         
-        case '+': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_PlusEquals    : Token_Plus);    break;
-        case '*': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_StarEquals    : Token_Star);    break;
-        case '/': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_SlashEquals   : Token_Slash);   break;
-        case '%': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_PercentEquals : Token_Percent); break;
-        case '~': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_NotEquals     : Token_Not);     break;
-        case '!': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_BangEquals    : Token_Bang);    break;
-        case '=': token.kind = (*lexer->cursor == '=' ? ++lexer->cursor, Token_EqualsEquals  : Token_Equals);  break;
-        
-        case '-':
+        while (lexer->offset < lexer->string.size)
         {
-            if      (*lexer->cursor == '>')                              lexer->cursor += 1, token.kind = Token_Arrow;
-            else if (*lexer->cursor == '=')                              lexer->cursor += 1, token.kind = Token_MinusEquals;
-            else if (lexer->cursor[0] == '-' && lexer->cursor[1] == '-') lexer->cursor += 2, token.kind = Token_TripleMinus;
-            else                                                                             token.kind = Token_Minus;
-        } break;
-        
-        case '<':
-        {
-            if      (*lexer->cursor == '=') ++lexer->cursor, token.kind = Token_LessEquals;
-            else if (*lexer->cursor == '<')
+            char c = lexer->string.data[lexer->offset];
+            
+            if (c == ' '  || c == '\t' ||
+                c == '\v' || c == '\f' ||
+                c == '\r')
             {
-                if (lexer->cursor[1] == '=') lexer->cursor += 2, token.kind = Token_LessLessEquals;
-                else                         lexer->cursor += 1, token.kind = Token_LessLess;
+                lexer->offset += 1;
             }
-            else token.kind = Token_Less;
-        } break;
-        
-        case '&':
-        {
-            if      (*lexer->cursor == '=') ++lexer->cursor, token.kind = Token_AndEquals;
-            else if (*lexer->cursor == '&')
+            else if (c == '\n')
             {
-                if (lexer->cursor[1] == '=') lexer->cursor += 2, token.kind = Token_AndAndEquals;
-                else                         lexer->cursor += 1, token.kind = Token_AndAnd;
+                lexer->offset += 1;
+                lexer->line   += 1;
+                lexer->offset_to_line = lexer->offset;
             }
-            else token.kind = Token_And;
-        } break;
+            else break;
+        }
         
-        case '|':
-        {
-            if      (*lexer->cursor == '=') ++lexer->cursor, token.kind = Token_OrEquals;
-            else if (*lexer->cursor == '|')
-            {
-                if (lexer->cursor[1] == '=') lexer->cursor += 2, token.kind = Token_OrOrEquals;
-                else                         lexer->cursor += 1, token.kind = Token_OrOr;
-            }
-            else token.kind = Token_Or;
-        } break;
+        MM_Token* token = &buffer[i];
+        *token = (MM_Token){
+            .kind              = MM_Token_Invalid, // NOTE: Assume invalid until proved otherwise
+            .offset            = lexer->offset,
+            .line              = lexer->line,
+            .column            = lexer->offset - lexer->offset_to_line,
+            .preceding_spacing = lexer->offset - start_offset,
+            .length            = 0, // NOTE: Updated later
+        };
         
-        case '>':
+        if (lexer->offset >= lexer->string.size)
         {
-            if      (*lexer->cursor == '=') ++lexer->cursor, token.kind = Token_GreaterEquals;
-            else if (*lexer->cursor == '>')
+            MM_ASSERT(lexer->offset == lexer->string.size);
+            
+            token->kind = MM_Token_EndOfStream;
+        }
+        else if (lexer->offset + 1 < lexer->string.size && lexer->string.data[lexer->offset] == '/' &&
+                 (lexer->string.data[lexer->offset + 1] == '/' || lexer->string.data[lexer->offset + 1] == '*'))
+        {
+            if (lexer->string.data[lexer->offset + 1] == '/')
             {
-                if (lexer->cursor[1] == '>')
+                token->kind = MM_Token_Comment;
+                
+                while (lexer->offset < lexer->string.size && (lexer->string.data[lexer->offset] != '\r' &&
+                                                              lexer->string.data[lexer->offset] != '\n'))
                 {
-                    if (lexer->cursor[2] == '=') lexer->cursor += 3, token.kind = Token_TripleGreaterEquals;
-                    else                         lexer->cursor += 2, token.kind = Token_TripleGreater;
+                    lexer->offset += 1;
                 }
-                else if (lexer->cursor[1] == '=') lexer->cursor += 2, token.kind = Token_GreaterGreaterEquals;
-                else                              lexer->cursor += 1, token.kind = Token_GreaterGreater;
             }
-            else token.kind = Token_Less;
-        } break;
-        
-        case '.':
-        {
-            if      (*lexer->cursor == '{') ++lexer->cursor, token.kind = Token_PeriodOpenBrace;
-            else if (*lexer->cursor == '[') ++lexer->cursor, token.kind = Token_PeriodOpenBracket;
-            else                                             token.kind = Token_Period;
-        } break;
-        
-        default:
-        {
-            if (c >= 'a' && c <= 'z' ||
-                c >= 'A' && c <= 'Z' ||
-                c == '_')
+            else
             {
-                String identifier = {
-                    .data = lexer->cursor - 1,
-                    .size = 1,
-                };
+                token->kind = MM_Token_BlockComment;
                 
-                while (*lexer->cursor >= 'a' && *lexer->cursor <= 'z' ||
-                       *lexer->cursor >= 'A' && *lexer->cursor <= 'Z' ||
-                       *lexer->cursor >= '0' && *lexer->cursor <= '9' ||
-                       *lexer->cursor == '_')
+                lexer->offset += 2;
+                
+                MM_imm level = 1;
+                while (lexer->offset + 1 < lexer->string.size)
                 {
-                    ++lexer->cursor;
-                    ++identifier.size;
-                }
-                
-                u64 hash                      = String_Hash(identifier);
-                Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, identifier);
-                
-                if (*entry == 0)
-                {
-                    *entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + identifier.size, ALIGNOF(Interned_String_Entry));
-                    **entry = (Interned_String_Entry){
-                        .next = 0,
-                        .hash = hash,
-                        .size = identifier.size,
-                    };
-                    
-                    Copy(identifier.data, *entry + 1, identifier.size);
-                }
-                
-                token.kind   = Token_Identifier;
-                token.string = InternedString__FromEntry(workspace, *entry);
-            }
-            else if (c >= '0' && c <= '9')
-            {
-                bool encountered_errors = false;
-                
-                u8* start       = lexer->cursor - 1;
-                imm is_float    = -1; // NOTE: is_float is ternary: -1 undecided, 0 false, 1 true
-                u8 base         = 0;
-                umm digit_count = 0;
-                I256 integer    = I256_0;
-                bool overflow   = false;
-                
-                if (c == '0')
-                {
-                    if      (*lexer->cursor == 'b') base = 2;
-                    else if (*lexer->cursor == 't') base = 3;
-                    else if (*lexer->cursor == 'o') base = 8;
-                    else if (*lexer->cursor == 'd') base = 10;
-                    else if (*lexer->cursor == 'z') base = 12;
-                    else if (*lexer->cursor == 'h') base = 16;
-                    else if (*lexer->cursor == 'x') base = 16;
-                    else if (*lexer->cursor == 'y') base = 32;
-                    else if (*lexer->cursor == 's') base = 60;
-                    
-                    if (base != 0)
+                    if (lexer->string.data[lexer->offset] == '/' && lexer->string.data[lexer->offset] == '*')
                     {
-                        is_float = (*lexer->cursor == 'h');
-                        ++lexer->cursor;
+                        lexer->offset += 2;
+                        level += 1;
                     }
-                }
-                
-                u8 parse_base = (umm)base;
-                if (base == -1)
-                {
-                    integer      = I256_FromU64(c - '0');
-                    parse_base   = 10;
-                    digit_count += 1;
-                }
-                
-                while (!encountered_errors)
-                {
-                    u8 digit;
-                    if      (*lexer->cursor >= '0' && *lexer->cursor <= '9') digit = *lexer->cursor & 0x0F;
-                    else if (*lexer->cursor >= 'A' && *lexer->cursor <= 'Z') digit = *lexer->cursor & 0x1F + 9;
-                    else if (*lexer->cursor >= 'a' && *lexer->cursor <= 'x') digit = *lexer->cursor & 0x1F + 25;
-                    else if (*lexer->cursor == '_')
+                    else if (lexer->string.data[lexer->offset] == '*' && lexer->string.data[lexer->offset] == '/')
                     {
-                        ++lexer->cursor;
-                        continue;
-                    }
-                    else if (is_float == -1 && *lexer->cursor == '.')
-                    {
-                        is_float = true;
-                        ++lexer->cursor;
-                        break;
-                    }
-                    else break;
-                    
-                    if (digit >= (umm)parse_base)
-                    {
-                        Lexer__Error(lexer, &token, LexError_DigitTooLarge, lexer->cursor, lexer->cursor + 1);
-                        encountered_errors = true;
-                    }
-                    else
-                    {
-                        overflow = (overflow || I256_AppendDigit(&integer, parse_base, digit));
-                        digit_count += 1;
+                        level -= 1;
+                        if (level == 0) break;
                         
-                        ++lexer->cursor;
+                        // NOTE: the offset is incremented after the loop exit oppertunity such that the two exit conditions
+                        //       (lexer->offset + 1 >= lexer->string.size and level == 0) can be distinguished
+                        lexer->offset += 2;
                     }
+                    else lexer->offset += 1;
                 }
                 
-                if (!encountered_errors)
+                if (lexer->offset + 1 >= lexer->string.size)
                 {
-                    if (overflow)
+                    //// ERROR: Unterminated comment
+                    MM_NOT_IMPLEMENTED;
+                }
+                else lexer->offset += 2; // NOTE: terminated comment, skipping the terminating "*/"
+            }
+        }
+        else
+        {
+            char c[4];
+            c[0] = lexer->string.data[lexer->offset++];
+            c[1] = (lexer->offset + 0 < lexer->string.size ? lexer->string.data[lexer->offset + 0] : 0);
+            c[2] = (lexer->offset + 1 < lexer->string.size ? lexer->string.data[lexer->offset + 1] : 0);
+            c[3] = (lexer->offset + 2 < lexer->string.size ? lexer->string.data[lexer->offset + 2] : 0);
+            
+            switch (c[0])
+            {
+                case '(': token->kind = MM_Token_OpenParen;    break;
+                case ')': token->kind = MM_Token_CloseParen;   break;
+                case '[': token->kind = MM_Token_OpenBracket;  break;
+                case ']': token->kind = MM_Token_CloseBracket; break;
+                case '{': token->kind = MM_Token_OpenBrace;    break;
+                case '}': token->kind = MM_Token_CloseBrace;   break;
+                case ':': token->kind = MM_Token_Colon;        break;
+                case ',': token->kind = MM_Token_Comma;        break;
+                case ';': token->kind = MM_Token_Semicolon;    break;
+                case '?': token->kind = MM_Token_QuestionMark; break;
+                case '^': token->kind = MM_Token_Hat;          break;
+                
+                case '*': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_StarEquals    : MM_Token_Star);    break;
+                case '/': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_SlashEquals   : MM_Token_Slash);   break;
+                case '%': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_PercentEquals : MM_Token_Percent); break;
+                case '+': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_PlusEquals    : MM_Token_Plus);    break;
+                case '=': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_EqualsEquals  : MM_Token_Equals);  break;
+                case '!': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_BangEquals    : MM_Token_Bang);    break;
+                case '~': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_TildeEquals   : MM_Token_Tilde);   break;
+                
+                // NOTE: I wrote this in a sort of cmov fashion, which might be a bad idea if the compiler does not
+                //       understand it, or disagrees with the decision, but it looks nice, and should hopefully not
+                //       matter that much
+                case '-':
+                {
+                    token->kind = MM_Token_Minus;
+                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_MinusEquals;
+                    if (c[1] == '>')                lexer->offset += 1, token->kind = MM_Token_Arrow;
+                    if (c[1] == '-' && c[2] == '-') lexer->offset += 2, token->kind = MM_Token_TripleMinus;
+                } break;
+                
+                case '.':
+                {
+                    token->kind = MM_Token_Period;
+                    if (c[1] == '{') ++lexer->offset, token->kind = MM_Token_PeriodOpenBrace;
+                    if (c[1] == '[') ++lexer->offset, token->kind = MM_Token_PeriodOpenBracket;
+                }
+                
+                case '>':
+                {
+                    token->kind = MM_Token_Greater;
+                    if (c[1] == '=')                               lexer->offset += 1, token->kind = MM_Token_GreaterEquals;
+                    if (c[1] == '>' && c[2] != '=')                lexer->offset += 1, token->kind = MM_Token_GreaterGreater;
+                    if (c[1] == '>' && c[2] == '=')                lexer->offset += 2, token->kind = MM_Token_GreaterGreaterEquals;
+                    if (c[1] == '>' && c[2] == '>' && c[3] != '=') lexer->offset += 2, token->kind = MM_Token_TripleGreater;
+                    if (c[1] == '>' && c[2] == '>' && c[3] == '=') lexer->offset += 3, token->kind = MM_Token_TripleGreaterEquals;
+                } break;
+                
+                case '<':
+                {
+                    token->kind = MM_Token_Less;
+                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_LessEquals;
+                    if (c[1] == '<' && c[2] != '=') lexer->offset += 1, token->kind = MM_Token_LessLess;
+                    if (c[1] == '<' && c[2] == '=') lexer->offset += 2, token->kind = MM_Token_LessLessEquals;
+                } break;
+                
+                case '&':
+                {
+                    token->kind = MM_Token_And;
+                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_AndEquals;
+                    if (c[1] == '&' && c[2] != '=') lexer->offset += 1, token->kind = MM_Token_AndAnd;
+                    if (c[1] == '&' && c[2] == '=') lexer->offset += 2, token->kind = MM_Token_AndAndEquals;
+                } break;
+                
+                case '|':
+                {
+                    token->kind = MM_Token_Or;
+                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_OrEquals;
+                    if (c[1] == '|' && c[2] != '=') lexer->offset += 1, token->kind = MM_Token_OrOr;
+                    if (c[1] == '|' && c[2] == '=') lexer->offset += 2, token->kind = MM_Token_OrOrEquals;
+                } break;
+                
+                default:
+                {
+                    if (c[0] == '_' || c[0] >= 'a' && c[0] <= 'z' || c[0] >= 'A' && c[0] <= 'Z')
                     {
-                        Lexer__Error(lexer, &token, LexError_TooManyDigits, start, lexer->cursor);
-                        encountered_errors = true;
+                        MM_umm ident_offset = lexer->offset - 1;
+                        
+                        while (c[0] == '_'                ||
+                               c[0] >= 'a' && c[0] <= 'z' ||
+                               c[0] >= 'A' && c[0] <= 'Z' ||
+                               c[0] >= '0' && c[0] <= '9')
+                        {
+                            lexer->offset += 1;
+                        }
+                        
+                        if (lexer->offset - ident_offset == 1 && c[0] == '_') token->kind = MM_Token_BlankIdentifier;
+                        else
+                        {
+                            MM_NOT_IMPLEMENTED;
+                            // TODO: identifier || keyword
+                        }
                     }
-                    else
+                    else if (c[0] >= '0' && c[1] <= '9')
                     {
-                        if (is_float == true)
+                        MM_bool is_float   = MM_false;
+                        MM_umm base        = 10;
+                        MM_umm digit_count = 0;
+                        
+                        if (c[0] == '0')
+                        {
+                            if      (c[1] == 'b') base = 2;
+                            else if (c[1] == 'o') base = 8;
+                            else if (c[1] == 'd') base = 10;
+                            else if (c[1] == 'z') base = 12;
+                            else if (c[1] == 'x') base = 16;
+                            else if (c[1] == 'h') base = 16, is_float = MM_true;
+                            else if (c[1] == 'y') base = 32;
+                            else if (c[1] == 's') base = 60;
+                        }
+                        
+                        if (base == 0) digit_count   += 1;
+                        else           lexer->offset += 1;
+                        
+                        while (lexer->offset < lexer->string.size)
+                        {
+                            char c      = lexer->string.data[lexer->offset];
+                            MM_u8 digit = 0;
+                            if      (c >= '0' && c <= '9') digit = c - '0';
+                            else if (c >= 'A' && c <= 'Z') digit = (c - 'A') + 9;
+                            else if (c >= 'a' && c <= 'z') digit = (c - 'a') + 25;
+                            else if (c == '_')
+                            {
+                                lexer->offset += 1;
+                                continue;
+                            }
+                            else if (c == '.' && !is_float)
+                            {
+                                lexer->offset += 1;
+                                break;
+                            }
+                            else break;
+                            
+                            if (digit >= base) break;
+                            else
+                            {
+                                lexer->offset += 1;
+                                digit_count   += 1;
+                            }
+                        }
+                        
+                        if (is_float)
                         {
                             if (base == 16)
                             {
-                                if (digit_count == 2)
+                                if (digit_count != 4 && digit_count != 8 && digit_count != 16)
                                 {
-                                    token.kind                   = Token_Float;
-                                    token.floating.float64       = F64_FromF16(F16_FromBits((u16)I256_ChopToU64(integer, 2)));
-                                    token.floating.hex_byte_size = 2;
-                                }
-                                else if (digit_count == 4)
-                                {
-                                    token.kind                   = Token_Float;
-                                    token.floating.float64       = (f64)(F32_Bits){ .bits = (u32)I256_ChopToU64(integer, 4) }.f;
-                                    token.floating.hex_byte_size = 4;
-                                }
-                                else if (digit_count == 8)
-                                {
-                                    token.kind                   = Token_Float;
-                                    token.floating.float64       = (F64_Bits){ .bits = I256_ChopToU64(integer, 8) }.f;
-                                    token.floating.hex_byte_size = 8;
-                                }
-                                else
-                                {
-                                    Lexer__Error(lexer, &token, LexError_NumDigitsInHexFloat, start, lexer->cursor);
-                                    encountered_errors = true;
+                                    //// ERROR: Invalid digit count for hex float literal
+                                    MM_NOT_IMPLEMENTED;
                                 }
                             }
                             else
                             {
-                                if (*lexer->cursor < '0' || *lexer->cursor > '9')
+                                if (lexer->offset == lexer->string.size ||
+                                    !(lexer->string.data[lexer->offset] >= '0' && lexer->string.data[lexer->offset] <= '9'))
                                 {
-                                    Lexer__Error(lexer, &token, LexError_MissingFraction, start, lexer->cursor);
-                                    encountered_errors = true;
+                                    //// ERROR: Missing fraction after decimal point in floating point literal
+                                    MM_NOT_IMPLEMENTED;
                                 }
                                 else
                                 {
-                                    I256 fractional = I256_0;
-                                    I256 exponent   = I256_0;
-                                    
-                                    while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
+                                    while (lexer->offset < lexer->string.size &&
+                                           lexer->string.data[lexer->offset] >= '0' && lexer->string.data[lexer->offset] <= '9')
                                     {
-                                        overflow = (overflow || I256_AppendDigit(&fractional, 10, *lexer->cursor & 0xF));
-                                        ++lexer->cursor;
+                                        lexer->offset += 1;
                                     }
                                     
-                                    if (overflow)
+                                    if (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] == 'e')
                                     {
-                                        Lexer__Error(lexer, &token, LexError_TooManyDigitsInFraction, start, lexer->cursor);
-                                        encountered_errors = true;
-                                    }
-                                    else if (*lexer->cursor == 'e')
-                                    {
-                                        ++lexer->cursor;
+                                        lexer->offset += 1;
                                         
-                                        bool is_negative = false;
-                                        if      (*lexer->cursor == '+') ++lexer->cursor;
-                                        else if (*lexer->cursor == '-') ++lexer->cursor, is_negative = true;
-                                        
-                                        if (*lexer->cursor < '0' || *lexer->cursor > '9')
+                                        if (lexer->offset < lexer->string.size &&
+                                            (lexer->string.data[lexer->offset] == '+' || lexer->string.data[lexer->offset] == '-'))
                                         {
-                                            Lexer__Error(lexer, &token, LexError_MissingExponent, start, lexer->cursor);
-                                            encountered_errors = true;
-                                        }
-                                        else while (*lexer->cursor >= '0' && *lexer->cursor <= '9')
-                                        {
-                                            overflow = (overflow || I256_AppendDigit(&exponent, 10, *lexer->cursor & 0xF));
-                                            ++lexer->cursor;
+                                            lexer->offset += 1;
                                         }
                                         
-                                        if (overflow)
+                                        if (lexer->offset == lexer->string.size ||
+                                            !(lexer->string.data[lexer->offset] >= '0' && lexer->string.data[lexer->offset] <= '9'))
                                         {
-                                            Lexer__Error(lexer, &token, LexError_TooManyDigitsInExponent, start, lexer->cursor);
-                                            encountered_errors = true;
+                                            //// ERROR: Missing exponent after exponent suffix
+                                            MM_NOT_IMPLEMENTED;
                                         }
-                                    }
-                                    
-                                    if (!encountered_errors)
-                                    {
-                                        NOT_IMPLEMENTED;
-                                        
-                                        // TODO: convert integer, fractional, exponent to a float
-                                        
-                                        token.kind                   = Token_Float;
-                                        token.floating.float64; NOT_IMPLEMENTED;
-                                        token.floating.hex_byte_size = 0;
+                                        else while (lexer->offset < lexer->string.size &&
+                                                    lexer->string.data[lexer->offset] >= '0' && lexer->string.data[lexer->offset] <= '9')
+                                        {
+                                            lexer->offset += 1;
+                                        }
                                     }
                                 }
                             }
                         }
-                        else
+                        else token->kind = MM_Token_Int;
+                    }
+                    else if (c[0] == '"')
+                    {
+                        token->kind = MM_Token_String;
+                        
+                        MM_bool encountered_errors = MM_false;
+                        while (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] != '"' && MM_Lexer__AdvanceCharacter(lexer));
+                        
+                        if (!encountered_errors)
                         {
-                            token.kind         = Token_Int;
-                            token.integer.i256 = integer;
-                            token.integer.base = (u8)base;
+                            if (lexer->offset == lexer->string.size)
+                            {
+                                //// ERROR: Unterminated string literal
+                                MM_NOT_IMPLEMENTED;
+                            }
+                            else lexer->offset += 1;
                         }
                     }
-                }
-            }
-            else if (c == '"')
-            {
-                bool encountered_errors = false;
-                
-                Interned_String interned_string = EMPTY_STRING;
-                
-                u8* start = lexer->cursor - 1;
-                if (*lexer->cursor != '"')
-                {
-                    String raw_string = {
-                        .data = lexer->cursor,
-                        .size = 0,
-                    };
-                    
-                    while (*lexer->cursor != 0 && *lexer->cursor != '"')
+                    else if (c[0] == '\'')
                     {
-                        ++lexer->cursor;
-                        ++raw_string.size;
-                    }
-                    
-                    if (*lexer->cursor != '"')
-                    {
-                        Lexer__Error(lexer, &token, LexError_MissingDoubleQuote, start, lexer->cursor);
-                        encountered_errors = true;
+                        token->kind = MM_Token_Codepoint;
+                        
+                        if (MM_Lexer__AdvanceCharacter(lexer))
+                        {
+                            if (lexer->offset < lexer->string.size && lexer->string.data[lexer->offset] == '\'') lexer->offset += 1;
+                            else
+                            {
+                                //// ERROR: Unterminated character literal
+                                MM_NOT_IMPLEMENTED;
+                            }
+                        }
                     }
                     else
                     {
-                        Arena_Marker marker = Arena_BeginTemp(workspace->string_arena);
-                        
-                        Interned_String_Entry* new_entry = Arena_PushSize(workspace->string_arena, sizeof(Interned_String_Entry) + raw_string.size, ALIGNOF(Interned_String_Entry));
-                        
-                        u8* raw_string_cursor = raw_string.data;
-                        String string = {
-                            .data = (u8*)(new_entry + 1),
-                            .size = 0,
-                        };
-                        
-                        while (!encountered_errors && *raw_string_cursor != '"') encountered_errors = !Lexer__DecodeCharacter(lexer, &token, &raw_string_cursor, string.data, &string.size);
-                        
-                        if (encountered_errors) Arena_EndTemp(workspace->string_arena, marker);
-                        else
-                        {
-                            u64 hash                      = String_Hash(string);
-                            Interned_String_Entry** entry = InternedString__FindSpot(workspace, hash, string);
-                            
-                            if (*entry != 0) Arena_EndTemp(workspace->string_arena, marker);
-                            else
-                            {
-                                Arena_ReifyTemp(workspace->string_arena, marker);
-                                
-                                **entry = (Interned_String_Entry){
-                                    .next = 0,
-                                    .hash = hash,
-                                    .size = raw_string.size,
-                                };
-                            }
-                            
-                            interned_string = InternedString__FromEntry(workspace, *entry);
-                        }
+                        //// ERROR: Unknown byte
+                        MM_NOT_IMPLEMENTED;
                     }
-                }
-                
-                if (!encountered_errors)
-                {
-                    ASSERT(*lexer->cursor == '"');
-                    ++lexer->cursor;
-                    
-                    token.kind   = Token_String;
-                    token.string = interned_string;
-                }
+                } break;
             }
-            else if (c == '\'')
-            {
-                u8 bytes[4];
-                umm advancement = 0;
-                
-                u8* start = lexer->cursor - 1;
-                if      (c == '\'') Lexer__Error(lexer, &token, LexError_MissingCharInLit, start, lexer->cursor);
-                else if (!Lexer__DecodeCharacter(lexer, &token, &lexer->cursor, bytes, &advancement));
-                else if (c != '\'') Lexer__Error(lexer, &token, LexError_MissingSingleQuote, start, lexer->cursor);
-                else
-                {
-                    ++lexer->cursor;
-                    
-                    u32 codepoint;
-                    if      (advancement == 1) codepoint = (u32)(bytes[0] & 0x7F);
-                    else if (advancement == 2) codepoint = (u32)(bytes[0] & 0x1F) << 6  | (u32)(bytes[1] & 0x3F);
-                    else if (advancement == 3) codepoint = (u32)(bytes[0] & 0x0F) << 12 | (u32)(bytes[1] & 0x3F) << 6  | (u32)(bytes[2] & 0x3F);
-                    else                       codepoint = (u32)(bytes[0] & 0x07) << 18 | (u32)(bytes[1] & 0x3F) << 12 | (u32)(bytes[2] & 0x3F) << 6 | (u32)(bytes[3] & 0x3F);
-                    
-                    token.kind      = Token_Character;
-                    token.character = codepoint;
-                }
-            }
-        } break;
+        }
+        
+        token->length = lexer->offset - token->offset;
     }
     
-    token.text.size = (u32)(lexer->cursor - lexer->content) - token.text.offset;
+    return i;
+}
+
+MM_Token
+MM_Lexer_NextToken(MM_Lexer* lexer)
+{
+    MM_Token token;
+    
+    MM_umm lexed_tokens = MM_Lexer_NextTokens(lexer, &token, 1);
+    MM_ASSERT(lexed_tokens == 1);
     
     return token;
 }
 
-internal bool
-Lexer__DecodeCharacter(Lexer* lexer, Token* token, u8** cursor, u8* result, umm* advancement)
+MM_i128
+MM_Lexer_ParseInt(MM_Lexer* lexer, MM_Token token)
 {
-    bool encountered_errors = false;
+    MM_String string = MM_Lexer__TokenString(lexer, token);
     
-    *advancement += 1; // NOTE: assume one byte char length, is corrected for multibyte codepoints
-    if (**cursor == '\\')
+    MM_umm offset = 0;
+    MM_umm base   = 10;
+    if (string.size > 1 && string.data[0] == '0' && (string.data[1] < '0' || string.data[1] > '9'))
     {
-        u8* start = *cursor;
-        *cursor += 1;
+        if      (string.data[1] == 'b') base = 2;
+        else if (string.data[1] == 'o') base = 8;
+        else if (string.data[1] == 'd') base = 10;
+        else if (string.data[1] == 'z') base = 12;
+        else if (string.data[1] == 'x') base = 16;
+        else if (string.data[1] == 'y') base = 32;
+        else if (string.data[1] == 's') base = 60;
+        else MM_INVALID_CODE_PATH;
         
-        switch (**cursor)
+        offset += 2;
+    }
+    
+    MM_i128 integer = 0;
+    while (offset < string.size)
+    {
+        MM_u8 digit = 0;
+        char c      = string.data[offset];
+        if      (c >= '0' && c <= '9') digit = c - '0';
+        else if (c >= 'A' && c <= 'Z') digit = (c - 'A') + 9;
+        else if (c >= 'a' && c <= 'z') digit = (c - 'a') + 25;
+        else continue;
+        
+        integer *= base;
+        integer += digit;
+    }
+    
+    return integer;
+}
+
+MM_f64
+MM_Lexer_ParseFloat(MM_Lexer* lexer, MM_Token token)
+{
+    MM_f64 flt = 0;
+    
+    MM_String string = MM_Lexer__TokenString(lexer, token);
+    
+    if (string.size > 1 && string.data[0] == '0' && string.data[1] == 'h')
+    {
+        MM_u64 bits = 0;
+        
+        MM_umm offset = 2;
+        while (offset < string.size)
         {
-            case 'a':  *result = '\a'; break;
-            case 'b':  *result = '\b'; break;
-            case 'f':  *result = '\f'; break;
-            case 'n':  *result = '\n'; break;
-            case 'r':  *result = '\r'; break;
-            case 't':  *result = '\t'; break;
-            case 'v':  *result = '\v'; break;
-            case '\\': *result = '\\'; break;
-            case '\'': *result = '\''; break;
-            case '"':  *result = '"';  break;
+            char c = string.data[offset];
             
-            case 'x':
-            case 'u':
-            case 'U':
-            {
-                umm digit_count = (**cursor == 'x' ? 2 : (**cursor == 'u' ? 4 : 8));
-                
-                umm codepoint = 0;
-                for (umm i = 0; i < digit_count; ++i)
-                {
-                    if      ((*cursor)[1] >= '0' && (*cursor)[1] <= '9') codepoint = codepoint << 4 | ((*cursor)[1] & 0x0F);
-                    else if ((*cursor)[1] >= 'A' && (*cursor)[1] <= 'F') codepoint = codepoint << 4 | ((*cursor)[1] & 0x0F + 9);
-                    else
-                    {
-                        Lexer__Error(lexer, token, LexError_MissingDigitsInCodepoint, start, *cursor);
-                        encountered_errors = true;
-                    }
-                }
-                
-                if (!encountered_errors)
-                {
-                    if      (codepoint <= 0x7F) *result = (u8)codepoint;
-                    else if (codepoint <= 0x7FF)
-                    {
-                        result[0] = (u8)((codepoint & 0x7C) >> 6) | 0xC0;
-                        result[1] = (u8)((codepoint & 0x3F) >> 0) | 0x80;
-                        *advancement += 1;
-                    }
-                    else if (codepoint <= 0xFFFF)
-                    {
-                        result[0] = (u8)((codepoint & 0xF000) >> 12) | 0xE0;
-                        result[1] = (u8)((codepoint & 0x0FC0) >> 6)  | 0x80;
-                        result[2] = (u8)((codepoint & 0x003F) >> 0)  | 0x80;
-                        *advancement += 2;
-                    }
-                    else if (codepoint <= 0x10FFFF)
-                    {
-                        result[0] = (u8)((codepoint & 0x700000) >> 18) | 0xF0;
-                        result[1] = (u8)((codepoint & 0x03F000) >> 12) | 0x80;
-                        result[2] = (u8)((codepoint & 0x000FC0) >> 6)  | 0x80;
-                        result[3] = (u8)((codepoint & 0x00003F) >> 0)  | 0x80;
-                        *advancement += 3;
-                    }
-                    else
-                    {
-                        Lexer__Error(lexer, token, LexError_CodepointOutOfRange, start, *cursor);
-                        encountered_errors = true;
-                    }
-                }
-            } break;
+            bits *= 16;
+            bits += (c >= '0' && c <= '9' ? c - '0' : (c - 'A') + 9);
+        }
+        
+        MM_umm digit_count = string.size - offset;
+        
+        if (digit_count == 4)
+        {
+            flt = MM_F64_FromF16((MM_f16)bits);
+        }
+        else if (digit_count == 8)
+        {
+            MM_f32 f;
+            MM_Copy(&bits, &f, sizeof(MM_u32));
             
-            default:
-            {
-                if (**cursor == 0)
-                {
-                    Lexer__Error(lexer, token, LexError_MissingEscSeqAfterSlash, start, *cursor);
-                    encountered_errors = true;
-                }
-                else
-                {
-                    Lexer__Error(lexer, token, LexError_IllegalEscSeq, start, *cursor);
-                    encountered_errors = true;
-                }
-            } break;
+            flt = (MM_f64)f;
+        }
+        else MM_Copy(&bits, &flt, sizeof(MM_u64));
+    }
+    else
+    {
+        MM_NOT_IMPLEMENTED;
+    }
+    
+    return flt;
+}
+
+MM_u32
+MM_Lexer_ParseChar(MM_Lexer* lexer, MM_Token token)
+{
+    MM_umm offset = 1;
+    MM_String string = MM_Lexer__TokenString(lexer, token);
+    return MM_Lexer__ParseCodepoint(string, &offset);
+}
+
+MM_String
+MM_Lexer_ParseIdentifier(MM_Lexer* lexer, MM_Token token)
+{
+    return MM_Lexer__TokenString(lexer, token);
+}
+
+MM_String
+MM_Lexer_ParseString(MM_Lexer* lexer, MM_Token token, MM_u8* buffer) // NOTE: buffer should be at least token.size long
+{
+    MM_String string = MM_Lexer__TokenString(lexer, token);
+    
+    MM_umm read_offset  = 0;
+    MM_umm write_offset = 0;
+    while (read_offset < string.size)
+    {
+        MM_u32 codepoint = MM_Lexer__ParseCodepoint(string, &read_offset);
+        
+        if (codepoint <= 0x7F)
+        {
+            buffer[write_offset++] = (MM_u8)codepoint;
+        }
+        else if (codepoint <= 0x7FF)
+        {
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x7C) >> 6) | 0xC0;
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x3F) >> 0) | 0x80;
+        }
+        else if (codepoint <= 0xFFFF)
+        {
+            buffer[write_offset++] = (MM_u8)((codepoint & 0xF000) >> 12) | 0xE0;
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x0FC0) >> 6)  | 0x80;
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x003F) >> 0)  | 0x80;
+        }
+        else if (codepoint <= 0x10FFFF)
+        {
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x700000) >> 18) | 0xF0;
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x03F000) >> 12) | 0x80;
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x000FC0) >> 6)  | 0x80;
+            buffer[write_offset++] = (MM_u8)((codepoint & 0x00003F) >> 0)  | 0x80;
         }
     }
-    else if ((**cursor & 0x80) != 0)
+    return (MM_String){ .data = buffer, .size = write_offset };
+}
+
+//
+// NOTE: Helper functions
+//
+
+MM_bool
+MM_Lexer__AdvanceCharacter(MM_Lexer* lexer)
+{
+    MM_bool encountered_errors = MM_false;
+    
+    if (lexer->string.data[lexer->offset] == '\\')
     {
-        u8* start = *cursor;
+        lexer->offset += 1;
         
-        umm length = 1;
-        if      ((**cursor & 0xF8) == 0xF0) length = 4;
-        else if ((**cursor & 0xF0) == 0xE0) length = 3;
-        else if ((**cursor & 0xE0) == 0xC0) length = 2;
-        else
+        if (lexer->offset != lexer->string.size)
         {
-            Lexer__Error(lexer, token, LexError_IllegalUTF8Byte, start, lexer->cursor);
-            encountered_errors = true;
-        }
-        
-        if (!encountered_errors)
-        {
-            *result++     = **cursor;
-            *cursor      += 1;
-            *advancement += length - 1;
-            
-            for (umm i = 0; i < length; ++i, ++cursor)
+            char c = lexer->string.data[lexer->offset];
+            if (c == 'a' || c == 'b'  || c == 'f'  ||
+                c == 'n' || c == 'r'  || c == 't'  ||
+                c == 'v' || c == '\\' || c == '\'' ||
+                c == '"')
             {
-                if ((**cursor & 0xC0) == 0x80) *result++ = **cursor;
-                else
+                lexer->offset += 1;
+            }
+            else if (c == 'x' || c == 'u' || c == 'U')
+            {
+                lexer->offset += 1;
+                
+                MM_umm remaining_digits = (c == 'x' ? 2 : (c == 'u' ? 4 : 6));
+                MM_umm codepoint        = 0;
+                
+                while (lexer->offset < lexer->string.size && remaining_digits > 0)
                 {
-                    Lexer__Error(lexer, token, LexError_MissingUTF8SeqByte, start, lexer->cursor);
-                    encountered_errors = true;
+                    c = lexer->string.data[lexer->offset];
+                    
+                    MM_u8 digit;
+                    if      (c >= '0' && c <= '9') digit = c - '0';
+                    else if (c >= 'A' && c <= 'F') digit = (c - 'A') + 9;
+                    else break;
+                    
+                    lexer->offset    += 1;
+                    remaining_digits -= 1;
+                    
+                    codepoint *= 16;
+                    codepoint += digit;
                 }
+                
+                
+                if (remaining_digits != 0)
+                {
+                    //// ERROR: Missing digits in codepoint escape sequence
+                    encountered_errors = MM_true;
+                    MM_NOT_IMPLEMENTED;
+                }
+                else if (codepoint > 0x10FFFF)
+                {
+                    //// ERROR: Codepoint is out of UTF-8 range
+                    encountered_errors = MM_true;
+                    MM_NOT_IMPLEMENTED;
+                }
+            }
+            else
+            {
+                //// ERROR: Unknown escape sequence
+                encountered_errors = MM_true;
+                MM_NOT_IMPLEMENTED;
             }
         }
     }
-    else *result = **cursor;
-    
-    *cursor += 1;
+    else lexer->offset += 1;
     
     return !encountered_errors;
 }
 
-internal void
-Lexer__Error(Lexer* lexer, Token* token, LEXER_ERROR_CODE code, u8* start, u8* end)
+inline MM_String
+MM_Lexer__TokenString(MM_Lexer* lexer, MM_Token token)
 {
-    token->kind       = Token_Invalid;
-    token->error.code = code;
-    token->error.text = (Text_Interval){
-        .offset = (u32)(start - lexer->content),
-        .line   = token->text.line,
-        .column = (u32)((start - lexer->content) - token->text.offset) + token->text.column,
-        .size   = (u32)(end - start),
+    return (MM_String){
+        .data = lexer->string.data + token.offset,
+        .size = token.length
     };
+}
+
+MM_u32
+MM_Lexer__ParseCodepoint(MM_String string, MM_umm* offset)
+{
+    MM_u32 codepoint;
+    
+    if (string.data[*offset] == '\\')
+    {
+        *offset += 1;
+        
+        char c = string.data[*offset];
+        if      (c == 'a')  *offset += 1, codepoint = '\a';
+        else if (c == 'b')  *offset += 1, codepoint = '\b';
+        else if (c == 'f')  *offset += 1, codepoint = '\f';
+        else if (c == 'n')  *offset += 1, codepoint = '\n';
+        else if (c == 'r')  *offset += 1, codepoint = '\r';
+        else if (c == 't')  *offset += 1, codepoint = '\t';
+        else if (c == 'v')  *offset += 1, codepoint = '\v';
+        else if (c == '\\') *offset += 1, codepoint = '\\';
+        else if (c == '\'') *offset += 1, codepoint = '\'';
+        else if (c == '"')  *offset += 1, codepoint = '"';
+        else
+        {
+            *offset += 1;
+            
+            codepoint = 0;
+            for (MM_umm i = 0; i < (c == 'x' ? 2 : (c == 'u' ? 4 : 6)); ++i)
+            {
+                c        = string.data[*offset];
+                *offset += 1;
+                
+                codepoint *= 16;
+                codepoint += (c >= '0' && c <= '9' ? c - '0' : (c - 'A') + 9);
+            }
+        }
+    }
+    else
+    {
+        codepoint = string.data[*offset];
+        *offset += 1;
+    }
+    
+    return codepoint;
 }

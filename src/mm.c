@@ -1,19 +1,6 @@
-#define UNICODE
-#define NOMINMAX            1
-#define WIN32_LEAN_AND_MEAN 1
-#define WIN32_MEAN_AND_LEAN 1
-#define VC_EXTRALEAN        1
-#include <windows.h>
-#undef NOMINMAX
-#undef WIN32_LEAN_AND_MEAN
-#undef WIN32_MEAN_AND_LEAN
-#undef VC_EXTRALEAN
-#undef far
-#undef near
-#undef MM_MIN
-#undef MM_MAX
-
 #include "mm.h"
+
+#ifdef _WIN32
 
 void* memset(void* ptr, int value, unsigned __int64 size);
 void* memcpy(void* rdst, const void* rsrc, unsigned __int64 count);
@@ -46,8 +33,11 @@ memcpy(void* rdst, const void* rsrc, unsigned __int64 count)
 
 int _fltused;
 
-void __stdcall
-WinMainCRTStartup()
+int __stdcall _DllMainCRTStartup(void* hinstDLL, unsigned int fdwReason, void* lpReserved)
 {
-    ExitProcess(0);
+    return 1;
 }
+#endif
+
+#define internal static
+#define global static

@@ -1,168 +1,116 @@
-internal inline umm
-RoundUp(umm n, umm alignment)
+inline MM_umm
+MM_RoundUp(MM_umm n, MM_umm alignment)
 {
     return (n + (alignment - 1)) & ~(alignment - 1);
 }
 
-internal inline umm
-RoundDown(umm n, umm alignment)
+inline MM_umm
+MM_RoundDown(MM_umm n, MM_umm alignment)
 {
     return n & ~(alignment - 1);
 }
 
-internal inline void*
-Align(void* ptr, u8 alignment)
+inline void*
+MM_Align(void* ptr, MM_u8 alignment)
 {
-    return (void*)RoundUp((umm)ptr, alignment);
+    return (void*)MM_RoundUp((MM_umm)ptr, alignment);
 }
 
-internal inline u8
-AlignOffset(void* ptr, u8 alignment)
+inline MM_u8
+MM_AlignOffset(void* ptr, MM_u8 alignment)
 {
-    return (u8)(RoundUp((umm)ptr, alignment) - (umm)ptr);
+    return (MM_u8)(MM_RoundUp((MM_umm)ptr, alignment) - (MM_umm)ptr);
 }
 
-internal void
-Copy(void* src, void* dst, umm size)
+void
+MM_Copy(void* src, void* dst, MM_umm size)
 {
-    for (umm i = 0; i < size; ++i) ((u8*)dst)[i] = ((u8*)src)[i];
+    for (MM_umm i = 0; i < size; ++i) ((MM_u8*)dst)[i] = ((MM_u8*)src)[i];
 }
 
-internal void
-Move(void* src, void* dst, umm size)
+void
+MM_Move(void* src, void* dst, MM_umm size)
 {
-    u8* bsrc = (u8*)src;
-    u8* bdst = (u8*)dst;
+    MM_u8* bsrc = (MM_u8*)src;
+    MM_u8* bdst = (MM_u8*)dst;
     
-    if (bdst <= bsrc || bsrc + size < bdst) Copy(src, dst, size);
-    else for (umm i = 0; i < size; ++i) ((u8*)dst)[size - i] = ((u8*)src)[size - i];
+    if (bdst <= bsrc || bsrc + size < bdst) MM_Copy(src, dst, size);
+    else for (MM_umm i = 0; i < size; ++i) ((MM_u8*)dst)[size - i] = ((MM_u8*)src)[size - i];
 }
 
-internal void
-Zero(void* ptr, umm size)
+void
+MM_Zero(void* ptr, MM_umm size)
 {
-    for (umm i = 0; i < size; ++i) ((u8*)ptr)[i] = 0;
+    for (MM_umm i = 0; i < size; ++i) ((MM_u8*)ptr)[i] = 0;
 }
 
-#define ZeroStruct(S) Zero((S), sizeof(*(S)))
-#define ZeroArray(A, C) Zero((A), sizeof(*(A)) * (C))
+#define MM_ZeroStruct(S) MM_Zero((S), sizeof(*(S)))
+#define MM_ZeroArray(A, C) MM_Zero((A), sizeof(*(A)) * (C))
 
-#define ARENA_PREFERRED_RESERVE_SIZE GB(10)
-#define ARENA_PREFERRED_COMMIT_SIZE KB(8)
-
-typedef struct Arena
+typedef struct MM_Arena_Block
 {
-    system_commit_memory_func CommitMemory;
-    system_free_memory_func FreeMemory;
-    u64 offset;
-    u64 space;
-    u64 commit_size;
-} Arena;
+    struct MM_Arena_Block* next;
+    MM_u32 offset;
+    MM_u32 space;
+} MM_Arena_Block;
 
-typedef u64 Arena_Marker;
-
-internal Arena*
-Arena_Init(system_reserve_memory_func ReserveMemory, system_commit_memory_func CommitMemory, system_free_memory_func FreeMemory, u64 page_size)
+#define MM_ARENA_BLOCK_RESERVE_SIZE MM_GB(4)
+typedef struct MM_Arena
 {
-    umm reserve_size = RoundUp(ARENA_PREFERRED_RESERVE_SIZE, page_size);
-    umm commit_size  = RoundUp(ARENA_PREFERRED_COMMIT_SIZE, page_size);
+    MM_Reserve_Memory_Func reserve_func;
+    MM_Commit_Memory_Func commit_func;
+    MM_Free_Memory_Func free_func;
+    struct MM_Arena_Block* current_block;
     
-    Arena* arena = ReserveMemory(reserve_size);
-    CommitMemory(arena, commit_size);
-    
-    *arena = (Arena){
-        .CommitMemory  = CommitMemory,
-        .FreeMemory    = FreeMemory,
-        .offset        = 0,
-        .space         = commit_size,
-        .commit_size   = commit_size,
+    union
+    {
+        struct MM_Arena_Block;
+        MM_Arena_Block block;
     };
+} MM_Arena;
+
+MM_Arena*
+MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func)
+{
+    MM_Arena* arena = reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
+    
+    if (arena != 0)
+    {
+        *arena = (MM_Arena){
+            .reserve_func  = reserve_func,
+            .commit_func   = commit_func,
+            .free_func     = free_func,
+            .current_block = &arena->block,
+        };
+        
+        arena->current_block = (MM_Arena_Block){
+            .next   = 0,
+            .offset = sizeof(MM_Arena_Block),                         // NOTE: offset is relative to the block
+            .space  = MM_ARENA_BLOCK_RESERVE_SIZE - sizeof(MM_Arena), // NOTE: space is relative to the reserve base
+        };
+    }
     
     return arena;
 }
 
-internal void*
-Arena_PushSize(Arena* arena, umm size, u8 alignment)
+void*
+MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
 {
-    u8* cursor   = (u8*)(arena + 1) + arena->offset;
-    void* result = Align(cursor, alignment);
+    MM_Arena_Block* block = arena->current_block;
     
-    umm advancement = ((u8*)result + size) - cursor;
-    
-    if (advancement > arena->space)
-    {
-        umm commit_size = RoundUp(size, arena->commit_size);
-        
-        arena->CommitMemory(cursor + arena->space, commit_size);
-        arena->space += commit_size;
-    }
-    
-    arena->offset += advancement;
-    arena->space  -= advancement;
-    
-    return result;
+    if (block->offset)
 }
 
-internal void*
-Arena_PushCopy(Arena* arena, void* ptr, umm size, u8 alignment)
+void
+MM_Arena_Clear(MM_Arena* arena)
 {
-    void* memory = Arena_PushSize(arena, size, alignment);
-    Copy(ptr, memory, size);
-    return memory;
+    arena->current_block = &arena->block;
+    arena->current_block->offset = sizeof(MM_Arena_Block);
+    arena->current_block->space  = MM_ARENA_BLOCK_RESERVE_SIZE - sizeof(MM_Arena);
 }
 
-internal void
-Arena_Clear(Arena* arena)
+void
+MM_Arena_Free(MM_Arena* arena)
 {
-    arena->space += arena->offset;
-    arena->offset = 0;
-}
-
-internal void
-Arena_Free(Arena* arena)
-{
-    arena->FreeMemory(arena);
-}
-
-internal Arena_Marker
-Arena_BeginTemp(Arena* arena)
-{
-    return arena->offset;
-}
-
-internal void
-Arena_EndTemp(Arena* arena, Arena_Marker marker)
-{
-    ASSERT(marker <= arena->offset);
-    
-    arena->space += arena->offset - marker;
-    arena->offset = marker;
-}
-
-internal void
-Arena_ReifyTemp(Arena* arena, Arena_Marker marker)
-{
-    ASSERT(marker < arena->offset);
-}
-
-internal void
-Arena_ReifyPartialTemp(Arena* arena, Arena_Marker marker, umm size)
-{
-    ASSERT(marker < arena->offset && marker + size < arena->offset);
-    
-    umm end = marker + size;
-    arena->space += end - arena->offset;
-    arena->offset = end;
-}
-
-internal inline void*
-Arena_BasePointer(Arena* arena)
-{
-    return arena + 1;
-}
-
-internal inline void*
-Arena_OffsetPointer(Arena* arena)
-{
-    return (u8*)(arena + 1) + arena->offset;
+    arena->free_func(arena);
 }
