@@ -6,8 +6,9 @@
 //       name, type, values variable and constant decls
 //       assignment left and right side
 
-typedef MM_Interned_String MM_Identifier;
-typedef MM_Interned_String MM_String_Literal;
+// TODO: STUB
+typedef MM_u64 MM_Identifier;
+typedef MM_u64 MM_String_Literal;
 
 typedef enum MM_BUILTIN_KIND
 {

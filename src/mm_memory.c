@@ -1,4 +1,4 @@
-inline MM_umm
+MM_Internal inline MM_umm
 MM_RoundUp(MM_umm n, MM_umm alignment)
 {
     return (n + (alignment - 1)) & ~(alignment - 1);
@@ -6,7 +6,7 @@ MM_RoundUp(MM_umm n, MM_umm alignment)
 
 #define MM_ROUND_UP(n, alignment) (((n) + ((alignment) - 1)) & ~((alignment) - 1))
 
-inline MM_umm
+MM_Internal inline MM_umm
 MM_RoundDown(MM_umm n, MM_umm alignment)
 {
     return n & ~(alignment - 1);
@@ -14,25 +14,25 @@ MM_RoundDown(MM_umm n, MM_umm alignment)
 
 #define MM_ROUND_DOWN(n, alignment) ((n) & ~((alignment) - 1))
 
-inline void*
+MM_Internal inline void*
 MM_Align(void* ptr, MM_u8 alignment)
 {
     return (void*)MM_RoundUp((MM_umm)ptr, alignment);
 }
 
-inline MM_u8
+MM_Internal inline MM_u8
 MM_AlignOffset(void* ptr, MM_u8 alignment)
 {
     return (MM_u8)(MM_RoundUp((MM_umm)ptr, alignment) - (MM_umm)ptr);
 }
 
-void
+MM_Internal void
 MM_Copy(void* src, void* dst, MM_umm size)
 {
     for (MM_umm i = 0; i < size; ++i) ((MM_u8*)dst)[i] = ((MM_u8*)src)[i];
 }
 
-void
+MM_Internal void
 MM_Move(void* src, void* dst, MM_umm size)
 {
     MM_u8* bsrc = (MM_u8*)src;
@@ -42,7 +42,7 @@ MM_Move(void* src, void* dst, MM_umm size)
     else for (MM_umm i = 0; i < size; ++i) ((MM_u8*)dst)[size - i] = ((MM_u8*)src)[size - i];
 }
 
-void
+MM_Internal void
 MM_Zero(void* ptr, MM_umm size)
 {
     for (MM_umm i = 0; i < size; ++i) ((MM_u8*)ptr)[i] = 0;
@@ -74,7 +74,7 @@ typedef struct MM_Arena
     };
 } MM_Arena;
 
-MM_Arena*
+MM_API MM_Arena*
 MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func)
 {
     MM_Arena* arena = reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
@@ -89,7 +89,7 @@ MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_
             .current_block = &arena->block,
         };
         
-        arena->current_block = (MM_Arena_Block){
+        arena->block = (MM_Arena_Block){
             .next   = 0,
             .offset = sizeof(MM_Arena_Block),                // NOTE: offset is relative to the block
             .space  = MM_ARENA_PAGE_SIZE - sizeof(MM_Arena), // NOTE: space is relative to the reserve base
@@ -100,7 +100,7 @@ MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_
     return arena;
 }
 
-void*
+MM_API void*
 MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
 {
     MM_Arena_Block* block = arena->current_block;
@@ -136,14 +136,14 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
         }
     }
     
-    void* result = (MM_u8*)block + block->offset + offset,
+    void* result = (MM_u8*)block + block->offset + offset;
     block->offset += offset + size;
     block->space  -= offset + size;
     
     return result;
 }
 
-void
+MM_API void
 MM_Arena_Clear(MM_Arena* arena)
 {
     arena->current_block = &arena->block;
@@ -151,7 +151,7 @@ MM_Arena_Clear(MM_Arena* arena)
     arena->current_block->offset = sizeof(MM_Arena_Block);
 }
 
-void
+MM_API void
 MM_Arena_Free(MM_Arena* arena)
 {
     arena->free_func(arena);

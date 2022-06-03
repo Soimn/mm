@@ -7,6 +7,31 @@
 #define MM_F16_EXP_SIZE 5
 #define MM_F64_EXP_SIZE 11
 
+typedef union MM_F16_Bits
+{
+    MM_f16 bits;
+    
+    struct
+    {
+        MM_u16 significand : 10;
+        MM_u16 exponent : 5;
+        MM_u16 sign : 1;
+    };
+} MM_F16_Bits;
+
+typedef union MM_F64_Bits
+{
+    MM_u64 bits;
+    MM_f64 f;
+    
+    struct
+    {
+        MM_u64 significand : 52;
+        MM_u64 exponent : 11;
+        MM_u64 sign : 1;
+    };
+} MM_F64_Bits;
+
 // NOTE: It took me 4+ hours of understanding and adapting Fabien Giesen's code,
 //       fortunately making me understand how float conversion works, but it was
 //       only after the fact that I realized there are intrinsics for this...
@@ -15,10 +40,10 @@
 //       implementing 128-bit IEEE 754 floating point
 
 // NOTE: https://gist.github.com/rygorous/2144712 used as reference
-MM_f64
+MM_API MM_f64
 MM_F64_FromF16(MM_f16 float16)
 {
-    typedef union F16_Bits
+    typedef union MM_F16_Bits
     {
         MM_f16 bits;
         
@@ -28,9 +53,9 @@ MM_F64_FromF16(MM_f16 float16)
             MM_u16 exponent : 5;
             MM_u16 sign : 1;
         };
-    } F16_Bits;
+    } MM_F16_Bits;
     
-    typedef union F64_Bits
+    typedef union MM_F64_Bits
     {
         MM_u64 bits;
         MM_f64 f;
@@ -41,12 +66,12 @@ MM_F64_FromF16(MM_f16 float16)
             MM_u64 exponent : 11;
             MM_u64 sign : 1;
         };
-    } F64_Bits;
+    } MM_F64_Bits;
     
-    F16_Bits f = { .bits = float16 };
+    MM_F16_Bits f = { .bits = float16 };
     
     // NOTE: Signed 0 by default
-    F64_Bits bits = { .sign = f.sign };
+    MM_F64_Bits bits = { .sign = f.sign };
     
     // NOTE: denormal or signed 0
     if (f.exponent == 0)
@@ -90,38 +115,13 @@ MM_F64_FromF16(MM_f16 float16)
 }
 
 // NOTE: https://gist.github.com/rygorous/2144712 used as reference
-MM_f16
+MM_API MM_f16
 MM_F64_ToF16(MM_f64 float64)
 {
-    typedef union F16_Bits
-    {
-        MM_f16 bits;
-        
-        struct
-        {
-            MM_u16 significand : 10;
-            MM_u16 exponent : 5;
-            MM_u16 sign : 1;
-        };
-    } F16_Bits;
-    
-    typedef union F64_Bits
-    {
-        MM_u64 bits;
-        MM_f64 f;
-        
-        struct
-        {
-            MM_u64 significand : 52;
-            MM_u64 exponent : 11;
-            MM_u64 sign : 1;
-        };
-    } F64_Bits;
-    
-    F64_Bits bits = { .f = float64 };
+    MM_F64_Bits bits = { .f = float64 };
     
     // NOTE: Signed 0 by default
-    F16_Bits f = { .sign = (MM_u16)bits.sign };
+    MM_F16_Bits f = { .sign = (MM_u16)bits.sign };
     
     // NOTE: Signed inf and NaN
     if (bits.exponent == ((MM_umm)1 << MM_F64_EXP_SIZE) - 1)
@@ -197,12 +197,3 @@ MM_F64_ToF16(MM_f64 float64)
     
     return f.bits;
 }
-
-#undef MM_F16_SIGNIFICAND_SIZE
-#undef MM_F64_SIGNIFICAND_SIZE
-#undef MM_F16_EXP_BIAS
-#undef MM_F64_EXP_BIAS
-#undef MM_F16_SIGNIFICAND_MASK
-#undef MM_F64_SIGNIFICAND_MASK
-#undef MM_F16_EXP_SIZE
-#undef MM_F64_EXP_SIZE
