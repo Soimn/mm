@@ -36,34 +36,20 @@ MM_String_Hash(MM_String string)
     return (string.size != 0 ? *string.data : 0);
 }
 
-typedef MM_u64 MM_Interned_String;
+typedef MM_String MM_Interned_String;
 
-#define MM_INTERNED_STRING_NIL 0
-
-typedef struct MM_Interned_String_Entry
+MM_bool
+MM_InternedString_Match(MM_Interned_String s0, MM_Interned_String s1)
 {
-    struct MM_Interned_String_Entry* next;
-    MM_u64 hash;
-    MM_u32 size;
-    MM_u8 data[];
-} MM_Interned_String_Entry;
+    MM_ASSERT(s0.data != s1.data || s0.size == s1.size);
+    return (s0.data == s1.data);
+}
 
 typedef struct MM_Intern_Table
 {
-    MM_u64 table_size;
-    MM_Interned_String_Entry** table;
+    
 } MM_Intern_Table;
 
-MM_String
-MM_InternedString_ToString(MM_Intern_Table* table, MM_Interned_String istring)
+MM_InternedString_FromString(MM_Intern_Table* table, MM_String)
 {
-    MM_NOT_IMPLEMENTED;
-    return (MM_String){};
-}
-
-MM_Interned_String
-MM_InternedString_FromString(MM_Intern_Table* table, MM_String string)
-{
-    MM_NOT_IMPLEMENTED;
-    return MM_INTERNED_STRING_NIL;
 }

@@ -4,11 +4,15 @@ MM_RoundUp(MM_umm n, MM_umm alignment)
     return (n + (alignment - 1)) & ~(alignment - 1);
 }
 
+#define MM_ROUND_UP(n, alignment) (((n) + ((alignment) - 1)) & ~((alignment) - 1))
+
 inline MM_umm
 MM_RoundDown(MM_umm n, MM_umm alignment)
 {
     return n & ~(alignment - 1);
 }
+
+#define MM_ROUND_DOWN(n, alignment) ((n) & ~((alignment) - 1))
 
 inline void*
 MM_Align(void* ptr, MM_u8 alignment)
@@ -54,7 +58,8 @@ typedef struct MM_Arena_Block
     MM_u32 space;
 } MM_Arena_Block;
 
-#define MM_ARENA_BLOCK_RESERVE_SIZE MM_GB(4)
+#define MM_ARENA_PAGE_SIZE MM_KB(4)
+#define MM_ARENA_BLOCK_RESERVE_SIZE MM_ROUND_UP(MM_GB(4), MM_ARENA_PAGE_SIZE)
 typedef struct MM_Arena
 {
     MM_Reserve_Memory_Func reserve_func;
@@ -73,6 +78,7 @@ MM_Arena*
 MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func)
 {
     MM_Arena* arena = reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
+    commit_func(arena, MM_ARENA_PAGE_SIZE);
     
     if (arena != 0)
     {
@@ -85,9 +91,10 @@ MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_
         
         arena->current_block = (MM_Arena_Block){
             .next   = 0,
-            .offset = sizeof(MM_Arena_Block),                         // NOTE: offset is relative to the block
-            .space  = MM_ARENA_BLOCK_RESERVE_SIZE - sizeof(MM_Arena), // NOTE: space is relative to the reserve base
+            .offset = sizeof(MM_Arena_Block),                // NOTE: offset is relative to the block
+            .space  = MM_ARENA_PAGE_SIZE - sizeof(MM_Arena), // NOTE: space is relative to the reserve base
         };
+        
     }
     
     return arena;
@@ -98,15 +105,50 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
 {
     MM_Arena_Block* block = arena->current_block;
     
-    if (block->offset)
+    MM_u32 offset = alignment - (block->offset & ~(alignment - 1));
+    
+    if (block->space < offset + size)
+    {
+        if ((MM_umm)block->offset + (MM_umm)block->space < MM_ARENA_BLOCK_RESERVE_SIZE)
+        {
+            // NOTE: I don't think the extra parentheses are necessary, since a u64 + u32 + u32 add chain should never
+            //       be turned into u64 + (u32 + u32) by any reasonable compiler. However, I am a bit paranoid.
+            arena->commit_func(((MM_u8*)block + block->offset) + block->space, MM_ARENA_PAGE_SIZE);
+            block->space += MM_ARENA_PAGE_SIZE;
+        }
+        else if (block->next != 0)
+        {
+            arena->current_block = block = block->next;
+            block->space += (block->offset - sizeof(MM_Arena_Block));
+            block->offset = sizeof(MM_Arena_Block);
+        }
+        else
+        {
+            block->next = arena->reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
+            arena->commit_func(block, MM_ARENA_PAGE_SIZE);
+            
+            block = block->next;
+            *block = (MM_Arena_Block){
+                .next = 0,
+                .offset = sizeof(MM_Arena_Block),
+                .space  = MM_ARENA_PAGE_SIZE - sizeof(MM_Arena_Block),
+            };
+        }
+    }
+    
+    void* result = (MM_u8*)block + block->offset + offset,
+    block->offset += offset + size;
+    block->space  -= offset + size;
+    
+    return result;
 }
 
 void
 MM_Arena_Clear(MM_Arena* arena)
 {
     arena->current_block = &arena->block;
+    arena->current_block->space += (arena->current_block->offset - sizeof(MM_Arena_Block));
     arena->current_block->offset = sizeof(MM_Arena_Block);
-    arena->current_block->space  = MM_ARENA_BLOCK_RESERVE_SIZE - sizeof(MM_Arena);
 }
 
 void

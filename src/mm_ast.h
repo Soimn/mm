@@ -9,24 +9,6 @@
 typedef MM_Interned_String MM_Identifier;
 typedef MM_Interned_String MM_String_Literal;
 
-MM_String
-MM_Identifier_ToString(MM_Identifier identifier)
-{
-    //if (identifier == 0) return ;
-    //else                 return ;
-    MM_NOT_IMPLEMENTED;
-    return (MM_String){};
-}
-
-MM_String
-MM_StringLiteral_ToString(MM_String_Literal string_lit)
-{
-    //if (string_lit == 0) return ;
-    //else                 return ;
-    MM_NOT_IMPLEMENTED;
-    return (MM_String){};
-}
-
 typedef enum MM_BUILTIN_KIND
 {
     MM_Builtin_Cast,
