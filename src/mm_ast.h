@@ -1,15 +1,3 @@
-// TODO: Enum body
-//       Proc params
-//       Proc ret vals
-//       call args
-//       lit args
-//       name, type, values variable and constant decls
-//       assignment left and right side
-
-// TODO: STUB
-typedef MM_u64 MM_Identifier;
-typedef MM_u64 MM_String_Literal;
-
 typedef enum MM_BUILTIN_KIND
 {
     MM_Builtin_Cast,
@@ -20,12 +8,23 @@ typedef enum MM_BUILTIN_KIND
     MM_Builtin_Typeof,
 } MM_BUILTIN_KIND;
 
+#define MM_AST_KIND_BLOCK_SIZE 16
+#define MM_AST_BLOCK_INDEX_FROM_KIND(kind) ((kind) / MM_AST_KIND_BLOCK_SIZE)
+#define MM_AST_BLOCK_OFFSET_FROM_KIND(kind) ((kind) / MM_AST_KIND_BLOCK_SIZE)
+
 typedef enum MM_AST_KIND
 {
     MM_AST_Invalid = 0,
     
     MM_AST_FirstExpression,
-    MM_AST_Identifier = MM_AST_FirstExpression,
+    MM_AST_FirstSpecialExpression = MM_AST_FirstExpression,
+    MM_AST_Enum_Member = MM_AST_FirstSpecialExpression,
+    MM_AST_Argument,
+    MM_AST_Parameter,
+    MM_AST_LastSpecialExpression = MM_AST_Parameter,
+    
+    MM_AST_FirstPrimaryExpression,
+    MM_AST_Identifier = MM_AST_FirstPrimaryExpression,
     MM_AST_Int,
     MM_AST_Float,
     MM_AST_String,
@@ -38,10 +37,11 @@ typedef enum MM_AST_KIND
     MM_AST_Enum,
     MM_AST_Builtin,
     MM_AST_Compound,
+    MM_AST_LastPrimaryExpression = MM_AST_Compound,
     
     MM_AST_FirstPostfix,
     MM_AST_Dereference = MM_AST_FirstPostfix,
-    MM_AST_Member,
+    MM_AST_MemberAccess,
     MM_AST_Subscript,
     MM_AST_Slice,
     MM_AST_Call,
@@ -113,8 +113,9 @@ typedef enum MM_AST_KIND
 
 typedef struct MM_Proc_Header
 {
-    // TODO: params
-    // TODO: return values
+    // IMPORTANT HACK
+    struct MM_Parameter* params;
+    struct MM_Parameter* return_values;
 } MM_Proc_Header;
 
 typedef MM_Proc_Header MM_Proc_Expr;
@@ -131,25 +132,26 @@ typedef struct MM_Proc_Lit_Expr
 
 typedef struct MM_Struct_Expr
 {
-    struct AST_Block_Statement* body;
+    struct MM_Block_Statement* body;
 } MM_Struct_Expr;
 
 typedef struct MM_Enum_Expr
 {
-    // TODO: body
+    struct MM_Expression* member_type;
+    struct MM_Enum_Member* members;
 } MM_Enum_Expr;
 
 typedef struct MM_Builtin_Expr
 {
     MM_BUILTIN_KIND kind;
-    // TODO: args
+    struct MM_Argument* args;
 } MM_Builtin_Expr;
 
-typedef struct MM_Member_Expr
+typedef struct MM_Member_Access_Expr
 {
     struct MM_Expression* symbol;
-    MM_Identifier member;
-} MM_Member_Expr;
+    MM_String member;
+} MM_Member_Access_Expr;
 
 typedef struct MM_Subscript_Expr
 {
@@ -167,19 +169,19 @@ typedef struct MM_Slice_Expr
 typedef struct MM_Call_Expr
 {
     struct MM_Expression* proc;
-    // TODO: call args
+    struct MM_Argument* args;
 } MM_Call_Expr;
 
 typedef struct MM_Struct_Lit_Expr
 {
     struct MM_Expression* type;
-    // TODO: lit args
+    struct MM_Argument* args;
 } MM_Struct_Lit_Expr;
 
 typedef struct MM_Array_Lit_Expr
 {
     struct MM_Expression* type;
-    // TODO: lit args
+    struct MM_Argument* args;
 } MM_Array_Lit_Expr;
 
 typedef struct MM_Array_Type_Expr
@@ -203,11 +205,12 @@ typedef struct MM_Conditional_Expr
 
 typedef union MM_Expression_Union
 {
-    MM_Identifier identifier;
+    MM_String identifier;
     MM_i128 integer;
     MM_f64 floating;
-    MM_String_Literal string_literal;
+    MM_String string_literal;
     MM_u32 codepoint;
+    MM_bool boolean;
     
     MM_Proc_Expr proc_expr;
     MM_Proc_Lit_Expr proc_lit_expr;
@@ -217,7 +220,7 @@ typedef union MM_Expression_Union
     MM_Builtin_Expr builtin_expr;
     struct MM_Expression* compound_expr;
     struct MM_Expression* unary_expr;
-    MM_Member_Expr member_expr;
+    MM_Member_Access_Expr member_access_expr;
     MM_Subscript_Expr subscript_expr;
     MM_Slice_Expr slice_expr;
     MM_Call_Expr call_expr;
@@ -230,17 +233,25 @@ typedef union MM_Expression_Union
 
 typedef struct MM_Variable_Decl
 {
-    // TODO:
+    struct MM_Expression* names;
+    struct MM_Expression* types;
+    struct MM_Expression* values;
+    MM_bool is_using;
+    MM_bool is_uninitialized;
 } MM_Variable_Decl;
 
 typedef struct MM_Constant_Decl
 {
-    // TODO:
+    struct MM_Expression* names;
+    struct MM_Expression* types;
+    struct MM_Expression* values;
+    MM_bool is_using;
 } MM_Constant_Decl;
 
 typedef struct MM_Using_Decl
 {
-    // TODO:
+    struct MM_Expression* symbols;
+    struct MM_Expression* aliases;
 } MM_Using_Decl;
 
 typedef union MM_Declaration_Union
@@ -252,22 +263,38 @@ typedef union MM_Declaration_Union
 
 typedef struct MM_Block_Statement
 {
-    // TODO:
+    MM_String label;
+    struct MM_Statement* body;
 } MM_Block_Statement;
+
+typedef struct MM_Assignment_Statement
+{
+    struct MM_Expression* lhs;
+    struct MM_Expression* rhs;
+    MM_AST_KIND op;
+} MM_Assignment_Statement;
 
 typedef struct MM_If_Statement
 {
-    // TODO:
+    MM_String label;
+    struct MM_DeclAssignmentOrExpression* init;
+    struct MM_Expression* condition;
+    struct MM_Statement* true_body;
+    struct MM_Statement* false_body;
 } MM_If_Statement;
 
 typedef struct MM_While_Statement
 {
-    // TODO:
+    MM_String label;
+    struct MM_DeclAssignmentOrExpression* init;
+    struct MM_Expression* condition;
+    struct MM_AssignmentOrExpression* step;
+    struct MM_Statement* body;
 } MM_While_Statement;
 
 typedef struct MM_Jump_Statement
 {
-    MM_Identifier label;
+    MM_String label;
 } MM_Jump_Statement;
 
 typedef MM_Jump_Statement MM_Break_Statement;
@@ -275,13 +302,8 @@ typedef MM_Jump_Statement MM_Continue_Statement;
 
 typedef struct MM_Return_Statement
 {
-    // TODO:
+    struct MM_Argument* args;
 } MM_Return_Statement;
-
-typedef struct MM_Assignment_Statement
-{
-    // TODO:
-} MM_Assignment_Statement;
 
 typedef union MM_Statement_Union
 {
@@ -298,18 +320,23 @@ typedef union MM_Statement_Union
 typedef struct MM_Expression
 {
     MM_AST_KIND kind;
+    struct MM_Expression* next;
+    
     union MM_Expression_Union;
 } MM_Expression;
 
 typedef struct MM_Declaration
 {
     MM_AST_KIND kind;
+    struct MM_Declaration* next;
+    
     union MM_Declaration_Union;
 } MM_Declaration;
 
 typedef struct MM_Statement
 {
     MM_AST_KIND kind;
+    struct MM_Statement* next;
     
     union
     {
@@ -318,6 +345,82 @@ typedef struct MM_Statement
         union MM_Statement_Union;
     };
 } MM_Statement;
+
+typedef struct  MM_AssignmentOrExpression
+{
+    MM_AST_KIND kind;
+    
+    union
+    {
+        MM_Assignment_Statement assignment_statement;
+        union MM_Expression_Union;
+    };
+} MM_AssignmentOrExpression;
+
+typedef struct MM_DeclAssignmentOrExpression
+{
+    MM_AST_KIND kind;
+    
+    union
+    {
+        union MM_Declaration_Union;
+        MM_Assignment_Statement assignment_statement;
+        union MM_Expression_Union;
+    };
+} MM_DeclAssignmentOrExpression;
+
+typedef union MM_Enum_Member_Union
+{
+    struct
+    {
+        MM_String name;
+        struct MM_Expression* value;
+    };
+} MM_Enum_Member_Union;
+
+typedef struct MM_Enum_Member
+{
+    MM_AST_KIND kind;
+    struct MM_Enum_Member* next;
+    
+    union MM_Enum_Member_Union;
+} MM_Enum_Member;
+
+typedef union MM_Argument_Union
+{
+    struct
+    {
+        struct MM_Expression* name;
+        struct MM_Expression* value;
+    };
+} MM_Argument_Union;
+
+typedef struct MM_Argument
+{
+    MM_AST_KIND kind;
+    struct MM_Argument* next;
+    
+    union MM_Argument_Union;
+} MM_Argument;
+
+typedef union MM_Parameter_Union
+{
+    struct
+    {
+        struct MM_Expression* names;
+        struct MM_Expression* type;
+        struct MM_Expression* value;
+        MM_bool is_using;
+    };
+} MM_Parameter_Union;
+
+typedef struct MM_Parameter
+{
+    MM_AST_KIND kind;
+    struct MM_Parameter* next;
+    
+    union MM_Parameter_Union;
+} MM_Parameter;
 
 typedef union MM_AST
 {
@@ -330,10 +433,28 @@ typedef union MM_AST
             union MM_Expression_Union;
             union MM_Declaration_Union;
             union MM_Statement_Union;
+            
+            struct
+            {
+                union MM_Enum_Member_Union;
+            } enum_member;
+            
+            struct
+            {
+                union MM_Argument_Union;
+            } argument;
+            
+            struct
+            {
+                union MM_Parameter_Union;
+            } parameter;
         };
     };
     
     MM_Expression expression;
     MM_Declaration declaration;
     MM_Statement statement;
+    MM_Enum_Member enum_member_wrapper;
+    MM_Argument argument_wrapper;
+    MM_Parameter parameter_wrapper;
 } MM_AST;

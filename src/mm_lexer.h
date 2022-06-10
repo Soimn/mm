@@ -22,7 +22,10 @@ typedef enum MM_TOKEN_KIND
     MM_Token_Comment,
     MM_Token_BlockComment,
     
-    MM_Token_FirstAssignment = 1*16,
+    MM_Token_FirstAssignment,
+    MM_Token_Equals = MM_Token_FirstAssignment,
+    
+    MM_Token_FirstBinaryAssignment = 1*16,
     MM_Token_FirstMulLevelAssignment = MM_Token_FirstAssignment,
     MM_Token_StarEquals = MM_Token_FirstMulLevelAssignment,
     MM_Token_SlashEquals,
@@ -43,7 +46,8 @@ typedef enum MM_TOKEN_KIND
     MM_Token_AndAndEquals = 4*16,
     
     MM_Token_OrOrEquals = 5*16,
-    MM_Token_LastAssignment = MM_Token_OrOrEquals,
+    MM_Token_LastBinaryAssignment = MM_Token_OrOrEquals,
+    MM_Token_LastAssignment = MM_Token_LastBinaryAssignment,
     
     MM_Token_FirstBinary = 6*16,
     MM_Token_FirstMulLevel = MM_Token_FirstBinary,
@@ -94,7 +98,6 @@ typedef enum MM_TOKEN_KIND
     MM_Token_Period,
     MM_Token_PeriodOpenBrace,
     MM_Token_PeriodOpenBracket,
-    MM_Token_Equals,
     
     MM_Token_FirstKeyword,
     MM_Token_Include = MM_Token_FirstKeyword,
@@ -113,10 +116,14 @@ typedef enum MM_TOKEN_KIND
     MM_Token_Using,
     MM_Token_Defer,
     MM_Token_Return,
-    MM_Token_Cast,
+    MM_Token_LastKeyword = MM_Token_Return,
+    
+    MM_Token_FirstBuiltin,
+    MM_Token_Cast = MM_Token_FirstBuiltin,
     MM_Token_Transmute,
     MM_Token_Where,
-    MM_Token_LastKeyword = MM_Token_Where,
+    MM_Token_LastBuiltin = MM_Token_Where,
+    
     
 } MM_TOKEN_KIND;
 
@@ -150,10 +157,19 @@ typedef struct MM_Token
     };
 } MM_Token;
 
+typedef struct MM_Token_Array
+{
+    MM_u8* string_base;
+    MM_Token* tokens;
+    MM_umm count;
+} MM_Token_Array;
+
 typedef struct MM_Lexer
 {
     MM_String string;
     MM_u64 offset;
     MM_u32 offset_to_line;
     MM_u32 line;
+    
+    MM_Token last_token;
 } MM_Lexer;

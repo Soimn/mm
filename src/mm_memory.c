@@ -66,6 +66,7 @@ typedef struct MM_Arena
     MM_Commit_Memory_Func commit_func;
     MM_Free_Memory_Func free_func;
     struct MM_Arena_Block* current_block;
+    MM_u16 block_count;
     
     union
     {
@@ -141,6 +142,30 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
     block->space  -= offset + size;
     
     return result;
+}
+
+MM_API MM_Arena_Marker
+MM_Arena_GetMarker(MM_Arena* arena)
+{
+    return (MM_Arena_Marker)(((MM_u64)arena->block_count << 32) | arena->current_block->offset);
+}
+
+MM_API void
+MM_Arena_PopBack(MM_Arena* arena, MM_Arena_Marker marker)
+{
+    MM_umm block_index  = (MM_u64)marker >> 32;
+    MM_umm block_offset = (MM_u32)(MM_u64)marker;
+    
+    MM_Arena_Block* block = &arena->block;
+    MM_umm i = 0;
+    for (; i < block_index && block != 0; ++i, block = block->next);
+    
+    MM_ASSERT(i == block_offset);
+    MM_ASSERT(block->offset >= block_offset);
+    
+    arena->current_block = block;
+    arena->current_block->space  += block->offset - arena->current_block->offset;
+    arena->current_block->offset  = block_offset;
 }
 
 MM_API void

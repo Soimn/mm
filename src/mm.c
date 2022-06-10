@@ -68,7 +68,7 @@ int __stdcall _DllMainCRTStartup(void* hinstDLL, unsigned int fdwReason, void* l
 #define MM_INVALID_CODE_PATH MM_ASSERT(!"INVALID_CODE_PATH")
 
 #define MM_OFFSETOF(element, type) (MM_umm)&((type*)0)->element
-#define MM_ALIGNOF(T) OFFSETOF(t, struct { MM_u8 b; T t; })
+#define MM_ALIGNOF(T) MM_OFFSETOF(t, struct { MM_u8 b; T t; })
 
 #define MM_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MM_MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -95,3 +95,4 @@ typedef struct MM_Workspace
 #include "mm_string.c"
 #include "mm_f16.c"
 #include "mm_lexer.c"
+#include "mm_parser.c"

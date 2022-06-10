@@ -1,6 +1,5 @@
 // NOTE: Helper functions
 MM_Internal MM_bool MM_Lexer__AdvanceCharacter(MM_Lexer* lexer);
-MM_Internal inline MM_String MM_Lexer__TokenString(MM_Lexer* lexer, MM_Token token);
 MM_Internal MM_u32 MM_Lexer__ParseCodepoint(MM_String string, MM_umm* offset);
 
 MM_API MM_Lexer
@@ -11,7 +10,15 @@ MM_Lexer_Init(MM_String string)
         .offset         = 0,
         .offset_to_line = 0,
         .line           = 1,
+        .last_token     = {0}
     };
+}
+
+MM_API MM_Token
+MM_Lexer_GetToken(MM_Lexer* lexer)
+{
+    if (lexer->offset == 0) return MM_Lexer_NextToken(lexer);
+    else                    return lexer->last_token;
 }
 
 // NOTE: The lexer is designed to only verify the input, not parse it.
@@ -24,7 +31,7 @@ MM_Lexer_Init(MM_String string)
 //       implementation for parsing in the compiler). This decision
 //       will probably be reconsidered later, but the lexer will stay
 //       this way for the time being.
-MM_API MM_umm
+MM_API MM_Token_Array
 MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm amount)
 {
     // NOTE: The maximum string size for lexing is 4GB, this is enforced by the MM_String type by limiting size
@@ -218,7 +225,7 @@ MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm amount)
                         else
                         {
                             MM_NOT_IMPLEMENTED;
-                            // TODO: identifier || keyword
+                            // TODO: identifier || keyword || builtin
                         }
                     }
                     else if (c[0] >= '0' && c[1] <= '9')
@@ -363,9 +370,14 @@ MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm amount)
         }
         
         token->length = lexer->offset - token->offset;
+        lexer->last_token = *token;
     }
     
-    return i;
+    return (MM_Token_Array){
+        .string_base = lexer->string.data,
+        .tokens      = buffer,
+        .count       = i
+    };
 }
 
 MM_API MM_Token
@@ -373,17 +385,24 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
 {
     MM_Token token;
     
-    MM_umm lexed_tokens = MM_Lexer_NextTokens(lexer, &token, 1);
-    MM_ASSERT(lexed_tokens == 1);
+    MM_Token_Array array = MM_Lexer_NextTokens(lexer, &token, 1);
+    MM_ASSERT(array.count == 1);
     
     return token;
 }
 
-MM_API MM_i128
-MM_Lexer_ParseInt(MM_Lexer* lexer, MM_Token token)
+MM_API MM_String
+MM_Lexer_TokenToString(MM_Lexer* lexer, MM_Token token)
 {
-    MM_String string = MM_Lexer__TokenString(lexer, token);
-    
+    return (MM_String){
+        .data = lexer->string.data + token.offset,
+        .size = token.length
+    };
+}
+
+MM_API MM_i128
+MM_Lexer_ParseIntFromString(MM_String string)
+{
     MM_umm offset = 0;
     MM_umm base   = 10;
     if (string.size > 1 && string.data[0] == '0' && (string.data[1] < '0' || string.data[1] > '9'))
@@ -418,11 +437,9 @@ MM_Lexer_ParseInt(MM_Lexer* lexer, MM_Token token)
 }
 
 MM_API MM_f64
-MM_Lexer_ParseFloat(MM_Lexer* lexer, MM_Token token)
+MM_Lexer_ParseFloatFromString(MM_String string)
 {
     MM_f64 flt = 0;
-    
-    MM_String string = MM_Lexer__TokenString(lexer, token);
     
     if (string.size > 1 && string.data[0] == '0' && string.data[1] == 'h')
     {
@@ -461,23 +478,18 @@ MM_Lexer_ParseFloat(MM_Lexer* lexer, MM_Token token)
 }
 
 MM_API MM_u32
-MM_Lexer_ParseChar(MM_Lexer* lexer, MM_Token token)
+MM_Lexer_ParseCodepointFromString(MM_String string)
 {
     MM_umm offset = 1;
-    MM_String string = MM_Lexer__TokenString(lexer, token);
     return MM_Lexer__ParseCodepoint(string, &offset);
 }
 
 MM_API MM_String
-MM_Lexer_ParseIdentifier(MM_Lexer* lexer, MM_Token token)
+MM_Lexer_ParseStringFromString(MM_String string, MM_u8* buffer)
 {
-    return MM_Lexer__TokenString(lexer, token);
-}
-
-MM_API MM_String
-MM_Lexer_ParseString(MM_Lexer* lexer, MM_Token token, MM_u8* buffer) // NOTE: buffer should be at least token.size long
-{
-    MM_String string = MM_Lexer__TokenString(lexer, token);
+    // NOTE: Removing the prefixing and suffixing '"'
+    string.data += 1;
+    string.size -= 1 + 1;
     
     MM_umm read_offset  = 0;
     MM_umm write_offset = 0;
@@ -509,6 +521,30 @@ MM_Lexer_ParseString(MM_Lexer* lexer, MM_Token token, MM_u8* buffer) // NOTE: bu
         }
     }
     return (MM_String){ .data = buffer, .size = write_offset };
+}
+
+MM_API MM_i128
+MM_Lexer_ParseInt(MM_Lexer* lexer, MM_Token token)
+{
+    return MM_Lexer_ParseIntFromString(MM_Lexer_TokenToString(lexer, token));
+}
+
+MM_API MM_f64
+MM_Lexer_ParseFloat(MM_Lexer* lexer, MM_Token token)
+{
+    return MM_Lexer_ParseFloatFromString(MM_Lexer_TokenToString(lexer, token));
+}
+
+MM_API MM_u32
+MM_Lexer_ParseCodepoint(MM_Lexer* lexer, MM_Token token)
+{
+    return MM_Lexer_ParseCodepointFromString(MM_Lexer_TokenToString(lexer, token));
+}
+
+MM_API MM_String
+MM_Lexer_ParseString(MM_Lexer* lexer, MM_Token token, MM_u8* buffer)
+{
+    return MM_Lexer_ParseStringFromString(MM_Lexer_TokenToString(lexer, token), buffer);
 }
 
 //
@@ -582,15 +618,6 @@ MM_Lexer__AdvanceCharacter(MM_Lexer* lexer)
     else lexer->offset += 1;
     
     return !encountered_errors;
-}
-
-MM_Internal inline MM_String
-MM_Lexer__TokenString(MM_Lexer* lexer, MM_Token token)
-{
-    return (MM_String){
-        .data = lexer->string.data + token.offset,
-        .size = token.length
-    };
 }
 
 MM_Internal MM_u32
