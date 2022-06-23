@@ -185,7 +185,7 @@ MM_F64_ToF16(MM_f64 float64)
             //       producing a signed inf. (What I mean by representable is that there is a non inf/NaN f16 value that is as
             //       close to the actual value as possible. Increasing the significand by 1 might not always increase the f16
             //       value by 1. This means the "nearest representable even" is kind of misleading, since the value is the
-            //       nearest non inf/NaN value that is even, but it might not be a multiple of 2)
+            //       nearest non inf/NaN value that is even, but it might not be a the closest multiple of 2)
             MM_u64 shifted_out_mask     = MM_F64_SIGNIFICAND_MASK >> (MM_F64_SIGNIFICAND_SIZE - MM_F16_SIGNIFICAND_SIZE);
             MM_u64 most_significant_bit = (shifted_out_mask >> 1) + 1;
             if ((bits.significand & shifted_out_mask) > most_significant_bit || bits.significand == most_significant_bit && (f.significand & 1) != 0)

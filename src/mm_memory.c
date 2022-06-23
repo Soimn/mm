@@ -54,6 +54,7 @@ MM_Zero(void* ptr, MM_umm size)
 typedef struct MM_Arena_Block
 {
     struct MM_Arena_Block* next;
+    struct MM_Arena_Block* prev;
     MM_u32 offset;
     MM_u32 space;
 } MM_Arena_Block;
@@ -67,6 +68,7 @@ typedef struct MM_Arena
     MM_Free_Memory_Func free_func;
     struct MM_Arena_Block* current_block;
     MM_u16 block_count;
+    MM_u16 current_block_index;
     
     union
     {
@@ -92,6 +94,7 @@ MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_
         
         arena->block = (MM_Arena_Block){
             .next   = 0,
+            .prev   = 0,
             .offset = sizeof(MM_Arena_Block),                // NOTE: offset is relative to the block
             .space  = MM_ARENA_PAGE_SIZE - sizeof(MM_Arena), // NOTE: space is relative to the reserve base
         };
@@ -106,14 +109,12 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
 {
     MM_Arena_Block* block = arena->current_block;
     
-    MM_u32 offset = alignment - (block->offset & ~(alignment - 1));
+    MM_u32 offset = MM_ROUND_UP(block->offset, alignment) - block->offset;
     
     if (block->space < offset + size)
     {
         if ((MM_umm)block->offset + (MM_umm)block->space < MM_ARENA_BLOCK_RESERVE_SIZE)
         {
-            // NOTE: I don't think the extra parentheses are necessary, since a u64 + u32 + u32 add chain should never
-            //       be turned into u64 + (u32 + u32) by any reasonable compiler. However, I am a bit paranoid.
             arena->commit_func(((MM_u8*)block + block->offset) + block->space, MM_ARENA_PAGE_SIZE);
             block->space += MM_ARENA_PAGE_SIZE;
         }
@@ -122,18 +123,23 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
             arena->current_block = block = block->next;
             block->space += (block->offset - sizeof(MM_Arena_Block));
             block->offset = sizeof(MM_Arena_Block);
+            
+            arena->current_block_index += 1;
         }
         else
         {
             block->next = arena->reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
             arena->commit_func(block, MM_ARENA_PAGE_SIZE);
             
-            block = block->next;
-            *block = (MM_Arena_Block){
-                .next = 0,
+            *(block->next) = (MM_Arena_Block){
+                .next   = 0,
+                .prev   = block,
                 .offset = sizeof(MM_Arena_Block),
                 .space  = MM_ARENA_PAGE_SIZE - sizeof(MM_Arena_Block),
             };
+            
+            block                       = block->next;
+            arena->current_block_index += 1;
         }
     }
     
@@ -144,10 +150,24 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
     return result;
 }
 
+MM_API void
+MM_Arena_Pop(MM_Arena* arena, MM_umm amount)
+{
+    for (MM_Arena_Block* block = arena->current_block; amount > 0 && block != 0; block = block->prev, --arena->current_block_index)
+    {
+        MM_umm bite = MM_MIN(amount, block->offset - sizeof(MM_Arena_Block));
+        block->offset -= bite;
+        block->space  += bite;
+        amount        -= bite;
+    }
+    
+    MM_ASSERT(amount == 0);
+}
+
 MM_API MM_Arena_Marker
 MM_Arena_GetMarker(MM_Arena* arena)
 {
-    return (MM_Arena_Marker)(((MM_u64)arena->block_count << 32) | arena->current_block->offset);
+    return (MM_Arena_Marker)(((MM_u64)arena->current_block_index << 32) | arena->current_block->offset);
 }
 
 MM_API void
@@ -158,7 +178,10 @@ MM_Arena_PopBack(MM_Arena* arena, MM_Arena_Marker marker)
     
     MM_Arena_Block* block = &arena->block;
     MM_umm i = 0;
-    for (; i < block_index && block != 0; ++i, block = block->next);
+    for (; i < block_index && block != 0; ++i, block = block->next)
+    {
+        MM_ASSERT(block != arena->current_block);
+    }
     
     MM_ASSERT(i == block_offset);
     MM_ASSERT(block->offset >= block_offset);
@@ -166,6 +189,7 @@ MM_Arena_PopBack(MM_Arena* arena, MM_Arena_Marker marker)
     arena->current_block = block;
     arena->current_block->space  += block->offset - arena->current_block->offset;
     arena->current_block->offset  = block_offset;
+    arena->current_block_index    = block_index;
 }
 
 MM_API void
@@ -174,10 +198,36 @@ MM_Arena_Clear(MM_Arena* arena)
     arena->current_block = &arena->block;
     arena->current_block->space += (arena->current_block->offset - sizeof(MM_Arena_Block));
     arena->current_block->offset = sizeof(MM_Arena_Block);
+    arena->current_block_index   = 0;
 }
 
 MM_API void
 MM_Arena_Free(MM_Arena* arena)
 {
+    for (MM_Arena_Block* block = arena->block.next; block != 0; )
+    {
+        MM_Arena_Block* next = block->next;
+        
+        arena->free_func(block);
+        
+        block = next;
+    }
+    
     arena->free_func(arena);
+}
+
+MM_API void
+MM_Arena_FreeEveryBlockAfterCurrent(MM_Arena* arena)
+{
+    for (MM_Arena_Block* block = arena->current_block->next; block != 0; )
+    {
+        MM_Arena_Block* next = block->next;
+        
+        arena->free_func(block);
+        
+        arena->block_count -= 1;
+        block = next;
+    }
+    
+    arena->current_block->next = 0;
 }

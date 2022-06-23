@@ -75,10 +75,12 @@ typedef struct MM_Arena MM_Arena;
 typedef void* MM_Arena_Marker;
 MM_API MM_Arena*       MM_Arena_Init     (MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func);
 MM_API void*           MM_Arena_Push     (MM_Arena* arena, MM_umm size, MM_u8 alignment);
+MM_API void            MM_Arena_Pop      (MM_Arena* arena, MM_umm amount);
 MM_API MM_Arena_Marker MM_Arena_GetMarker(MM_Arena* arena);
 MM_API void            MM_Arena_PopBack  (MM_Arena* arena, MM_Arena_Marker marker);
 MM_API void            MM_Arena_Clear    (MM_Arena* arena);
 MM_API void            MM_Arena_Free     (MM_Arena* arena);
+MM_API void            MM_Arena_FreeEveryBlockAfterCurrent(MM_Arena* arena);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -146,23 +148,23 @@ typedef struct MM_Parser_Error
 // NOTE: The return value is 0 when there was an error, otherwise it is the root node of the resulting AST
 // NOTE: The error report parameter is optional. If it is not 0 and an error has occured, the error message and other
 //       related information is written to the structure pointed to by "report".
-MM_API MM_Expression*                 MM_Parser_ParseExpressionWithLexer                (MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_Statement*                  MM_Parser_ParseStatementWithLexer                 (MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_Statement*                  MM_Parser_ParseStatementListWithLexer             (MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionWithLexer    (MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report);
+MM_API MM_Expression*                 MM_Parser_ParseExpressionWithLexer                (MM_Lexer*, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_Statement*                  MM_Parser_ParseStatementWithLexer                 (MM_Lexer*, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_Statement*                  MM_Parser_ParseStatementListWithLexer             (MM_Lexer*, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionWithLexer    (MM_Lexer*, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionWithLexer(MM_Lexer*, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
 
-MM_API MM_Expression*                 MM_Parser_ParseExpressionFromTokens                (MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_Statement*                  MM_Parser_ParseStatementFromTokens                 (MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_Statement*                  MM_Parser_ParseStatementListFromTokens             (MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionFromTokens    (MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report);
+MM_API MM_Expression*                 MM_Parser_ParseExpressionFromTokens                (MM_Token_Array, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_Statement*                  MM_Parser_ParseStatementFromTokens                 (MM_Token_Array, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_Statement*                  MM_Parser_ParseStatementListFromTokens             (MM_Token_Array, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionFromTokens    (MM_Token_Array, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionFromTokens(MM_Token_Array, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
 
-MM_API MM_Expression*                 MM_Parser_ParseExpressionFromString                (MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_Statement*                  MM_Parser_ParseStatementFromString                 (MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_Statement*                  MM_Parser_ParseStatementListFromString             (MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionFromString    (MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report);
-MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report);
+MM_API MM_Expression*                 MM_Parser_ParseExpressionFromString                (MM_String, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_Statement*                  MM_Parser_ParseStatementFromString                 (MM_String, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_Statement*                  MM_Parser_ParseStatementListFromString             (MM_String, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionFromString    (MM_String, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
+MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionFromString(MM_String, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // TODO: intern string api

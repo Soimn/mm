@@ -9,6 +9,7 @@ typedef struct MM_Parser
     MM_Parser_GetToken_Func next_token;
     MM_Parser_TokenToString_Func token_to_string;
     MM_Arena* ast_arena;
+    MM_Arena* str_arena;
     MM_Parser_Error* report;
     
     union
@@ -104,6 +105,7 @@ MM_Parser__EatToken(MM_Parser* parser, MM_TOKEN_KIND kind)
 .next_token      = &MM_Parser__NextTokenLexer,     \
 .token_to_string = &MM_Parser__TokenToStringLexer, \
 .ast_arena       = ast_arena,                      \
+.str_arena       = str_arena,                      \
 .lexer           = lexer,                          \
 }
 
@@ -111,6 +113,8 @@ MM_Parser__EatToken(MM_Parser* parser, MM_TOKEN_KIND kind)
 .get_token       = &MM_Parser__GetTokenLexer,       \
 .next_token      = &MM_Parser__NextTokenLexer,      \
 .token_to_string = &MM_Parser__TokenToStringTokens, \
+.ast_arena       = ast_arena,                       \
+.str_arena       = str_arena,                       \
 .tokens          = tokens.tokens,                   \
 .string_base     = tokens.string_base,              \
 .count           = tokens.count,                    \
@@ -122,6 +126,7 @@ MM_Parser__EatToken(MM_Parser* parser, MM_TOKEN_KIND kind)
 .next_token      = &MM_Parser__NextTokenLexer,     \
 .token_to_string = &MM_Parser__TokenToStringLexer, \
 .ast_arena       = ast_arena,                      \
+.str_arena       = str_arena,                      \
 .lexer           = &lexer,                         \
 }
 
@@ -131,7 +136,7 @@ MM_Internal MM_bool MM_Parser__ParseAssignmentOrExpression(MM_Parser* parser, MM
 MM_Internal MM_bool MM_Parser__ParseDeclAssignmentOrExpression(MM_Parser* parser, MM_DeclAssignmentOrExpression** result);
 
 MM_API MM_Expression*
-MM_Parser_ParseExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = WithLexerParser;
     MM_Expression* expr = 0;
@@ -139,7 +144,7 @@ MM_Parser_ParseExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Pars
 }
 
 MM_API MM_Statement*
-MM_Parser_ParseStatementWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseStatementWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = WithLexerParser;
     MM_Statement* statement = 0;
@@ -147,7 +152,7 @@ MM_Parser_ParseStatementWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parse
 }
 
 MM_API MM_Statement*
-MM_Parser_ParseStatementListWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseStatementListWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = WithLexerParser;
     
@@ -164,7 +169,7 @@ MM_Parser_ParseStatementListWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_P
 }
 
 MM_API MM_AssignmentOrExpression*
-MM_Parser_ParseAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = WithLexerParser;
     MM_AssignmentOrExpression* result = 0;
@@ -172,7 +177,7 @@ MM_Parser_ParseAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_ar
 }
 
 MM_API MM_DeclAssignmentOrExpression*
-MM_Parser_ParseDeclAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseDeclAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = WithLexerParser;
     MM_DeclAssignmentOrExpression* result = 0;
@@ -180,7 +185,7 @@ MM_Parser_ParseDeclAssignmentOrExpressionWithLexer(MM_Lexer* lexer, MM_Arena* as
 }
 
 MM_API MM_Expression*
-MM_Parser_ParseExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = FromTokensParser;
     
@@ -196,7 +201,7 @@ MM_Parser_ParseExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, 
 }
 
 MM_API MM_Statement*
-MM_Parser_ParseStatementFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseStatementFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = FromTokensParser;
     
@@ -212,7 +217,7 @@ MM_Parser_ParseStatementFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, M
 }
 
 MM_API MM_Statement*
-MM_Parser_ParseStatementListFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseStatementListFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = FromTokensParser;
     
@@ -229,7 +234,7 @@ MM_Parser_ParseStatementListFromTokens(MM_Token_Array tokens, MM_Arena* ast_aren
 }
 
 MM_API MM_AssignmentOrExpression*
-MM_Parser_ParseAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = FromTokensParser;
     
@@ -245,7 +250,7 @@ MM_Parser_ParseAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Arena*
 }
 
 MM_API MM_DeclAssignmentOrExpression*
-MM_Parser_ParseDeclAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseDeclAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Parser parser = FromTokensParser;
     
@@ -261,7 +266,7 @@ MM_Parser_ParseDeclAssignmentOrExpressionFromTokens(MM_Token_Array tokens, MM_Ar
 }
 
 MM_API MM_Expression*
-MM_Parser_ParseExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Lexer lexer   = MM_Lexer_Init(string);
     MM_Parser parser = FromStringParser;
@@ -278,7 +283,7 @@ MM_Parser_ParseExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Pa
 }
 
 MM_API MM_Statement*
-MM_Parser_ParseStatementFromString(MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseStatementFromString(MM_String string, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Lexer lexer   = MM_Lexer_Init(string);
     MM_Parser parser = FromStringParser;
@@ -295,7 +300,7 @@ MM_Parser_ParseStatementFromString(MM_String string, MM_Arena* ast_arena, MM_Par
 }
 
 MM_API MM_Statement*
-MM_Parser_ParseStatementListFromString(MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseStatementListFromString(MM_String string, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Lexer lexer   = MM_Lexer_Init(string);
     MM_Parser parser = FromStringParser;
@@ -313,7 +318,7 @@ MM_Parser_ParseStatementListFromString(MM_String string, MM_Arena* ast_arena, MM
 }
 
 MM_API MM_AssignmentOrExpression*
-MM_Parser_ParseAssignmentOrExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseAssignmentOrExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Lexer lexer   = MM_Lexer_Init(string);
     MM_Parser parser = FromStringParser;
@@ -330,7 +335,7 @@ MM_Parser_ParseAssignmentOrExpressionFromString(MM_String string, MM_Arena* ast_
 }
 
 MM_API MM_DeclAssignmentOrExpression*
-MM_Parser_ParseDeclAssignmentOrExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Parser_Error* report)
+MM_Parser_ParseDeclAssignmentOrExpressionFromString(MM_String string, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Parser_Error* report)
 {
     MM_Lexer lexer   = MM_Lexer_Init(string);
     MM_Parser parser = FromStringParser;
@@ -485,8 +490,8 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         NextToken(parser);
         
         *expression = MM_Parser__PushNode(parser, MM_AST_Identifier);
-        MM_NOT_IMPLEMENTED; // TODO: How to handle blank identifiers?
-        (*expression)->identifier = TokenToString(parser, token);
+        if (token.kind == MM_Token_Identifier) (*expression)->identifier = TokenToString(parser, token);
+        else                                   (*expression)->identifier = (MM_String){};
     }
     else if (token.kind == MM_Token_Int)
     {
@@ -506,9 +511,12 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
     {
         NextToken(parser);
         
+        MM_String raw_string = TokenToString(parser, token);
+        
         *expression = MM_Parser__PushNode(parser, MM_AST_String);
-        MM_NOT_IMPLEMENTED;
-        //(*expression)->string_literal = MM_Lexer_ParseStringFromString(TokenToString(parser, token), );
+        (*expression)->string_literal = MM_Lexer_ParseStringFromString(raw_string, MM_Arena_Push(parser->str_arena, raw_string.size, MM_ALIGNOF(MM_u8)));
+        
+        MM_Arena_Pop(parser->str_arena, (*expression)->string_literal.size - raw_string.size);
     }
     else if (token.kind == MM_Token_Codepoint)
     {
@@ -638,11 +646,31 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         {
             for (MM_Enum_Member** next_member = &members;; next_member = &(*next_member)->next)
             {
-                MM_Expression* name  = 0;
+                token = GetToken(parser);
+                
+                if (token.kind == MM_Token_BlankIdentifier)
+                {
+                    //// ERROR: Illegal use of blank identifier as enum member name
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+                if (token.kind != MM_Token_Identifier)
+                {
+                    //// ERROR: Missing name of enum member
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+                
+                MM_String name       = TokenToString(parser, token);
                 MM_Expression* value = 0;
                 
-                if (MM_Parser__ParseExpression(parser, &name)) return MM_false;
+                NextToken(parser);
+                
                 if (EatToken(parser, MM_Token_Equals) && !MM_Parser__ParseExpression(parser, &value)) return MM_false;
+                
+                *next_member = MM_Parser__PushNode(parser, MM_AST_EnumMember);
+                (*next_member)->name  = name;
+                (*next_member)->value = value;
                 
                 if (EatToken(parser, MM_Token_Comma)) continue;
                 else                                  break;

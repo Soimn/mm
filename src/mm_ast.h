@@ -18,7 +18,7 @@ typedef enum MM_AST_KIND
     
     MM_AST_FirstExpression,
     MM_AST_FirstSpecialExpression = MM_AST_FirstExpression,
-    MM_AST_Enum_Member = MM_AST_FirstSpecialExpression,
+    MM_AST_EnumMember = MM_AST_FirstSpecialExpression,
     MM_AST_Argument,
     MM_AST_Parameter,
     MM_AST_LastSpecialExpression = MM_AST_Parameter,
@@ -113,7 +113,6 @@ typedef enum MM_AST_KIND
 
 typedef struct MM_Proc_Header
 {
-    // IMPORTANT HACK
     struct MM_Parameter* params;
     struct MM_Parameter* return_values;
 } MM_Proc_Header;
@@ -317,6 +316,35 @@ typedef union MM_Statement_Union
     MM_Assignment_Statement assignment_statement;
 } MM_Statement_Union;
 
+typedef union MM_Enum_Member_Union
+{
+    struct
+    {
+        MM_String name;
+        struct MM_Expression* value;
+    };
+} MM_Enum_Member_Union;
+
+typedef union MM_Argument_Union
+{
+    struct
+    {
+        struct MM_Expression* name;
+        struct MM_Expression* value;
+    };
+} MM_Argument_Union;
+
+typedef union MM_Parameter_Union
+{
+    struct
+    {
+        struct MM_Expression* names;
+        struct MM_Expression* type;
+        struct MM_Expression* value;
+        MM_bool is_using;
+    };
+} MM_Parameter_Union;
+
 typedef struct MM_Expression
 {
     MM_AST_KIND kind;
@@ -369,15 +397,6 @@ typedef struct MM_DeclAssignmentOrExpression
     };
 } MM_DeclAssignmentOrExpression;
 
-typedef union MM_Enum_Member_Union
-{
-    struct
-    {
-        MM_String name;
-        struct MM_Expression* value;
-    };
-} MM_Enum_Member_Union;
-
 typedef struct MM_Enum_Member
 {
     MM_AST_KIND kind;
@@ -386,15 +405,6 @@ typedef struct MM_Enum_Member
     union MM_Enum_Member_Union;
 } MM_Enum_Member;
 
-typedef union MM_Argument_Union
-{
-    struct
-    {
-        struct MM_Expression* name;
-        struct MM_Expression* value;
-    };
-} MM_Argument_Union;
-
 typedef struct MM_Argument
 {
     MM_AST_KIND kind;
@@ -402,17 +412,6 @@ typedef struct MM_Argument
     
     union MM_Argument_Union;
 } MM_Argument;
-
-typedef union MM_Parameter_Union
-{
-    struct
-    {
-        struct MM_Expression* names;
-        struct MM_Expression* type;
-        struct MM_Expression* value;
-        MM_bool is_using;
-    };
-} MM_Parameter_Union;
 
 typedef struct MM_Parameter
 {

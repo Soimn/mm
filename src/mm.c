@@ -96,3 +96,4 @@ typedef struct MM_Workspace
 #include "mm_f16.c"
 #include "mm_lexer.c"
 #include "mm_parser.c"
+#include "mm_checker.c"
