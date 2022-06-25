@@ -52,19 +52,6 @@ typedef MM_u8 MM_bool;
 #define MM_TYPEDEF_FUNC(return_val, name, ...) typedef return_val (*name)(__VA_ARGS__)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////c
 
-/// Workspace API
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////c
-// NOTE: The workspace is intended to be a way for the compiler to keep state about the compilation and provide
-//       certain guarantees (like "deterministic" compilation).
-
-struct MM_Workspace;
-typedef struct MM_Workspace MM_Workspace;
-MM_API MM_Workspace* MM_Workspace_Open ();
-MM_API void          MM_Workspace_Close(MM_Workspace* workspace);
-
-// TODO: intended usage
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /// Memory
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 MM_TYPEDEF_FUNC(void*, MM_Reserve_Memory_Func, MM_umm size);
@@ -167,23 +154,31 @@ MM_API MM_AssignmentOrExpression*     MM_Parser_ParseAssignmentOrExpressionFromS
 MM_API MM_DeclAssignmentOrExpression* MM_Parser_ParseDeclAssignmentOrExpressionFromString(MM_String, MM_Arena* ast, MM_Arena* strings, MM_Parser_Error* report);
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Workspace API
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////c
+// NOTE: The workspace is intended to be a way for the compiler to keep state about the compilation and provide
+//       certain guarantees (like "deterministic" compilation).
+
+struct MM_Workspace;
+typedef struct MM_Workspace MM_Workspace;
+
+typedef struct MM_Workspace_Settings
+{
+    MM_Reserve_Memory_Func reserve_func;
+    MM_Commit_Memory_Func commit_func;
+    MM_Free_Memory_Func free_func;
+} MM_Workspace_Settings;
+
+
+MM_API MM_Workspace* MM_Workspace_Open   (MM_Workspace_Settings settings);
+MM_API void          MM_Workspace_Close  (MM_Workspace* workspace);
+MM_API void          MM_Workspace_AddDecl(MM_Workspace* workspace, struct MM_Declaration* decl); // NOTE: deep copies the declaration
+
+// TODO: intended usage
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // TODO: intern string api
 
 // TODO: load and store full state for debug info and branching (debug needs AST <-> instruction mapping information as well)
-/*
-MM_Check_Status MM_Workspace_Recheck(MM_Workspace workspace);
-
-
-while (true)
-{
-    remove and update old declarations;
-    insert new declarations;
-    MM_Check_Status check_status = MM_Workspace_Recheck(workspace);
-    
-    if (check_status.code == Check_Completed)
-    {
-        report newc
-    }
-}*/
 
 #endif

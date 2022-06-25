@@ -59,7 +59,7 @@ typedef struct MM_Arena_Block
     MM_u32 space;
 } MM_Arena_Block;
 
-#define MM_ARENA_PAGE_SIZE MM_KB(4)
+#define MM_ARENA_PAGE_SIZE MM_KB(16)
 #define MM_ARENA_BLOCK_RESERVE_SIZE MM_ROUND_UP(MM_GB(4), MM_ARENA_PAGE_SIZE)
 typedef struct MM_Arena
 {

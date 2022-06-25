@@ -86,14 +86,68 @@ int __stdcall _DllMainCRTStartup(void* hinstDLL, unsigned int fdwReason, void* l
 
 #define MM_Internal static
 
-typedef struct MM_Workspace
-{
-    
-} MM_Workspace;
+typedef void* MM_Type_ID;
 
 #include "mm_memory.c"
 #include "mm_string.c"
 #include "mm_f16.c"
 #include "mm_lexer.c"
 #include "mm_parser.c"
+#include "mm_symbols.c"
+#include "mm_types.c"
 #include "mm_checker.c"
+
+typedef struct MM_Workspace
+{
+    union
+    {
+        MM_Arena* arena_bank[3];
+        struct
+        {
+            MM_Arena* ws_arena;  // NOTE: for storing the MM_Workspace and other misc structures
+            MM_Arena* ast_arena; // NOTE: for storing MM_AST nodes
+            MM_Arena* str_arena; // NOTE: for storing string literals
+        };
+    };
+} MM_Workspace;
+
+MM_API MM_Workspace*
+MM_Workspace_Open(MM_Workspace_Settings settings)
+{
+    MM_Workspace* workspace = 0;
+    
+    MM_Arena* ws_arena = MM_Arena_Init(settings.reserve_func, settings.commit_func, settings.free_func);
+    
+    if (ws_arena != 0)
+    {
+        workspace = MM_Arena_Push(ws_arena, sizeof(MM_Workspace), MM_ALIGNOF(MM_Workspace));
+        MM_ZeroStruct(workspace);
+        
+        workspace->ws_arena = ws_arena;
+        for (MM_umm i = 1; i < MM_ARRAY_SIZE(workspace->arena_bank); ++i)
+        {
+            // TODO: What to do if the init fails? What to do when a later commit fails?
+            workspace->arena_bank[i] = MM_Arena_Init(settings.reserve_func, settings.commit_func, settings.free_func);
+        }
+    }
+    
+    return workspace;
+}
+
+MM_API void
+MM_Workspace_Close(MM_Workspace* workspace)
+{
+    for (MM_umm i = 1; i < MM_ARRAY_SIZE(workspace->arena_bank); ++i)
+    {
+        MM_Arena_Free(workspace->arena_bank[i]);
+    }
+    
+    MM_Arena_Free(workspace->ws_arena);
+}
+
+MM_API void
+MM_Workspace_AddDecl(MM_Workspace* workspace, struct MM_Declaration* decl)
+{
+    // TODO: Copy and gen symbols
+    MM_NOT_IMPLEMENTED;
+}
