@@ -134,3 +134,143 @@ typedef struct MM_Symbol_Table
 //       and extending it would either break row/column contiguity, or require a separate memory range for
 //       each row/column. Two hash tables using linked lists, with embedded linked lists for each row/column,
 //       seems like a decent solution.
+
+// TODO: There should probably be a way of declaring a procedure without defining it, and later providing the definition.
+//       This would nicely fit in with the problem of checking cyclicly dependent procedures, since they require
+//       separating the procedure header from the body to complete. Mirroring this in the language would clarify this
+//       for usage in the metaprogram, and would also provide a way of declaring declarations that will be generated
+//       by the metaprogram, such that tools can gather more information up front about how the program will end up.
+//       (E.g. declaring that the symbol SerliazeEntity is a procedure of the form proc(^String_Builder, ^Entity)
+//       will provide a tool that doesn't want to do a full live compile the information needed to properly e.g.
+//       highlight SerializeEntity as a procedure, and provide autocompletion). However, this does kind of conflict with
+//       the whole "no shadowing or redefinitions" mindset I designed the language with. Having thought more about it,
+//       the concept of shadowing does not seem as terrible. The obvious reason is that allowing shadowing is always
+//       better than not, if the language provides a way of enforcing user defined rules on shadowing usage, and that
+//       it does not severly hinder tools. However, shadowing can also be useful, in that it can provide a way of
+//       modifying the context of generated code (e.g. if the code expects a context, the caller can hide its own
+//       context and provide a separate one by declaring a shadowing copy of the context) and also provide more
+//       utility to explicit overloading. The last one is a big advantage, since this means overloading can be
+//       entirely explicit, while still being as useful as implicit overloading. By making overloading explicit
+//       and allowing the metaprogram to add overloads to the explicit overload set gives the compiler the
+//       nice advantage of always having to serve a single declaration to the metaprogram when the metaprogram
+//       asks for the declaration of a symbol. If overloading is implicit, the compiler would have to serve
+//       n declarations, which would all have to be handled by the metaprogram, and this special case in the
+//       metaprogram would not be very special, since it would need to be handled on every declaration query,
+//       since the metaprogram cannot know if the symbol is overloaded without checking. By making overloading
+//       explicit, by providing a way of declaring procedure overload sets, would allow the metaprogram to always
+//       handle one declaration at a time, and destinguish between overload sets and other declarations by type.
+//       Making overloading explicit would increase friction when writing code, however, this could be alleviated
+//       by using some sort of tagging that can inform the metaprogram to generate the boilerplate. This tagging
+//       should be mostly user controlled, and the language should only provide an expressive way of using these
+//       tags (The examples use Jai/Odin compiler directive syntax for these tags). Another benefit of doing it this
+//       way, is that polymorphism could be an abstraction over procedure overload sets and compiler generated
+//       procedures. The only remaining problem I can think of is that this forward declaration should probably also
+//       work for regular values, not only procs, structs, unions and enums, since there is value in stating that
+//       a given symbol is of some type but the value is generated later.
+/*
+   
+SerializeEntity :: proc(builder: ^String_Builder, entity: ^Entity) ---
+
+SerializeEntity :: proc(builder: ^String_Builder, entity: ^Entity) ---
+
+SerializeEntity :: proc(builder: ^String_Builder, entity: ^Entity)
+{
+}
+
+
+#overloads(Add)
+Add_U32 :: proc(a: u32, b: u32) -> u32
+{
+    return a + b;
+}
+
+Add :: proc[Add_u32, Add_f32];
+
+{
+    Add :: proc[Add, Add_v3]; // local overload
+    
+#verloads(Add);
+    Add_v3 :: proc(a: v3, b: v3) -> v3
+    {
+    }
+}
+
+Add_p :: proc(t: $T, s: $S) -> T where T != S
+
+Add_p :: proc[Add_p@u32i32, Add_p@i320u32];
+
+Add_p@u32i32 :: proc(t: u32, s: i32) -> u32
+{
+}
+
+Add_p@i32u32 :: proc(t: i32, s: u32) -> i32
+{
+}
+
+Entity :: struct ---
+
+Entity_Kind :: enum ---
+
+Entity_Kind :: enum
+{
+    Door,
+    Window,
+    Apple
+}
+
+A :: proc(int) -> int ---
+A :: proc(f32) -> f32 ---
+
+B :: 0;
+
+{
+    B :: "Hello World";
+    print(B);
+}
+
+print("This is the % message", (B < 3 ? .["1st", "2nd", "3rd"][B] : format_string("%th", B)));
+
+
+// need a way of declaring a soft int
+A : i32 : 0;
+A : i32 : ---;
+
+// maybe?
+A : soft_int : 0;
+A : soft_int : ---;
+
+// procedures are weird
+B : proc(int) : ---;
+B : proc(int) :  proc(int) ---;
+
+// procedure overload set
+BB :proc[]: ---;    // forward declaring an overload set with unspecified content
+BB :proc[]: proc[]; // declaring an overload set with no content
+
+// structs are not
+C :typeid: ---;
+C :typeid: struct ---;
+
+// struct overload set
+ CC :struct[]: ---;    // forward declaring an overload set with unspecified content
+ CC :struct[]: struct[]; // declaring an overload set with no content
+
+// overload set with specified signature
+DD :: proc[proc($T) -> int]
+
+// proc like syntax with signatures for overload sets?
+format_string :proc[proc($T) -> string]: ---;
+format_string :proc[proc($T) -> string]: proc[proc($T) -> string] ---;
+format_string :proc[proc($T) -> string]: proc[proc($T) -> string] {format_int, format_float};
+*/
+
+// TODO: Problems:
+// - struct[] and proc[] use the same syntax to indicate a type, and an overload set
+// - procs can sort of be forward declared in two different ways
+// * the two different ways sort of imply two different things, so it is okay
+// - is providing the soft_int type a good idea?
+// * whitout much thought, yes
+// - shadowing, how to refer to the outer version inside the inner version?
+// - should overload sets provide a way of specifying a signature the procedures need to match?
+// - should it be possible to take a pointer to an overload set?
+// - runtime overloading? (this is probably something that should be done in user space)
