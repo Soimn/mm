@@ -1,11 +1,15 @@
 typedef enum MM_BUILTIN_KIND
 {
-    MM_Builtin_Cast,
-    MM_Builtin_Transmute,
-    MM_Builtin_Sizeof,
-    MM_Builtin_Alignof,
-    MM_Builtin_Offsetof,
-    MM_Builtin_Typeof,
+    MM_Builtin_Cast,      // NOTE: cast(expr), cast(type, expr). cast(expr) autocasts to the suggested type
+    MM_Builtin_Transmute, // NOTE: transmute(expr), transmute(type, expr). transmute(expr) autotransmutes to the suggested type
+    MM_Builtin_Sizeof,    // NOTE: sizeof(type)
+    MM_Builtin_Alignof,   // NOTE: alignof(type)
+    MM_Builtin_Offsetof,  // NOTE: offsetof(type, symbol)
+    MM_Builtin_Typeof,    // NOTE: typeof(expr)
+    MM_Builtin_Shadowed,  // NOTE: shadowed(expr, level). Level 0 is the first occurence, 1 is the second, etc.
+    MM_Builtin_Min,       // NOTE: min(type), min(expr, expr). min(type) returns the minimum value for a type
+    MM_Builtin_Max,       // NOTE: max(type), max(expr, expr). max(type) returns the maximum value for a type
+    MM_Builtin_Len,       // NOTE: len(expr). Returns the length of slices and arrays. Works both with array types and arrays
 } MM_BUILTIN_KIND;
 
 #define MM_AST_KIND_BLOCK_SIZE 16
@@ -31,12 +35,19 @@ typedef enum MM_AST_KIND
     MM_AST_Codepoint,
     MM_AST_Bool,
     MM_AST_Proc,
-    MM_AST_ProcLiteral,
+    MM_AST_ProcLit,
+    MM_AST_ProcLitFwdDecl,
+    MM_AST_ProcSet,
+    MM_AST_ProcSetFwdDecl,
     MM_AST_Struct,
+    MM_AST_StructFwdDecl,
     MM_AST_Union,
+    MM_AST_UnionFwdDecl,
     MM_AST_Enum,
+    MM_AST_EnumFwdDecl,
     MM_AST_Builtin,
     MM_AST_Compound,
+    MM_AST_This,
     MM_AST_LastPrimaryExpression = MM_AST_Compound,
     
     MM_AST_FirstPostfix,
@@ -96,7 +107,9 @@ typedef enum MM_AST_KIND
     MM_AST_FirstDeclaration,
     MM_AST_Variable,
     MM_AST_Constant,
+    MM_AST_ConstantFwdDecl,
     MM_AST_Using,
+    MM_AST_When,
     MM_AST_LastDeclaration = MM_AST_Using,
     
     MM_AST_FirstStatement,
@@ -129,6 +142,17 @@ typedef struct MM_Proc_Lit_Expr
     struct MM_Block_Statement* body;
 } MM_Proc_Lit_Expr;
 
+typedef union MM_Proc_Lit_Fwd_Decl_Expr
+{
+    struct MM_Proc_Header;
+    MM_Proc_Header header;
+} MM_Proc_Lit_Fwd_Decl_Expr;
+
+typedef struct MM_Proc_Set_Expr
+{
+    struct MM_Expression* members;
+} MM_Proc_Set_Expr;
+
 typedef struct MM_Struct_Expr
 {
     struct MM_Block_Statement* body;
@@ -139,6 +163,11 @@ typedef struct MM_Enum_Expr
     struct MM_Expression* member_type;
     struct MM_Enum_Member* members;
 } MM_Enum_Expr;
+
+typedef struct MM_Enum_Fwd_Decl_Expr
+{
+    struct MM_Expression* member_type;
+} MM_Enum_Fwd_Decl_Expr;
 
 typedef struct MM_Builtin_Expr
 {
@@ -213,9 +242,12 @@ typedef union MM_Expression_Union
     
     MM_Proc_Expr proc_expr;
     MM_Proc_Lit_Expr proc_lit_expr;
+    MM_Proc_Lit_Fwd_Decl_Expr proc_lit_fwd_decl_expr;
+    MM_Proc_Set_Expr proc_set_expr;
     MM_Struct_Expr struct_expr;
     MM_Struct_Expr union_expr;
     MM_Enum_Expr enum_expr;
+    MM_Enum_Fwd_Decl_Expr enum_fwd_decl_expr;
     MM_Builtin_Expr builtin_expr;
     struct MM_Expression* compound_expr;
     struct MM_Expression* unary_expr;
@@ -247,17 +279,32 @@ typedef struct MM_Constant_Decl
     MM_bool is_using;
 } MM_Constant_Decl;
 
+typedef struct MM_Constant_Fwd_Decl
+{
+    struct MM_Expression* names;
+    struct MM_Expression* types;
+} MM_Constant_Fwd_Decl;
+
 typedef struct MM_Using_Decl
 {
     struct MM_Expression* symbols;
     struct MM_Expression* aliases;
 } MM_Using_Decl;
 
+typedef struct MM_When_Decl
+{
+    struct MM_Expression* condition;
+    struct MM_Statement* true_body;
+    struct MM_Statement* false_body;
+} MM_When_Decl;
+
 typedef union MM_Declaration_Union
 {
     MM_Variable_Decl variable_decl;
     MM_Constant_Decl constant_decl;
+    MM_Constant_Fwd_Decl constant_fwd_decl;
     MM_Using_Decl using_decl;
+    MM_When_Decl when_decl;
 } MM_Declaration_Union;
 
 typedef struct MM_Block_Statement

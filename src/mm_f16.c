@@ -6,6 +6,14 @@
 #define MM_F64_SIGNIFICAND_MASK 0xFFFFFFFFFFFFF
 #define MM_F16_EXP_SIZE 5
 #define MM_F64_EXP_SIZE 11
+#define MM_F16_EXP_MAX (((MM_umm)1 << MM_F16_EXP_SIZE) - 1)
+#define MM_F64_EXP_MAX (((MM_umm)1 << MM_F64_EXP_SIZE) - 1)
+#define MM_F16_INF (MM_F16_Bits){ .sign = 0, .exponent = MM_F16_EXP_MAX, .significand = 0 }.f
+#define MM_F64_INF (MM_F64_Bits){ .sign = 0, .exponent = MM_F64_EXP_MAX, .significand = 0 }.f
+#define MM_F16_QNAN (MM_F16_Bits){ .sign = 0, .exponent = MM_F16_EXP_MAX, .significand = (MM_umm)1 << 9  | 1 }.f
+#define MM_F64_QNAN (MM_F64_Bits){ .sign = 0, .exponent = MM_F64_EXP_MAX, .significand = (MM_umm)1 << 51 | 1 }.f
+#define MM_F16_SNAN (MM_F16_Bits){ .sign = 0, .exponent = MM_F16_EXP_MAX, .significand = 1 }.f
+#define MM_F64_SNAN (MM_F64_Bits){ .sign = 0, .exponent = MM_F64_EXP_MAX, .significand = 1 }.f
 
 typedef union MM_F16_Bits
 {
@@ -94,7 +102,7 @@ MM_F64_FromF16(MM_f16 float16)
         }
     }
     // NOTE: signed inf or NaN
-    else if (f.exponent == ((MM_umm)1 << MM_F16_EXP_SIZE) - 1)
+    else if (f.exponent == MM_F16_EXP_MAX)
     {
         // NOTE: significand == 0 => signed inf, significand != 0 => sNaN/qNaN
         //       NaN and qNaN are typically distinguished by the most significant bit
@@ -102,7 +110,7 @@ MM_F64_FromF16(MM_f16 float16)
         //       it is safe to truncate the lower bits of a NaNs significand by shifting
         //       it up to the "binary point" of a single precision float. I assume this also
         //       holds true for half to double.
-        bits.exponent    = ((MM_umm)1 << MM_F64_EXP_SIZE) - 1;
+        bits.exponent    = MM_F64_EXP_MAX;
         bits.significand = (MM_u64)f.significand << (MM_F64_SIGNIFICAND_SIZE - MM_F16_SIGNIFICAND_SIZE);
     }
     else
@@ -124,11 +132,11 @@ MM_F64_ToF16(MM_f64 float64)
     MM_F16_Bits f = { .sign = (MM_u16)bits.sign };
     
     // NOTE: Signed inf and NaN
-    if (bits.exponent == ((MM_umm)1 << MM_F64_EXP_SIZE) - 1)
+    if (bits.exponent == MM_F64_EXP_MAX)
     {
         // NOTE: NaN is converted to qNaN, signed inf is kept as is
         f.significand = (bits.significand == 0 ? 0 : 0x200);
-        f.exponent    = ((MM_umm)1 << MM_F16_EXP_SIZE) - 1;
+        f.exponent    = MM_F16_EXP_MAX;
     }
     // NOTE: Normal double numbers
     else
@@ -139,7 +147,7 @@ MM_F64_ToF16(MM_f64 float64)
         if (exponent >= 2 * MM_F16_EXP_BIAS + 1)
         {
             f.significand = 0;
-            f.exponent    = ((MM_umm)1 << MM_F16_EXP_SIZE) - 1;
+            f.exponent    = MM_F16_EXP_MAX;
         }
         // NOTE: exponent might be too small (float underflow), adjust if the normalized value is representable, else return 0
         else if (exponent <= 0)

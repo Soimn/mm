@@ -1,4 +1,5 @@
 * due to the "parse everything before allocating" scheme all pointers to sub nodes are back pointers, this might become a performance problem later down the line
+* forward decl expressions seems weird, maybe change them?
 
 * todo for next devlog
 - changes to operator precedence

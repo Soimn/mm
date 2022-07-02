@@ -2,6 +2,7 @@ typedef enum MM_SYMBOL_KIND
 {
     MM_Symbol_Invalid = 0,
     
+    // TODO: Forward decls
     MM_Symbol_Variable,
     MM_Symbol_Constant,
     MM_Symbol_UsingLink,
@@ -16,8 +17,6 @@ typedef enum MM_SYMBOL_KIND
 typedef struct MM_Symbol
 {
     MM_SYMBOL_KIND kind;
-    struct MM_Symbol* prev;
-    struct MM_Symbol* next;
     
     union
     {
@@ -87,11 +86,3 @@ typedef struct MM_Symbol
     
     MM_AST* ast;
 } MM_Symbol;
-
-typedef struct MM_Symbol_Table
-{
-    MM_Symbol* symbols;
-    MM_Symbol** map;
-    MM_u32 map_size;
-    MM_u32 symbol_count;
-} MM_Symbol_Table;

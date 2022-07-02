@@ -404,13 +404,121 @@ C :typeid: struct ---;
 // TODO: Remaining problems:
 // - soft types (soft_int or not?)
 // - proc overload set syntax
-// - forward decl syntax
+// - forward decl syntax semicolons
 
+The point of forward declarations is to enable the programmer to state that a certain symbol is something vague whithout fully declaring what that
+something is. This is useful when dealing with generated code, since it can inform a reader about what will be generated, as well as possibly give
+the compiler the ability to issue better error messages for generated code. The first obvious question to answer is then what the minimal information
+one can provide with such declarations, and what is the maximal. The maximal information is, in case of values, the type, and in case of procs, structs
+and similar, the type and header. The minimal information a programmer needs to provide should probably be the type, since I don't see much value in
+being able to reserve an identifier for a declaration (since most often you know at least the type). This would then mean that forward declarations
+are declarations that are missing the value, or body of a declaration. This would then lead to the syntax:
+
+A :int: ---;           // Forward declare an int
+A :typeid: ---;        // Forward declare a type
+A :typeid: struct ---; // Forward declare a struct type
+A :: struct ---;       // Forward declare a struct type
+A :struct{}: ---;      // Forward declare something of type struct{}
+A :proc: ---;          // Forward declare a procedure (pointer or literal)
+A :proc: proc ---;     // Forward declare a procedure literal
+
+The problem is then how forward delcarations should work with soft types, and how overload set syntax should work.
+
+A :soft_int: 0;
+
+a : soft_int; // illegal
+a : proc[]; // illegal
+
+A :proc[]: proc[] {B, C};
+A :proc[]: proc[] ---;
+A :proc[]: ---;
+
+A :: proc ---;
+{
+A :typeid: proc_set {A, B, C, D};
+}
+
+A :typeid: proc_set{B, C, D}
+A :typeid: proc_set ---;
+A :typeid: ---;
+
+
+glclear :: proc ---
+pi_int :: proc -> int ---
+
+proc -> string
+{
+	return to_string(typeof(this))
+}
+
+this   - reference to the enclosing declaration's symbol
+this() - equivalent to using the enclosing declaration's symbol instead of this (InfiniteRecursion :: proc { this(); })
+
+// TODO: Unify builtins
+
+"this" does not want to be a builtin in the sense that it works like a procedure
+"shadowed" wants to be a procedure like thing
+"shadow" and "no_shadow" are more like decorators
+"sizeof", "alignof", "offsetof", "typeof", "cast" and "transmute" are definitely proc like
+
+// TODO: Think about this later, shadowed, shadow and no_shadow can be implementer later, this is added now
 
 // TODO: Additions
 // - forward declarations
+// * done
 // - "shadowed" builtin (this could be weird when dealing with global scope, e.g. A :: 0; A :: proc -> int { return shadowed(A); })
 // - "this" builtin
+// * done
 // - builtins for symbol info queries
-// - see it '.' before name of named value is possible AND a good idea
-// - add proc[] overload syntax
+// - see if '.' before name of named value is possible AND a good idea
+// * not a good idea
+// - add proc_set overload syntax
+// * done
+// - add soft types
+// * done
+// - forward declarations do use semicolons
+// * done
+
+
+// Symbol dependency tracking
+
+
+Add :: proc_set { Add_i8, Add_u8 }
+
+#overloads(Add)
+Add_v3 :: proc(a, b: v3) -> v3
+{
+	print("outer");
+	return .{ x = a.x + b.x, y = a.y + b.y };
+}
+
+{
+	// This shadows the previous Add_v3
+    Add_v3 :: proc(a, b: v3) -> v3
+	{
+		print("inner");
+		return .{ x = a.x + b.x, y = a.y + b.y };
+	}
+
+	// This shadows the previous Add
+	Add :: proc_set { Add, Add_v3 }
+
+	// If you want to be explicit, you could do this too
+	// Add :: proc_set { shadowed(Add), Add_v3 }
+
+	a, b: v3;
+
+	Add(a, b);              // prints "inner"
+	Add_v3(a, b);           // prints "inner"
+	shadowed(Add)(a, b);    // prints "outer"
+	shadowed(Add_v3)(a, b); // prints "outer"
+
+	{
+		Add :: 0;
+		print(Add);                 // prints "0"
+		shadowed(Add)();            // prints "inner"
+		shadowed(Add, level = 2)(); // prints "outer"
+	}
+}
+
+
