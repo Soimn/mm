@@ -65,24 +65,26 @@ typedef struct MM_Symbol
         {
             MM_String name;
             MM_Type_ID type;
-            // TODO: default value
-            // TODO: offset?
+            MM_u32 offset;
         } struct_member;
         
         struct
         {
             MM_String name;
             MM_Type_ID type;
-            // TODO: default value
         } union_member;
         
         struct
         {
             MM_String name;
             MM_Type_ID type;
-            // TODO: value
+            MM_i128 value;
         } enum_member;
     };
     
     MM_AST* ast;
 } MM_Symbol;
+
+// global symbol table
+// symbol table for type info entries
+// symbol table for scopes

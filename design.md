@@ -521,4 +521,19 @@ Add_v3 :: proc(a, b: v3) -> v3
 	}
 }
 
+// Depenencies on a are mapped as dependencies on GlobalThing
+using GlobalThing :: struct{a: int;}.{};
 
+// Dependencies cannot peer through when declarations (they need to be resolved before dependencies can be registered)
+when (condition)
+{
+	B :: a;
+}
+else
+{
+	B :: a + 1;
+}
+
+A :: B;
+
+// NOTE: default values in structs are now move to user space, .{} will zero init

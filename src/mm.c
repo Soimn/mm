@@ -109,6 +109,8 @@ typedef struct MM_Workspace
             MM_Arena* str_arena; // NOTE: for storing string literals
         };
     };
+    
+    
 } MM_Workspace;
 
 MM_API MM_Workspace*

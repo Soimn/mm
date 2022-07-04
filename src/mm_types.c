@@ -53,6 +53,7 @@ typedef enum MM_TYPE_KIND
     
     MM_Type_FirstWord,
     MM_Type_Word = MM_Type_FirstWord, // NOTE: register sized
+    MM_Type_Byte, // NOTE: Alias for w8
     MM_Type_W8,
     MM_Type_W16,
     MM_Type_W32,
@@ -74,6 +75,7 @@ typedef enum MM_TYPE_INFO_KIND
     MM_TypeInfo_Union,
     MM_TypeInfo_Enum,
     MM_TypeInfo_Proc,
+    MM_TypeInfo_ProcSet,
 } MM_TYPE_INFO_KIND;
 
 typedef struct MM_Type_Info
@@ -89,7 +91,7 @@ typedef struct MM_Type_Info
         {
             struct MM_Type_Info* elem_type;
             MM_u64 size;
-        } array;
+        } array_type;
         
         struct
         {
@@ -110,5 +112,10 @@ typedef struct MM_Type_Info
         {
             MM_Symbol_Table symbols;
         } proc_type;
+        
+        struct
+        {
+            MM_Symbol_Table symbols;
+        } proc_set_type;
     };
 } MM_Type_Info;
