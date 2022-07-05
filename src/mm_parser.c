@@ -1213,7 +1213,7 @@ MM_Parser__ParseDeclAssignmentOrExpression(MM_Parser* parser, MM_DeclAssignmentO
                     {
                         // NOTE: I currently don't know how using should behave with forward declarations, for now
                         //       they are illegal:
-                        // TODO: Catch this for ProcLitFwdDecl and others in the checker
+                        // TODO: Catch this for ProcLitFwdDecl, and others, in the checker
                         //// ERROR: Using cannot be applied on forward declarations
                         MM_NOT_IMPLEMENTED;
                         return MM_false;
@@ -1228,7 +1228,6 @@ MM_Parser__ParseDeclAssignmentOrExpression(MM_Parser* parser, MM_DeclAssignmentO
                     *result = MM_Parser__PushNode(parser, MM_AST_ConstantFwdDecl);
                     (*result)->constant_fwd_decl.names    = names;
                     (*result)->constant_fwd_decl.types    = types;
-                    (*result)->constant_fwd_decl.is_using = is_using;
                 }
                 else
                 {

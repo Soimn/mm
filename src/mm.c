@@ -86,15 +86,13 @@ int __stdcall _DllMainCRTStartup(void* hinstDLL, unsigned int fdwReason, void* l
 
 #define MM_Internal static
 
-typedef void* MM_Type_ID;
-
 #include "mm_memory.c"
 #include "mm_string.c"
 #include "mm_f16.c"
 #include "mm_lexer.c"
 #include "mm_parser.c"
-#include "mm_symbols.c"
 #include "mm_types.c"
+#include "mm_symbols.c"
 #include "mm_checker.c"
 
 typedef struct MM_Workspace

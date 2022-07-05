@@ -1,21 +1,18 @@
 typedef enum MM_SYMBOL_KIND
 {
-    MM_Symbol_Invalid = 0,
-    
-    // TODO: Forward decls
     MM_Symbol_Variable,
     MM_Symbol_Constant,
     MM_Symbol_UsingLink,
     MM_Symbol_Parameter,
     MM_Symbol_ReturnValue,
-    MM_Symbol_BlockLabel,
-    MM_Symbol_StructMember,
-    MM_Symbol_UnionMember,
-    MM_Symbol_EnumMember,
+    MM_Symbol_Label,
 } MM_SYMBOL_KIND;
 
 typedef struct MM_Symbol
 {
+    // TODO: link to ast
+    // TODO: forward decls
+    
     MM_SYMBOL_KIND kind;
     
     union
@@ -25,66 +22,43 @@ typedef struct MM_Symbol
         struct
         {
             MM_String name;
-            MM_Type_ID type;
+            MM_Type_Info* type;
         } variable;
         
         struct
         {
             MM_String name;
-            MM_Type_ID type;
-            // TODO: value
+            MM_Type_Info* type;
+            MM_Const_Val value;
         } constant;
         
         struct
         {
             MM_String name;
-            // symbol
+            MM_Type_Info* type;
+            struct MM_Symbol* symbol;
         } using_link;
         
         struct
         {
             MM_String name;
-            MM_Type_ID type;
-            // TODO: default value?
+            MM_Type_Info* type;
+            MM_Const_Val value;
         } parameter;
         
         struct
         {
             MM_String name;
-            MM_Type_ID type;
-            // TODO: default value?
+            MM_Type_Info* type;
+            MM_Const_Val value;
         } return_value;
         
         struct
         {
             MM_String name;
-            // TODO: Reference to the block it is applied to
-        } block_label;
-        
-        struct
-        {
-            MM_String name;
-            MM_Type_ID type;
-            MM_u32 offset;
-        } struct_member;
-        
-        struct
-        {
-            MM_String name;
-            MM_Type_ID type;
-        } union_member;
-        
-        struct
-        {
-            MM_String name;
-            MM_Type_ID type;
-            MM_i128 value;
-        } enum_member;
+            struct MM_Symbol* symbol;
+        } label;
     };
-    
-    MM_AST* ast;
 } MM_Symbol;
 
-// global symbol table
-// symbol table for type info entries
-// symbol table for scopes
+// IMPORTANT NOTE: Types depend on symbols, they should be part of the dependency graph
