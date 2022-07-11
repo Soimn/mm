@@ -1532,14 +1532,9 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
         
         if (result->kind == MM_AST_Constant && result->constant_decl.values->next == 0 &&
             (result->constant_decl.values->kind == MM_AST_ProcLit        ||
-             result->constant_decl.values->kind == MM_AST_ProcLitFwdDecl ||
              result->constant_decl.values->kind == MM_AST_Struct         ||
-             result->constant_decl.values->kind == MM_AST_StructFwdDecl  ||
              result->constant_decl.values->kind == MM_AST_Union          ||
-             result->constant_decl.values->kind == MM_AST_UnionFwdDecl   ||
-             result->constant_decl.values->kind == MM_AST_EnumFwdDecl    ||
-             result->constant_decl.values->kind == MM_AST_Enum) ||
-            result->kind == MM_AST_ConstantFwdDecl)
+             result->constant_decl.values->kind == MM_AST_Enum))
         {
             if (GetToken(parser).kind == MM_Token_Semicolon)
             {

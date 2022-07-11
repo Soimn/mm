@@ -93,6 +93,7 @@ int __stdcall _DllMainCRTStartup(void* hinstDLL, unsigned int fdwReason, void* l
 #include "mm_parser.c"
 #include "mm_types.c"
 #include "mm_symbols.c"
+#include "mm_compilation_unit.c"
 #include "mm_checker.c"
 
 typedef struct MM_Workspace
@@ -108,7 +109,7 @@ typedef struct MM_Workspace
         };
     };
     
-    
+    MM_Global_Symbol_Table symbol_table;
 } MM_Workspace;
 
 MM_API MM_Workspace*

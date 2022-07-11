@@ -69,7 +69,7 @@ MM_TYPEDEF_FUNC(void,  MM_Free_Memory_Func, void* reserve_base);
 
 typedef struct MM_Arena MM_Arena;
 typedef void* MM_Arena_Marker;
-MM_API MM_Arena*       MM_Arena_Init     (MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func);
+MM_API MM_Arena*       MM_Arena_Init     (MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func, MM_u32 block_size);
 MM_API void*           MM_Arena_Push     (MM_Arena* arena, MM_umm size, MM_u8 alignment);
 MM_API void            MM_Arena_Pop      (MM_Arena* arena, MM_umm amount);
 MM_API MM_Arena_Marker MM_Arena_GetMarker(MM_Arena* arena);

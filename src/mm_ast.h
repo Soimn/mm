@@ -468,39 +468,42 @@ typedef struct MM_Parameter
     union MM_Parameter_Union;
 } MM_Parameter;
 
-typedef union MM_AST
+typedef struct MM_AST
 {
-    struct
+    union
     {
-        MM_AST_KIND kind;
-        
-        union
+        struct
         {
-            union MM_Expression_Union;
-            union MM_Declaration_Union;
-            union MM_Statement_Union;
+            MM_AST_KIND kind;
             
-            struct
+            union
             {
-                union MM_Enum_Member_Union;
-            } enum_member;
-            
-            struct
-            {
-                union MM_Argument_Union;
-            } argument;
-            
-            struct
-            {
-                union MM_Parameter_Union;
-            } parameter;
+                union MM_Expression_Union;
+                union MM_Declaration_Union;
+                union MM_Statement_Union;
+                
+                struct
+                {
+                    union MM_Enum_Member_Union;
+                } enum_member;
+                
+                struct
+                {
+                    union MM_Argument_Union;
+                } argument;
+                
+                struct
+                {
+                    union MM_Parameter_Union;
+                } parameter;
+            };
         };
+        
+        MM_Expression expression;
+        MM_Declaration declaration;
+        MM_Statement statement;
+        MM_Enum_Member enum_member_wrapper;
+        MM_Argument argument_wrapper;
+        MM_Parameter parameter_wrapper;
     };
-    
-    MM_Expression expression;
-    MM_Declaration declaration;
-    MM_Statement statement;
-    MM_Enum_Member enum_member_wrapper;
-    MM_Argument argument_wrapper;
-    MM_Parameter parameter_wrapper;
 } MM_AST;

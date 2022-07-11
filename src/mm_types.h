@@ -141,59 +141,63 @@ typedef struct MM_Type_Info_Header
     MM_Type_ID type_id;
 } MM_Type_Info_Header;
 
+#define MM_TYPE_INFO_HEADER() union { struct MM_Type_Info_Header; struct MM_Type_Info_Header header; }
+
 typedef struct MM_Type_Info_Base_Type
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
 } MM_Type_Info_Base_Type;
 
 typedef struct MM_Type_Info_Array
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     struct MM_Type_Info* elem_type;
     MM_u32 size;
 } MM_Type_Info_Array;
 
 typedef struct MM_Type_Info_Slice
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     struct MM_Type_Info* elem_type;
 } MM_Type_Info_Slice;
 
 typedef struct MM_Type_Info_Pointer
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     struct MM_Type_Info* elem_type;
 } MM_Type_Info_Pointer;
 
 typedef struct MM_Type_Info_Struct_Member
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     MM_String name;
     struct MM_Type_Info* type;
 } MM_Type_Info_Struct_Member;
 
 typedef struct MM_Type_Info_Struct
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
+    MM_bool is_complete;
     MM_Slice(MM_Type_Info_Struct_Member) members;
 } MM_Type_Info_Struct;
 
 typedef struct MM_Type_Info_Union_Member
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     MM_String name;
     struct MM_Type_Info* type;
 } MM_Type_Info_Union_Member;
 
 typedef struct MM_Type_Info_Union
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
+    MM_bool is_complete;
     MM_Slice(MM_Type_Info_Union_Member) members;
 } MM_Type_Info_Union;
 
 typedef struct MM_Type_Info_Enum_Member
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     MM_String name;
     struct MM_Type_Info* backing_type;
     MM_i128 value;
@@ -201,13 +205,14 @@ typedef struct MM_Type_Info_Enum_Member
 
 typedef struct MM_Type_Info_Enum
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
+    MM_bool is_complete;
     MM_Slice(MM_Type_Info_Enum_Member) members;
 } MM_Type_Info_Enum;
 
 typedef struct MM_Type_Info_Parameter
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     MM_String name;
     struct MM_Type_Info* type;
     
@@ -216,7 +221,7 @@ typedef struct MM_Type_Info_Parameter
 
 typedef struct MM_Type_Info_Return_Value
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     MM_String name;
     struct MM_Type_Info* type;
     
@@ -225,14 +230,14 @@ typedef struct MM_Type_Info_Return_Value
 
 typedef struct MM_Type_Info_Proc
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     MM_Slice(MM_Type_Info_Parameter) params;
     MM_Slice(MM_Type_Info_Return_Value) return_values;
 } MM_Type_Info_Proc;
 
 typedef struct MM_Type_Info_Proc_Set_Entry
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
     struct MM_Type_Info* type;
     MM_bool no_shadow;
     
@@ -241,7 +246,8 @@ typedef struct MM_Type_Info_Proc_Set_Entry
 
 typedef struct MM_Type_Info_Proc_Set
 {
-    struct MM_Type_Info_Header;
+    MM_TYPE_INFO_HEADER();
+    MM_bool is_complete;
     MM_Slice(MM_Type_Info_Proc_Set_Entry) entries;
     
     struct MM_Symbol* symbol;
@@ -249,7 +255,7 @@ typedef struct MM_Type_Info_Proc_Set
 
 typedef struct MM_Type_Info_Distinct
 {
-    struct MM_Type_Info_Header;
+    
     struct MM_Type_Info* aliased_type;
     
     struct MM_Symbol* symbol;
@@ -259,6 +265,7 @@ typedef struct MM_Type_Info
 {
     union
     {
+        MM_TYPE_INFO_HEADER();
         MM_Type_Info_Base_Type base_type_info;
         MM_Type_Info_Array array_info;
         MM_Type_Info_Slice slice_info;

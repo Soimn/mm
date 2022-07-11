@@ -60,7 +60,6 @@ typedef struct MM_Arena_Block
 } MM_Arena_Block;
 
 #define MM_ARENA_PAGE_SIZE MM_KB(16)
-#define MM_ARENA_BLOCK_RESERVE_SIZE MM_ROUND_UP(MM_GB(4), MM_ARENA_PAGE_SIZE)
 typedef struct MM_Arena
 {
     MM_Reserve_Memory_Func reserve_func;
@@ -69,6 +68,7 @@ typedef struct MM_Arena
     struct MM_Arena_Block* current_block;
     MM_u16 block_count;
     MM_u16 current_block_index;
+    MM_u32 block_size;
     
     union
     {
@@ -78,18 +78,23 @@ typedef struct MM_Arena
 } MM_Arena;
 
 MM_API MM_Arena*
-MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func)
+MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_func, MM_Free_Memory_Func free_func, MM_u32 block_size)
 {
-    MM_Arena* arena = reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
+    block_size = MM_ROUND_UP(block_size, MM_ARENA_PAGE_SIZE);
+    
+    MM_Arena* arena = reserve_func(block_size);
     commit_func(arena, MM_ARENA_PAGE_SIZE);
     
     if (arena != 0)
     {
         *arena = (MM_Arena){
-            .reserve_func  = reserve_func,
-            .commit_func   = commit_func,
-            .free_func     = free_func,
-            .current_block = &arena->block,
+            .reserve_func        = reserve_func,
+            .commit_func         = commit_func,
+            .free_func           = free_func,
+            .current_block       = &arena->block,
+            .block_count         = 0,
+            .current_block_index = 0,
+            .block_size          = block_size,
         };
         
         arena->block = (MM_Arena_Block){
@@ -98,7 +103,6 @@ MM_Arena_Init(MM_Reserve_Memory_Func reserve_func, MM_Commit_Memory_Func commit_
             .offset = sizeof(MM_Arena_Block),                // NOTE: offset is relative to the block
             .space  = MM_ARENA_PAGE_SIZE - sizeof(MM_Arena), // NOTE: space is relative to the reserve base
         };
-        
     }
     
     return arena;
@@ -113,7 +117,7 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
     
     if (block->space < offset + size)
     {
-        if ((MM_umm)block->offset + (MM_umm)block->space < MM_ARENA_BLOCK_RESERVE_SIZE)
+        if ((MM_umm)block->offset + (MM_umm)block->space < arena->block_size)
         {
             arena->commit_func(((MM_u8*)block + block->offset) + block->space, MM_ARENA_PAGE_SIZE);
             block->space += MM_ARENA_PAGE_SIZE;
@@ -128,7 +132,7 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
         }
         else
         {
-            block->next = arena->reserve_func(MM_ARENA_BLOCK_RESERVE_SIZE);
+            block->next = arena->reserve_func(arena->block_size);
             arena->commit_func(block, MM_ARENA_PAGE_SIZE);
             
             *(block->next) = (MM_Arena_Block){

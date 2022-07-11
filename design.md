@@ -537,3 +537,32 @@ else
 A :: B;
 
 // NOTE: default values in structs are now move to user space, .{} will zero init
+
+
+
+
+
+The problem: øarchitecting the compiler is too hard at the moment because it is a library
+memory management and ownership is the main problem right now
+I don't see a way of making the library completely opaque to the user without sacrificing a _lot_ of performance
+maybe the library should not live on its own and be more of a "single header library" or toolkit
+
+
+how to fix memory management for use in editors?
+text editors need to be responsive and can't wait on a full recompile of the project on every keystroke of the user.
+incremental compilation is useful here, since the user can rarely edit all the source files at the same time, which
+can be taken advantage of by allowing the editor to only recompile sections that the user has changed.
+Choosing exactly what to recompile can be tricky, since text is very unstructured, and recompiling the whole file, instead
+of a small text snippet, might be beneficial. The problem is then how the old file should be replaced with the new one.
+- replacing old declarations
+- replacing the file
+
+Debuggers want to know as much about the program as possible, since this information can be used to aid the user. By storing all compiler
+state, along with every source file, alongside other debug information, the debugger can know as much about the program that is running as
+the compiler knew during compilation. Additionally, if the user encounters code in the debugger that seems off, the problem causing that
+code generation weirdness can be more easily found if the debugger has access to a log of where that code came from and how it may have
+been changed by the optimizer (this is especially useful for generated code).
+- store all state
+- keep a log of useful information that is accessible a debugger
+
+for the compiler to be able to serve the debugger all source files, the source files have to be owned by the compiler
