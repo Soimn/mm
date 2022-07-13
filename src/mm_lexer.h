@@ -61,11 +61,11 @@ enum MM_TOKEN_KIND
     MM_Token_LastMulLevel = MM_Token_TripleGreater,
     
     MM_Token_FirstAddLevel = 7*16,
-    MM_Token_Tilde = MM_Token_FirstAddLevel,
-    MM_Token_Or,
+    MM_Token_Plus  = MM_Token_FirstAddLevel,
     MM_Token_Minus,
-    MM_Token_Plus,
-    MM_Token_LastAddLevel = MM_Token_Plus,
+    MM_Token_Or,
+    MM_Token_Tilde,
+    MM_Token_LastAddLevel = MM_Token_Tilde,
     
     MM_Token_FirstCmpLevel = 8*16,
     MM_Token_Greater = MM_Token_FirstCmpLevel,
@@ -308,76 +308,76 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
             
             switch (c[0])
             {
-                case '(': token->kind = MM_Token_OpenParen;    break;
-                case ')': token->kind = MM_Token_CloseParen;   break;
-                case '[': token->kind = MM_Token_OpenBracket;  break;
-                case ']': token->kind = MM_Token_CloseBracket; break;
-                case '{': token->kind = MM_Token_OpenBrace;    break;
-                case '}': token->kind = MM_Token_CloseBrace;   break;
-                case ':': token->kind = MM_Token_Colon;        break;
-                case ',': token->kind = MM_Token_Comma;        break;
-                case ';': token->kind = MM_Token_Semicolon;    break;
-                case '?': token->kind = MM_Token_QuestionMark; break;
-                case '^': token->kind = MM_Token_Hat;          break;
+                case '(': lexer->current_token.kind = MM_Token_OpenParen;    break;
+                case ')': lexer->current_token.kind = MM_Token_CloseParen;   break;
+                case '[': lexer->current_token.kind = MM_Token_OpenBracket;  break;
+                case ']': lexer->current_token.kind = MM_Token_CloseBracket; break;
+                case '{': lexer->current_token.kind = MM_Token_OpenBrace;    break;
+                case '}': lexer->current_token.kind = MM_Token_CloseBrace;   break;
+                case ':': lexer->current_token.kind = MM_Token_Colon;        break;
+                case ',': lexer->current_token.kind = MM_Token_Comma;        break;
+                case ';': lexer->current_token.kind = MM_Token_Semicolon;    break;
+                case '?': lexer->current_token.kind = MM_Token_QuestionMark; break;
+                case '^': lexer->current_token.kind = MM_Token_Hat;          break;
                 
-                case '*': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_StarEquals    : MM_Token_Star);    break;
-                case '/': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_SlashEquals   : MM_Token_Slash);   break;
-                case '%': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_PercentEquals : MM_Token_Percent); break;
-                case '+': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_PlusEquals    : MM_Token_Plus);    break;
-                case '=': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_EqualsEquals  : MM_Token_Equals);  break;
-                case '!': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_BangEquals    : MM_Token_Bang);    break;
-                case '~': token->kind = (c[1] == '=' ? ++lexer->offset, MM_Token_TildeEquals   : MM_Token_Tilde);   break;
+                case '*': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_StarEquals    : MM_Token_Star);    break;
+                case '/': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_SlashEquals   : MM_Token_Slash);   break;
+                case '%': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_PercentEquals : MM_Token_Percent); break;
+                case '+': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_PlusEquals    : MM_Token_Plus);    break;
+                case '=': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_EqualsEquals  : MM_Token_Equals);  break;
+                case '!': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_BangEquals    : MM_Token_Bang);    break;
+                case '~': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_TildeEquals   : MM_Token_Tilde);   break;
                 
                 // NOTE: I wrote this in a sort of cmov fashion, which might be a bad idea if the compiler does not
                 //       understand it, or disagrees with the decision, but it looks nice, and should hopefully not
                 //       matter that much
                 case '-':
                 {
-                    token->kind = MM_Token_Minus;
-                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_MinusEquals;
-                    if (c[1] == '>')                lexer->offset += 1, token->kind = MM_Token_Arrow;
-                    if (c[1] == '-' && c[2] == '-') lexer->offset += 2, token->kind = MM_Token_TripleMinus;
+                    lexer->current_token.kind = MM_Token_Minus;
+                    if (c[1] == '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_MinusEquals;
+                    if (c[1] == '>')                lexer->offset += 1, lexer->current_token.kind = MM_Token_Arrow;
+                    if (c[1] == '-' && c[2] == '-') lexer->offset += 2, lexer->current_token.kind = MM_Token_TripleMinus;
                 } break;
                 
                 case '.':
                 {
-                    token->kind = MM_Token_Period;
-                    if (c[1] == '{') ++lexer->offset, token->kind = MM_Token_PeriodOpenBrace;
-                    if (c[1] == '[') ++lexer->offset, token->kind = MM_Token_PeriodOpenBracket;
+                    lexer->current_token.kind = MM_Token_Period;
+                    if (c[1] == '{') ++lexer->offset, lexer->current_token.kind = MM_Token_PeriodOpenBrace;
+                    if (c[1] == '[') ++lexer->offset, lexer->current_token.kind = MM_Token_PeriodOpenBracket;
                 }
                 
                 case '>':
                 {
-                    token->kind = MM_Token_Greater;
-                    if (c[1] == '=')                               lexer->offset += 1, token->kind = MM_Token_GreaterEquals;
-                    if (c[1] == '>' && c[2] != '=')                lexer->offset += 1, token->kind = MM_Token_GreaterGreater;
-                    if (c[1] == '>' && c[2] == '=')                lexer->offset += 2, token->kind = MM_Token_GreaterGreaterEquals;
-                    if (c[1] == '>' && c[2] == '>' && c[3] != '=') lexer->offset += 2, token->kind = MM_Token_TripleGreater;
-                    if (c[1] == '>' && c[2] == '>' && c[3] == '=') lexer->offset += 3, token->kind = MM_Token_TripleGreaterEquals;
+                    lexer->current_token.kind = MM_Token_Greater;
+                    if (c[1] == '=')                               lexer->offset += 1, lexer->current_token.kind = MM_Token_GreaterEquals;
+                    if (c[1] == '>' && c[2] != '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_GreaterGreater;
+                    if (c[1] == '>' && c[2] == '=')                lexer->offset += 2, lexer->current_token.kind = MM_Token_GreaterGreaterEquals;
+                    if (c[1] == '>' && c[2] == '>' && c[3] != '=') lexer->offset += 2, lexer->current_token.kind = MM_Token_TripleGreater;
+                    if (c[1] == '>' && c[2] == '>' && c[3] == '=') lexer->offset += 3, lexer->current_token.kind = MM_Token_TripleGreaterEquals;
                 } break;
                 
                 case '<':
                 {
-                    token->kind = MM_Token_Less;
-                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_LessEquals;
-                    if (c[1] == '<' && c[2] != '=') lexer->offset += 1, token->kind = MM_Token_LessLess;
-                    if (c[1] == '<' && c[2] == '=') lexer->offset += 2, token->kind = MM_Token_LessLessEquals;
+                    lexer->current_token.kind = MM_Token_Less;
+                    if (c[1] == '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_LessEquals;
+                    if (c[1] == '<' && c[2] != '=') lexer->offset += 1, lexer->current_token.kind = MM_Token_LessLess;
+                    if (c[1] == '<' && c[2] == '=') lexer->offset += 2, lexer->current_token.kind = MM_Token_LessLessEquals;
                 } break;
                 
                 case '&':
                 {
-                    token->kind = MM_Token_And;
-                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_AndEquals;
-                    if (c[1] == '&' && c[2] != '=') lexer->offset += 1, token->kind = MM_Token_AndAnd;
-                    if (c[1] == '&' && c[2] == '=') lexer->offset += 2, token->kind = MM_Token_AndAndEquals;
+                    lexer->current_token.kind = MM_Token_And;
+                    if (c[1] == '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_AndEquals;
+                    if (c[1] == '&' && c[2] != '=') lexer->offset += 1, lexer->current_token.kind = MM_Token_AndAnd;
+                    if (c[1] == '&' && c[2] == '=') lexer->offset += 2, lexer->current_token.kind = MM_Token_AndAndEquals;
                 } break;
                 
                 case '|':
                 {
-                    token->kind = MM_Token_Or;
-                    if (c[1] == '=')                lexer->offset += 1, token->kind = MM_Token_OrEquals;
-                    if (c[1] == '|' && c[2] != '=') lexer->offset += 1, token->kind = MM_Token_OrOr;
-                    if (c[1] == '|' && c[2] == '=') lexer->offset += 2, token->kind = MM_Token_OrOrEquals;
+                    lexer->current_token.kind = MM_Token_Or;
+                    if (c[1] == '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_OrEquals;
+                    if (c[1] == '|' && c[2] != '=') lexer->offset += 1, lexer->current_token.kind = MM_Token_OrOr;
+                    if (c[1] == '|' && c[2] == '=') lexer->offset += 2, lexer->current_token.kind = MM_Token_OrOrEquals;
                 } break;
                 
                 default:
@@ -394,42 +394,49 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                             lexer->offset += 1;
                         }
                         
-                        if (lexer->offset - ident_offset == 1 && c[0] == '_') token->kind = MM_Token_BlankIdentifier;
+                        MM_String identifier = {
+                            .data = lexer->string.data + ident_offset,
+                            .size = lexer->offset - ident_offset,
+                        };
+                        
+                        if (identifier.size == 1 && identifier.data[0] == '_') lexer->current_token.kind = MM_Token_BlankIdentifier;
                         else
                         {
                             // TODO: Replace with hash table lookup
-                            if      (MM_String_Match(identifier, "include"))   lexer->current_token.sub_kind = MM_TokenKeywordSub_Include;
-                            else if (MM_String_Match(identifier, "proc"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Proc;
-                            else if (MM_String_Match(identifier, "proc_set"))  lexer->current_token.sub_kind = MM_TokenKeywordSub_ProcSet;
-                            else if (MM_String_Match(identifier, "struct"))    lexer->current_token.sub_kind = MM_TokenKeywordSub_Struct;
-                            else if (MM_String_Match(identifier, "union"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Union;
-                            else if (MM_String_Match(identifier, "enum"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Enum;
-                            else if (MM_String_Match(identifier, "true"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_True;
-                            else if (MM_String_Match(identifier, "false"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_False;
-                            else if (MM_String_Match(identifier, "as"))        lexer->current_token.sub_kind = MM_TokenKeywordSub_As;
-                            else if (MM_String_Match(identifier, "if"))        lexer->current_token.sub_kind = MM_TokenKeywordSub_If;
-                            else if (MM_String_Match(identifier, "when"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_When;
-                            else if (MM_String_Match(identifier, "else"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Else;
-                            else if (MM_String_Match(identifier, "while"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_While;
-                            else if (MM_String_Match(identifier, "break"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Break;
-                            else if (MM_String_Match(identifier, "continue"))  lexer->current_token.sub_kind = MM_TokenKeywordSub_Continue;
-                            else if (MM_String_Match(identifier, "using"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Using;
-                            else if (MM_String_Match(identifier, "defer"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Defer;
-                            else if (MM_String_Match(identifier, "return"))    lexer->current_token.sub_kind = MM_TokenKeywordSub_Return;
-                            else if (MM_String_Match(identifier, "this"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_This;
-                            else if (MM_String_Match(identifier, "inf"))       lexer->current_token.sub_kind = MM_TokenKeywordSub_Inf;
-                            else if (MM_String_Match(identifier, "qnan"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Qnan;
-                            else if (MM_String_Match(identifier, "snan"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Snan;
-                            else if (MM_String_Match(identifier, "cast"))      lexer->current_token.sub_kind = MM_TokenBuiltinSub_Cast;
-                            else if (MM_String_Match(identifier, "transmute")) lexer->current_token.sub_kind = MM_TokenBuiltinSub_Transmute;
-                            else if (MM_String_Match(identifier, "sizeof"))    lexer->current_token.sub_kind = MM_TokenBuiltinSub_Sizeof;
-                            else if (MM_String_Match(identifier, "alignof"))   lexer->current_token.sub_kind = MM_TokenBuiltinSub_Alignof;
-                            else if (MM_String_Match(identifier, "offsetof"))  lexer->current_token.sub_kind = MM_TokenBuiltinSub_Offsetof;
-                            else if (MM_String_Match(identifier, "typeof"))    lexer->current_token.sub_kind = MM_TokenBuiltinSub_Typeof;
-                            else if (MM_String_Match(identifier, "shadowed"))  lexer->current_token.sub_kind = MM_TokenBuiltinSub_Shadowed;
-                            else if (MM_String_Match(identifier, "min"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Min;
-                            else if (MM_String_Match(identifier, "max"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Max;
-                            else if (MM_String_Match(identifier, "len"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Len;
+#define MM_Match(S) MM_String_Match(identifier, MM_STRING(S))
+                            if      (MM_Match("include"))   lexer->current_token.sub_kind = MM_TokenKeywordSub_Include;
+                            else if (MM_Match("proc"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Proc;
+                            else if (MM_Match("proc_set"))  lexer->current_token.sub_kind = MM_TokenKeywordSub_ProcSet;
+                            else if (MM_Match("struct"))    lexer->current_token.sub_kind = MM_TokenKeywordSub_Struct;
+                            else if (MM_Match("union"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Union;
+                            else if (MM_Match("enum"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Enum;
+                            else if (MM_Match("true"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_True;
+                            else if (MM_Match("false"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_False;
+                            else if (MM_Match("as"))        lexer->current_token.sub_kind = MM_TokenKeywordSub_As;
+                            else if (MM_Match("if"))        lexer->current_token.sub_kind = MM_TokenKeywordSub_If;
+                            else if (MM_Match("when"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_When;
+                            else if (MM_Match("else"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Else;
+                            else if (MM_Match("while"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_While;
+                            else if (MM_Match("break"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Break;
+                            else if (MM_Match("continue"))  lexer->current_token.sub_kind = MM_TokenKeywordSub_Continue;
+                            else if (MM_Match("using"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Using;
+                            else if (MM_Match("defer"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Defer;
+                            else if (MM_Match("return"))    lexer->current_token.sub_kind = MM_TokenKeywordSub_Return;
+                            else if (MM_Match("this"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_This;
+                            else if (MM_Match("inf"))       lexer->current_token.sub_kind = MM_TokenKeywordSub_Inf;
+                            else if (MM_Match("qnan"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Qnan;
+                            else if (MM_Match("snan"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Snan;
+                            else if (MM_Match("cast"))      lexer->current_token.sub_kind = MM_TokenBuiltinSub_Cast;
+                            else if (MM_Match("transmute")) lexer->current_token.sub_kind = MM_TokenBuiltinSub_Transmute;
+                            else if (MM_Match("sizeof"))    lexer->current_token.sub_kind = MM_TokenBuiltinSub_Sizeof;
+                            else if (MM_Match("alignof"))   lexer->current_token.sub_kind = MM_TokenBuiltinSub_Alignof;
+                            else if (MM_Match("offsetof"))  lexer->current_token.sub_kind = MM_TokenBuiltinSub_Offsetof;
+                            else if (MM_Match("typeof"))    lexer->current_token.sub_kind = MM_TokenBuiltinSub_Typeof;
+                            else if (MM_Match("shadowed"))  lexer->current_token.sub_kind = MM_TokenBuiltinSub_Shadowed;
+                            else if (MM_Match("min"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Min;
+                            else if (MM_Match("max"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Max;
+                            else if (MM_Match("len"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Len;
+#undef MM_Match
                         }
                     }
                     else if (c[0] >= '0' && c[1] <= '9')
@@ -483,7 +490,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                                     lexer->offset += 1;
                                 }
                                 
-                                if (lexer->offset < lexer->string) continue;
+                                if (lexer->offset < lexer->string.size) continue;
                                 else
                                 {
                                     //// ERROR: Missing exponent
@@ -512,9 +519,9 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                         
                         if (assumed_kind == MM_TokenFloatSub_Hex32)
                         {
-                            if      (digit_count == 4)  lexer->current_token.sub_kind =  = MM_TokenFloatSub_Hex16;
-                            else if (digit_count == 8)  lexer->current_token.sub_kind =  = MM_TokenFloatSub_Hex32;
-                            else if (digit_count == 16) lexer->current_token.sub_kind =  = MM_TokenFloatSub_Hex64;
+                            if      (digit_count == 4)  lexer->current_token.sub_kind = MM_TokenFloatSub_Hex16;
+                            else if (digit_count == 8)  lexer->current_token.sub_kind = MM_TokenFloatSub_Hex32;
+                            else if (digit_count == 16) lexer->current_token.sub_kind = MM_TokenFloatSub_Hex64;
                             else
                             {
                                 //// ERROR: Invalid digit count in hexadecimal floating point literal
