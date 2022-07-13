@@ -19,6 +19,5 @@ set "compile_options= %nocrt_options% %diag_options% /O2 /Zo /Z7"
 )
 
 clang-cl /LD %compile_options% ..\src\mm.c       /link %link_options% /PDB:libmm.pdb /out:libmm.dll
-clang-cl     %compile_options% ..\src\mm_win32.c /link %link_options% /PDB:mm.pdb /out:mm.exe /ENTRY:WinMainCRTStartup Kernel32.lib
 
 popd

@@ -566,3 +566,53 @@ been changed by the optimizer (this is especially useful for generated code).
 - keep a log of useful information that is accessible a debugger
 
 for the compiler to be able to serve the debugger all source files, the source files have to be owned by the compiler
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+I want a compiler that can compile an Odin/Jai like language and has good support for metaprogramming and tooling. The metaprogram should be able to do whatever with the compiling code, and the tooling should be able to easily reason and work with it. The most important part of tool support is giving the debugger more information.
+The compiler will need to keep track of everything that happens to the code, so that it can provide this information to the debugger. The compiler should therefore
+own all relevant data, with an API for managing this. This
+
+write each stage, then decide how the API should behave
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
