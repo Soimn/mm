@@ -1,28 +1,31 @@
 #define MM_AST_FIRST_KIND(type, group, sub_group) (((type) << 24) | ((group) << 16) | ((sub_group) << 8) | 1)
+#define MM_AST_KIND(k) (MM_AST_Kind){.kind = (k)}
 
-enum MM_AST
+enum MM_AST_TYPE
 {
-    MM_AST_None = 0,
-    
-    // NOTE: Types
-    MM_ASTType_Argument = 1,
-    MM_ASTType_Parameter,
-    MM_ASTType_ReturnValue,
-    MM_ASTType_StructMember,
-    MM_ASTType_UnionMember,
-    MM_ASTType_EnumMember,
+    MM_ASTType_Special = 1,
     MM_ASTType_Expression,
     MM_ASTType_Declaration,
     MM_ASTType_Statement,
-    
+};
+
+enum MM_AST_GROUP
+{
     // NOTE: Groups under MM_AST_Expression
     MM_ASTGroup_PrimaryExpression = 1,
     MM_ASTGroup_UnaryExpression,
     MM_ASTGroup_BinaryExpression,
     MM_ASTGroup_ConditionalExpression,
     
+    // NOTE: Groups under MM_AST_Statement
+    MM_ASTGroup_Jump = 1,
+    MM_ASTGroup_Assignment,
+};
+
+enum MM_AST_SUB_GROUP
+{
     // NOTE: Sub groups under MM_ASTType_Expression, MM_ASTGroup_PrimaryExpression
-    MM_ASTSubGroup_Builtin,
+    MM_ASTSubGroup_Builtin = 1,
     MM_ASTSubGroup_FwdDecl,
     
     // NOTE: Sub groups under MM_ASTType_Expression, MM_ASTGroup_UnaryExpression
@@ -35,10 +38,16 @@ enum MM_AST
     MM_ASTSubGroup_CmpLevel,
     MM_ASTSubGroup_AndLevel,
     MM_ASTSubGroup_OrLevel,
+};
+
+enum MM_AST
+{
+    MM_AST_None = 0,
     
-    // NOTE: Groups under MM_AST_Statement
-    MM_ASTGroup_Jump,
-    MM_ASTGroup_Assignment,
+    MM_AST_Argument = MM_AST_FIRST_KIND(MM_ASTType_Special, MM_AST_None, MM_AST_None),
+    MM_AST_Parameter,
+    MM_AST_ReturnValue,
+    MM_AST_EnumMember,
     
     MM_AST_Identifier = MM_AST_FIRST_KIND(MM_ASTType_Expression, MM_ASTGroup_PrimaryExpression, MM_AST_None),
     MM_AST_Int,
@@ -147,22 +156,18 @@ enum MM_AST
 
 typedef struct MM_AST_Kind
 {
-    MM_u32 kind;
-    struct
+    union
     {
-        MM_u8 kind_index;
-        MM_u8 kind_sub_group;
-        MM_u8 kind_group;
-        MM_u8 kind_type;
+        MM_u32 kind;
+        struct
+        {
+            MM_u8 kind_index;
+            MM_u8 kind_sub_group;
+            MM_u8 kind_group;
+            MM_u8 kind_type;
+        };
     };
 } MM_AST_Kind;
-
-// TODO:
-typedef MM_String MM_Identifier;
-typedef MM_String MM_String_Literal;
-typedef MM_i128 MM_Soft_Int;
-typedef MM_f64 MM_Soft_Float;
-//
 
 typedef struct MM_Argument
 {
@@ -178,7 +183,7 @@ typedef struct MM_Parameter
     struct MM_Parameter* next;
     struct MM_Expression* names;
     struct MM_Expression* type;
-    struct MM_Expression* values;
+    struct MM_Expression* value;
 } MM_Parameter;
 
 typedef struct MM_Return_Value
@@ -187,24 +192,8 @@ typedef struct MM_Return_Value
     struct MM_Return_Value* next;
     struct MM_Expression* names;
     struct MM_Expression* type;
-    struct MM_Expression* values;
+    struct MM_Expression* value;
 } MM_Return_Value;
-
-typedef struct MM_Struct_Member
-{
-    struct MM_AST_Kind;
-    struct MM_Struct_Member* next;
-    struct MM_Expression* names;
-    struct MM_Expression* type;
-} MM_Struct_Member;
-
-typedef struct MM_Union_Member
-{
-    struct MM_AST_Kind;
-    struct MM_Union_Member* next;
-    struct MM_Expression* names;
-    struct MM_Expression* type;
-} MM_Union_Member;
 
 typedef struct MM_Enum_Member
 {
@@ -224,6 +213,18 @@ typedef struct MM_Expression_Header
 
 #define MM_EXPRESSION_HEADER() union { struct MM_Expression_Header; MM_Expression_Header header; }
 
+typedef struct MM_Integer_Literal_Expression
+{
+    MM_Soft_Int value;
+    MM_u8 explicit_base; // NOTE: 0 means no explicit base, non 0 corresponds to the bases of 0x0 (16), 0d0 (10) and 0b0 (2)
+} MM_Integer_Literal_Expression;
+
+typedef struct MM_Float_Literal_Expression
+{
+    MM_Soft_Float value;
+    MM_u8 explicit_size; // NOTE: 0 means no explicit size, non 0 corresponds to the size of HexFloat16 - 64 in bytes
+} MM_Float_Literal_Expression;
+
 typedef struct MM_Compound_Expression
 {
     MM_EXPRESSION_HEADER();
@@ -242,7 +243,7 @@ typedef struct MM_Proc_Literal_Expression
     MM_EXPRESSION_HEADER();
     MM_Parameter* params;
     MM_Return_Value* return_vals;
-    struct MM_Statement* body;
+    struct MM_Block_Statement* body;
 } MM_Proc_Literal_Expression;
 
 typedef struct MM_Proc_Set_Expression
@@ -254,13 +255,13 @@ typedef struct MM_Proc_Set_Expression
 typedef struct MM_Struct_Expression
 {
     MM_EXPRESSION_HEADER();
-    MM_Struct_Member* members;
+    struct MM_Declaration* body;
 } MM_Struct_Expression;
 
 typedef struct MM_Union_Expression
 {
     MM_EXPRESSION_HEADER();
-    MM_Union_Member* members;
+    struct MM_Declaration* body;
 } MM_Union_Expression;
 
 typedef struct MM_Enum_Expression
@@ -381,9 +382,10 @@ typedef struct MM_Expression
         MM_EXPRESSION_HEADER();
         
         MM_Identifier identifier;
-        MM_Soft_Int integer;
-        MM_Soft_Float floating;
+        MM_Integer_Literal_Expression int_expr;
+        MM_Float_Literal_Expression float_expr;
         MM_String_Literal string;
+        MM_u32 codepoint;
         MM_bool boolean;
         MM_Compound_Expression compound_expr;
         MM_Proc_Expression proc_expr;

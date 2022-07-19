@@ -1,31 +1,44 @@
-// NOTE: Token kinds are organized into blocks of max 16 in size. This is to get checking for binary operators and their
-//       precedence for free, as well as mapping binary assignment tokens to their operators
+#define MM_TOKEN_KIND_FIRST(group) ((MM_u16)(group) << 8)
+#define MM_TOKEN_GROUP_FROM_KIND(kind) ((kind) >> 8)
+#define MM_TOKEN_BINARY_OPERATOR_BLOCK_SIZE 16
+#define MM_TOKEN_BINARY_OPERATOR_BLOCK(kind) ((MM_u8)(kind) / MM_TOKEN_BINARY_OPERATOR_BLOCK_SIZE - 6)
+#define MM_TOKEN_BINARY_OPERATOR_INDEX(kind) ((MM_u8)(kind) % MM_TOKEN_BINARY_OPERATOR_BLOCK_SIZE)
 
-#define MM_TOKEN_KIND_BLOCK_SIZE 16
-#define MM_TOKEN_BLOCK_INDEX_FROM_KIND(kind) ((kind) / MM_TOKEN_KIND_BLOCK_SIZE)
-#define MM_TOKEN_BLOCK_OFFSET_FROM_KIND(kind) ((kind) / MM_TOKEN_KIND_BLOCK_SIZE)
-#define MM_TOKEN_BINARY_ASSIGNMENT_TO_BINARY_KIND(kind) ((MM_TOKEN_BLOCK_INDEX_FROM_KIND(kind) + 5)*MM_TOKEN_KIND_BLOCK_SIZE + MM_TOKEN_BLOCK_OFFSET_FROM_KIND(kind))
-#define MM_TOKEN_BINARY_TO_BINARY_ASSIGNMENT_KIND(kind) ((MM_TOKEN_BLOCK_INDEX_FROM_KIND(kind) - 5)*MM_TOKEN_KIND_BLOCK_SIZE + MM_TOKEN_BLOCK_OFFSET_FROM_KIND(kind))
+enum MM_TOKEN_GROUP_KIND
+{
+    MM_TokenGroup_None = 0,
+    MM_TokenGroup_Integer,
+    MM_TokenGroup_Float,
+    MM_TokenGroup_Operator,
+    MM_TokenGroup_Comment,
+    MM_TokenGroup_Keyword,
+    MM_TokenGroup_Builtin,
+};
 
 enum MM_TOKEN_KIND
 {
-    MM_Token_Invalid = 0,
+    MM_Token_Invalid = MM_TOKEN_KIND_FIRST(MM_TokenGroup_None),
     MM_Token_EndOfStream,
     
-    MM_Token_Comment,
-    MM_Token_Keyword,
-    MM_Token_Builtin,
     MM_Token_Identifier,
     MM_Token_BlankIdentifier,
-    MM_Token_Int,
-    MM_Token_Float,
     MM_Token_String,
     MM_Token_Codepoint,
     
-    MM_Token_FirstAssignment,
+    MM_Token_Int = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Integer),
+    MM_Token_BinaryInt,
+    MM_Token_DecimalInt,
+    MM_Token_HexInt,
+    
+    MM_Token_Float = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Float),
+    MM_Token_HexFloat16,
+    MM_Token_HexFloat32,
+    MM_Token_HexFloat64,
+    
+    MM_Token_FirstAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator),
     MM_Token_Equals = MM_Token_FirstAssignment,
     
-    MM_Token_FirstBinaryAssignment = 1*16,
+    MM_Token_FirstBinaryAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 1*16,
     MM_Token_FirstMulLevelAssignment = MM_Token_FirstAssignment,
     MM_Token_StarEquals = MM_Token_FirstMulLevelAssignment,
     MM_Token_SlashEquals,
@@ -36,20 +49,20 @@ enum MM_TOKEN_KIND
     MM_Token_TripleGreaterEquals,
     MM_Token_LastMulLevelAssignment = MM_Token_GreaterGreaterEquals,
     
-    MM_Token_FirstAddLevelAssignment = 2*16,
+    MM_Token_FirstAddLevelAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 2*16,
     MM_Token_TildeEquals = MM_Token_FirstAddLevelAssignment,
     MM_Token_OrEquals,
     MM_Token_MinusEquals,
     MM_Token_PlusEquals,
     MM_Token_LastAddLevelAssignment = MM_Token_PlusEquals,
     
-    MM_Token_AndAndEquals = 4*16,
+    MM_Token_AndAndEquals = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 4*16,
     
-    MM_Token_OrOrEquals = 5*16,
+    MM_Token_OrOrEquals = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 5*16,
     MM_Token_LastBinaryAssignment = MM_Token_OrOrEquals,
     MM_Token_LastAssignment = MM_Token_LastBinaryAssignment,
     
-    MM_Token_FirstBinary = 6*16,
+    MM_Token_FirstBinary = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 6*16,
     MM_Token_FirstMulLevel = MM_Token_FirstBinary,
     MM_Token_Star = MM_Token_FirstMulLevel,
     MM_Token_Slash,
@@ -60,14 +73,14 @@ enum MM_TOKEN_KIND
     MM_Token_TripleGreater,
     MM_Token_LastMulLevel = MM_Token_TripleGreater,
     
-    MM_Token_FirstAddLevel = 7*16,
+    MM_Token_FirstAddLevel = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 7*16,
     MM_Token_Plus  = MM_Token_FirstAddLevel,
     MM_Token_Minus,
     MM_Token_Or,
     MM_Token_Tilde,
     MM_Token_LastAddLevel = MM_Token_Tilde,
     
-    MM_Token_FirstCmpLevel = 8*16,
+    MM_Token_FirstCmpLevel = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 8*16,
     MM_Token_Greater = MM_Token_FirstCmpLevel,
     MM_Token_GreaterEquals,
     MM_Token_Less,
@@ -76,9 +89,9 @@ enum MM_TOKEN_KIND
     MM_Token_BangEquals,
     MM_Token_LastCmpLevel = MM_Token_BangEquals,
     
-    MM_Token_AndAnd = 9*16,
+    MM_Token_AndAnd = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 9*16,
     
-    MM_Token_OrOr = 10*16,
+    MM_Token_OrOr = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 10*16,
     MM_Token_LastBinary = MM_Token_OrOr,
     
     MM_Token_Bang,
@@ -99,73 +112,45 @@ enum MM_TOKEN_KIND
     MM_Token_PeriodOpenBrace,
     MM_Token_PeriodOpenBracket,
     
-    MM_TOKEN_KIND_MAX,
+    MM_Token_SingleLineComment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Comment),
+    MM_Token_MultiLineComment,
+    
+    MM_Token_Include = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Keyword),
+    MM_Token_Proc,
+    MM_Token_ProcSet,
+    MM_Token_Struct,
+    MM_Token_Union,
+    MM_Token_Enum,
+    MM_Token_True,
+    MM_Token_False,
+    MM_Token_As,
+    MM_Token_If,
+    MM_Token_When,
+    MM_Token_Else,
+    MM_Token_While,
+    MM_Token_Break,
+    MM_Token_Continue,
+    MM_Token_Using,
+    MM_Token_Defer,
+    MM_Token_Return,
+    MM_Token_This,
+    MM_Token_Inf,
+    MM_Token_Qnan,
+    MM_Token_Snan,
+    
+    MM_Token_Cast = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Builtin),
+    MM_Token_Transmute,
+    MM_Token_Sizeof,
+    MM_Token_Alignof,
+    MM_Token_Offsetof,
+    MM_Token_Typeof,
+    MM_Token_Shadowed,
+    MM_Token_Min,
+    MM_Token_Max,
+    MM_Token_Len,
 };
 
-MM_STATIC_ASSERT(MM_Token_FirstAssignment < MM_Token_FirstBinaryAssignment);
-MM_STATIC_ASSERT(MM_TOKEN_KIND_MAX <= MM_U8_MAX);
-
-enum MM_TOKEN_COMMENT_SUB_KIND
-{
-    MM_TokenCommentSub_SingleLine = (MM_u16)MM_Token_Comment << 8,
-    MM_TokenCommentSub_MultiLine
-};
-
-enum MM_TOKEN_KEYWORD_SUB_KIND
-{
-    MM_TokenKeywordSub_Include = (MM_u16)MM_Token_Keyword << 8,
-    MM_TokenKeywordSub_Proc,
-    MM_TokenKeywordSub_ProcSet,
-    MM_TokenKeywordSub_Struct,
-    MM_TokenKeywordSub_Union,
-    MM_TokenKeywordSub_Enum,
-    MM_TokenKeywordSub_True,
-    MM_TokenKeywordSub_False,
-    MM_TokenKeywordSub_As,
-    MM_TokenKeywordSub_If,
-    MM_TokenKeywordSub_When,
-    MM_TokenKeywordSub_Else,
-    MM_TokenKeywordSub_While,
-    MM_TokenKeywordSub_Break,
-    MM_TokenKeywordSub_Continue,
-    MM_TokenKeywordSub_Using,
-    MM_TokenKeywordSub_Defer,
-    MM_TokenKeywordSub_Return,
-    MM_TokenKeywordSub_This,
-    MM_TokenKeywordSub_Inf,
-    MM_TokenKeywordSub_Qnan,
-    MM_TokenKeywordSub_Snan,
-};
-
-enum MM_TOKEN_BUILTIN_SUB_KIND
-{
-    MM_TokenBuiltinSub_Cast = (MM_u16)MM_Token_Builtin << 8,
-    MM_TokenBuiltinSub_Transmute,
-    MM_TokenBuiltinSub_Sizeof,
-    MM_TokenBuiltinSub_Alignof,
-    MM_TokenBuiltinSub_Offsetof,
-    MM_TokenBuiltinSub_Typeof,
-    MM_TokenBuiltinSub_Shadowed,
-    MM_TokenBuiltinSub_Min,
-    MM_TokenBuiltinSub_Max,
-    MM_TokenBuiltinSub_Len,
-};
-
-enum MM_TOKEN_INT_SUB_KIND
-{
-    MM_TokenIntSub_None = (MM_u16)MM_Token_Int << 8,
-    MM_TokenIntSub_Binary,
-    MM_TokenIntSub_Decimal,
-    MM_TokenIntSub_Hexadecimal,
-};
-
-enum MM_TOKEN_FLOAT_SUB_KIND
-{
-    MM_TokenFloatSub_None = (MM_u16)MM_Token_Float << 8,
-    MM_TokenFloatSub_Hex16,
-    MM_TokenFloatSub_Hex32,
-    MM_TokenFloatSub_Hex64,
-};
+MM_STATIC_ASSERT(MM_TOKEN_BINARY_OPERATOR_BLOCK(MM_Token_FirstBinary) == 0);
 
 typedef struct MM_Token
 {
@@ -177,11 +162,10 @@ typedef struct MM_Token
     {
         struct
         {
-            MM_u8 _;
-            MM_u8 kind;
+            MM_u8 kind_index;
+            MM_u8 kind_group;
         };
-        
-        MM_u16 sub_kind;
+        MM_u16 kind;
     };
 } MM_Token;
 
@@ -261,7 +245,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
         
         if (c[0] == '/' && c[1] == '/')
         {
-            lexer->current_token.sub_kind = MM_TokenCommentSub_SingleLine;
+            lexer->current_token.kind = MM_Token_SingleLineComment;
             
             lexer->offset += 2;
             
@@ -269,7 +253,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
         }
         else if (c[0] == '/' && c[1] == '*')
         {
-            lexer->current_token.sub_kind = MM_TokenCommentSub_MultiLine;
+            lexer->current_token.kind = MM_Token_MultiLineComment;
             
             lexer->offset += 2;
             
@@ -404,54 +388,54 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                         {
                             // TODO: Replace with hash table lookup
 #define MM_Match(S) MM_String_Match(identifier, MM_STRING(S))
-                            if      (MM_Match("include"))   lexer->current_token.sub_kind = MM_TokenKeywordSub_Include;
-                            else if (MM_Match("proc"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Proc;
-                            else if (MM_Match("proc_set"))  lexer->current_token.sub_kind = MM_TokenKeywordSub_ProcSet;
-                            else if (MM_Match("struct"))    lexer->current_token.sub_kind = MM_TokenKeywordSub_Struct;
-                            else if (MM_Match("union"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Union;
-                            else if (MM_Match("enum"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Enum;
-                            else if (MM_Match("true"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_True;
-                            else if (MM_Match("false"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_False;
-                            else if (MM_Match("as"))        lexer->current_token.sub_kind = MM_TokenKeywordSub_As;
-                            else if (MM_Match("if"))        lexer->current_token.sub_kind = MM_TokenKeywordSub_If;
-                            else if (MM_Match("when"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_When;
-                            else if (MM_Match("else"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Else;
-                            else if (MM_Match("while"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_While;
-                            else if (MM_Match("break"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Break;
-                            else if (MM_Match("continue"))  lexer->current_token.sub_kind = MM_TokenKeywordSub_Continue;
-                            else if (MM_Match("using"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Using;
-                            else if (MM_Match("defer"))     lexer->current_token.sub_kind = MM_TokenKeywordSub_Defer;
-                            else if (MM_Match("return"))    lexer->current_token.sub_kind = MM_TokenKeywordSub_Return;
-                            else if (MM_Match("this"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_This;
-                            else if (MM_Match("inf"))       lexer->current_token.sub_kind = MM_TokenKeywordSub_Inf;
-                            else if (MM_Match("qnan"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Qnan;
-                            else if (MM_Match("snan"))      lexer->current_token.sub_kind = MM_TokenKeywordSub_Snan;
-                            else if (MM_Match("cast"))      lexer->current_token.sub_kind = MM_TokenBuiltinSub_Cast;
-                            else if (MM_Match("transmute")) lexer->current_token.sub_kind = MM_TokenBuiltinSub_Transmute;
-                            else if (MM_Match("sizeof"))    lexer->current_token.sub_kind = MM_TokenBuiltinSub_Sizeof;
-                            else if (MM_Match("alignof"))   lexer->current_token.sub_kind = MM_TokenBuiltinSub_Alignof;
-                            else if (MM_Match("offsetof"))  lexer->current_token.sub_kind = MM_TokenBuiltinSub_Offsetof;
-                            else if (MM_Match("typeof"))    lexer->current_token.sub_kind = MM_TokenBuiltinSub_Typeof;
-                            else if (MM_Match("shadowed"))  lexer->current_token.sub_kind = MM_TokenBuiltinSub_Shadowed;
-                            else if (MM_Match("min"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Min;
-                            else if (MM_Match("max"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Max;
-                            else if (MM_Match("len"))       lexer->current_token.sub_kind = MM_TokenBuiltinSub_Len;
+                            if      (MM_Match("include"))   lexer->current_token.kind = MM_Token_Include;
+                            else if (MM_Match("proc"))      lexer->current_token.kind = MM_Token_Proc;
+                            else if (MM_Match("proc_set"))  lexer->current_token.kind = MM_Token_ProcSet;
+                            else if (MM_Match("struct"))    lexer->current_token.kind = MM_Token_Struct;
+                            else if (MM_Match("union"))     lexer->current_token.kind = MM_Token_Union;
+                            else if (MM_Match("enum"))      lexer->current_token.kind = MM_Token_Enum;
+                            else if (MM_Match("true"))      lexer->current_token.kind = MM_Token_True;
+                            else if (MM_Match("false"))     lexer->current_token.kind = MM_Token_False;
+                            else if (MM_Match("as"))        lexer->current_token.kind = MM_Token_As;
+                            else if (MM_Match("if"))        lexer->current_token.kind = MM_Token_If;
+                            else if (MM_Match("when"))      lexer->current_token.kind = MM_Token_When;
+                            else if (MM_Match("else"))      lexer->current_token.kind = MM_Token_Else;
+                            else if (MM_Match("while"))     lexer->current_token.kind = MM_Token_While;
+                            else if (MM_Match("break"))     lexer->current_token.kind = MM_Token_Break;
+                            else if (MM_Match("continue"))  lexer->current_token.kind = MM_Token_Continue;
+                            else if (MM_Match("using"))     lexer->current_token.kind = MM_Token_Using;
+                            else if (MM_Match("defer"))     lexer->current_token.kind = MM_Token_Defer;
+                            else if (MM_Match("return"))    lexer->current_token.kind = MM_Token_Return;
+                            else if (MM_Match("this"))      lexer->current_token.kind = MM_Token_This;
+                            else if (MM_Match("inf"))       lexer->current_token.kind = MM_Token_Inf;
+                            else if (MM_Match("qnan"))      lexer->current_token.kind = MM_Token_Qnan;
+                            else if (MM_Match("snan"))      lexer->current_token.kind = MM_Token_Snan;
+                            else if (MM_Match("cast"))      lexer->current_token.kind = MM_Token_Cast;
+                            else if (MM_Match("transmute")) lexer->current_token.kind = MM_Token_Transmute;
+                            else if (MM_Match("sizeof"))    lexer->current_token.kind = MM_Token_Sizeof;
+                            else if (MM_Match("alignof"))   lexer->current_token.kind = MM_Token_Alignof;
+                            else if (MM_Match("offsetof"))  lexer->current_token.kind = MM_Token_Offsetof;
+                            else if (MM_Match("typeof"))    lexer->current_token.kind = MM_Token_Typeof;
+                            else if (MM_Match("shadowed"))  lexer->current_token.kind = MM_Token_Shadowed;
+                            else if (MM_Match("min"))       lexer->current_token.kind = MM_Token_Min;
+                            else if (MM_Match("max"))       lexer->current_token.kind = MM_Token_Max;
+                            else if (MM_Match("len"))       lexer->current_token.kind = MM_Token_Len;
 #undef MM_Match
                         }
                     }
                     else if (c[0] >= '0' && c[1] <= '9')
                     {
                         MM_umm digit_count  = 1;
-                        MM_u16 assumed_kind = MM_TokenIntSub_None;
+                        MM_u16 assumed_kind = MM_Token_Int;
                         MM_umm base         = 10;
                         MM_bool has_exp     = MM_false;
                         
                         if (c[0] == '0')
                         {
-                            if      (c[1] == 'b') lexer->offset += 1, digit_count = 0, assumed_kind = MM_TokenIntSub_Binary,      base = 2;
-                            else if (c[1] == 'd') lexer->offset += 1, digit_count = 0, assumed_kind = MM_TokenIntSub_Decimal,     base = 10;
-                            else if (c[1] == 'x') lexer->offset += 1, digit_count = 0, assumed_kind = MM_TokenIntSub_Hexadecimal, base = 16;
-                            else if (c[1] == 'h') lexer->offset += 1, digit_count = 0, assumed_kind = MM_TokenFloatSub_Hex32,     base = 16;
+                            if      (c[1] == 'b') lexer->offset += 1, digit_count = 0, assumed_kind = MM_Token_BinaryInt,  base = 2;
+                            else if (c[1] == 'd') lexer->offset += 1, digit_count = 0, assumed_kind = MM_Token_DecimalInt, base = 10;
+                            else if (c[1] == 'x') lexer->offset += 1, digit_count = 0, assumed_kind = MM_Token_HexInt,     base = 16;
+                            else if (c[1] == 'h') lexer->offset += 1, digit_count = 0, assumed_kind = MM_Token_HexFloat32, base = 16;
                         }
                         
                         lexer->offset += 1;
@@ -466,10 +450,10 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                                 lexer->offset += 1;
                                 continue;
                             }
-                            else if (c0 == '.' && assumed_kind == MM_TokenIntSub_None)
+                            else if (c0 == '.' && assumed_kind == MM_Token_Int)
                             {
                                 lexer->offset += 1;
-                                assumed_kind = MM_TokenFloatSub_None;
+                                assumed_kind = MM_Token_Float;
                                 
                                 if (lexer->offset < lexer->string.size) continue;
                                 else
@@ -479,7 +463,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                                     break;
                                 }
                             }
-                            else if (c0 == 'e' && assumed_kind == MM_TokenFloatSub_None && !has_exp)
+                            else if (c0 == 'e' && assumed_kind == MM_Token_Float && !has_exp)
                             {
                                 lexer->offset += 1;
                                 has_exp = MM_true;
@@ -517,18 +501,18 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                             }
                         }
                         
-                        if (assumed_kind == MM_TokenFloatSub_Hex32)
+                        if (assumed_kind == MM_Token_HexFloat32)
                         {
-                            if      (digit_count == 4)  lexer->current_token.sub_kind = MM_TokenFloatSub_Hex16;
-                            else if (digit_count == 8)  lexer->current_token.sub_kind = MM_TokenFloatSub_Hex32;
-                            else if (digit_count == 16) lexer->current_token.sub_kind = MM_TokenFloatSub_Hex64;
+                            if      (digit_count == 4)  lexer->current_token.kind = MM_Token_HexFloat16;
+                            else if (digit_count == 8)  lexer->current_token.kind = MM_Token_HexFloat32;
+                            else if (digit_count == 16) lexer->current_token.kind = MM_Token_HexFloat64;
                             else
                             {
                                 //// ERROR: Invalid digit count in hexadecimal floating point literal
                                 MM_NOT_IMPLEMENTED;
                             }
                         }
-                        else lexer->current_token.sub_kind = assumed_kind;
+                        else lexer->current_token.kind = assumed_kind;
                     }
                     else if (c[0] == '"' || c[0] == '\'')
                     {
@@ -601,4 +585,110 @@ MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm buffer_size)
     }
     
     return i;
+}
+
+MM_Soft_Int
+MM_Token_ParseInt(MM_Token token)
+{
+    MM_ASSERT(token.kind_group == MM_TokenGroup_Integer);
+    
+    MM_Soft_Int result = 0;
+    
+    if (token.kind == MM_Token_BinaryInt)
+    {
+        for (MM_umm i = 2; i < token.size; ++i)
+        {
+            char c = token.data[i];
+            
+            if (c != '_')
+            {
+                MM_ASSERT(c >= '0' && c <= '1');
+                result <<= 1;
+                result  |= c & 0xF;
+            }
+        }
+    }
+    else if (token.kind == MM_Token_HexInt)
+    {
+        for (MM_umm i = 2; i < token.size; ++i)
+        {
+            char c = token.data[i];
+            
+            if (c != '_')
+            {
+                MM_ASSERT(c >= '0' && c <= '9' || c >= 'A' && c <= 'F');
+                result <<= 4;
+                if (c < 'A') result |= c & 0xF;
+                else         result |= (c & 0x1F) + 9;
+            }
+        }
+    }
+    else
+    {
+        MM_ASSERT(token.kind == MM_Token_Int || token.kind == MM_Token_DecimalInt);
+        
+        for (MM_umm i = (token.kind == MM_Token_DecimalInt ? 2 : 0); i < token.size; ++i)
+        {
+            char c = token.data[i];
+            
+            if (c != '_')
+            {
+                MM_ASSERT(c >= '0' && c <= '9');
+                result *= 10;
+                result += c & 0xF;
+            }
+        }
+    }
+    
+    return result;
+}
+
+MM_Soft_Float
+MM_Token_ParseFloat(MM_Token token)
+{
+    MM_ASSERT(token.kind_group == MM_TokenGroup_Float);
+    
+    MM_Soft_Float result = {0};
+    
+    if (token.kind == MM_Token_Float)
+    {
+        MM_NOT_IMPLEMENTED;
+    }
+    else
+    {
+        MM_u64 bits = 0;
+        
+        for (MM_umm i = 2; i < token.size; ++i)
+        {
+            char c = token.data[i];
+            
+            if (c != '_')
+            {
+                MM_ASSERT(c >= '0' && c <= '9' || c >= 'A' && c <= 'F');
+                bits <<= 4;
+                if (c < 'A') bits |= c & 0xF;
+                else         bits |= (c & 0x1F) + 9;
+            }
+        }
+        
+        if (token.kind == MM_Token_HexFloat16)
+        {
+            result = MM_F64_FromF16((MM_f16)bits);
+        }
+        else if (token.kind == MM_Token_HexFloat32)
+        {
+            MM_f32 f32;
+            MM_Copy(&bits, &f32, sizeof(MM_f32));
+            result = f32;
+        }
+        else
+        {
+            MM_ASSERT(token.kind == MM_Token_HexFloat64);
+            MM_f64 f64;
+            MM_Copy(&bits, &f64, sizeof(MM_f64));
+            result = f64;
+        }
+    }
+    
+    return result;
 }

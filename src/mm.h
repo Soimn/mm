@@ -129,7 +129,17 @@ struct MM_Token MM_Lexer_CurrentToken(struct MM_Lexer* lexer);
 struct MM_Token MM_Lexer_NextToken(struct MM_Lexer* lexer);
 MM_umm MM_Lexer_NextTokens(struct MM_Lexer* lexer, struct MM_Token* buffer, MM_umm buffer_size);
 
+// TODO:
+typedef MM_String MM_Identifier;
+typedef MM_String MM_String_Literal;
+typedef MM_i128 MM_Soft_Int;
+typedef MM_f64 MM_Soft_Float;
+//
+
+#include "mm_memory.h"
+#include "mm_float.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
+#include "mm_parser.h"
 
 #endif
