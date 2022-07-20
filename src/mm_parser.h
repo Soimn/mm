@@ -936,8 +936,307 @@ MM_Parser_ParseBlock(MM_Parser* parser, MM_Block_Statement** block)
 }
 
 MM_bool
+MM_Parser__ParseDeclAssignmentOrExpression(MM_Parser* parser, MM_Statement** statement)
+{
+    MM_NOT_IMPLEMENTED;
+    return MM_true;
+}
+
+MM_bool
 MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
 {
+    if (MM_IsToken(MM_Token_Semicolon))
+    {
+        //// ERROR: Empty statement
+        MM_NOT_IMPLEMENTED;
+        return MM_false;
+    }
+    else if (MM_IsToken(MM_Token_Else))
+    {
+        //// ERROR: Else without matching if
+        MM_NOT_IMPLEMENTED;
+        return MM_false;
+    }
+    else if (MM_IsToken(MM_Token_OpenBrace))
+    {
+        if (!MM_Parser_ParseBlock(parser, (MM_Block_Statement**)&statement)) return MM_false;
+    }
+    else if (MM_EatToken(MM_Token_If))
+    {
+        if (!MM_EatToken(MM_Token_OpenParen))
+        {
+            //// ERROR: Missing open paren after if keyword in if statement
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            MM_Statement* first = 0;
+            
+            if (!MM_IsToken(MM_Token_Semicolon))
+            {
+                if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &first)) return MM_false;
+            }
+            
+            MM_Statement* init       = 0;
+            MM_Expression* condition = 0;
+            
+            if (!MM_EatToken(MM_Token_Semicolon))
+            {
+                if (first->kind_type == MM_ASTType_Expression) condition = (MM_Expression*)first;
+                else
+                {
+                    //// ERROR: Invalid use of statement/declaration as if statement condition
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+            }
+            else
+            {
+                init = first;
+                if (!MM_Parser_ParseExpression(parser, &condition)) return MM_false;
+            }
+            
+            if (!MM_EatToken(MM_Token_CloseParen))
+            {
+                //// ERROR: Missing closing parenthesis after if statement condition
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else
+            {
+                MM_Statement* true_body  = 0;
+                MM_Statement* false_body = 0;
+                
+                if (!MM_Parser_ParseStatement(parser, &true_body)) return MM_false;
+                else
+                {
+                    if (MM_EatToken(MM_Token_Else))
+                    {
+                        if (!MM_Parser_ParseStatement(parser, &false_body)) return MM_false;
+                    }
+                    
+                    *statement = MM_Parser_PushNode(parser, MM_AST_If);
+                    (*statement)->if_statement.init       = init;
+                    (*statement)->if_statement.condition  = condition;
+                    (*statement)->if_statement.true_body  = true_body;
+                    (*statement)->if_statement.false_body = false_body;
+                }
+            }
+        }
+    }
+    else if (MM_EatToken(MM_Token_When))
+    {
+        if (!MM_EatToken(MM_Token_OpenParen))
+        {
+            //// ERROR: Missing open paren after when keyword in when statement
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            MM_Expression* condition = 0;
+            
+            if (!MM_Parser_ParseExpression(parser, &condition)) return MM_false;
+            else
+            {
+                if (!MM_EatToken(MM_Token_CloseParen))
+                {
+                    //// ERROR: Missing closing parenthesis after when statement condition
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+                else
+                {
+                    MM_Statement* true_body  = 0;
+                    MM_Statement* false_body = 0;
+                    
+                    if (!MM_Parser_ParseStatement(parser, &true_body)) return MM_false;
+                    else
+                    {
+                        if (MM_EatToken(MM_Token_Else))
+                        {
+                            if (!MM_Parser_ParseStatement(parser, &false_body)) return MM_false;
+                        }
+                        
+                        *statement = MM_Parser_PushNode(parser, MM_AST_When);
+                        (*statement)->when_statement.condition  = condition;
+                        (*statement)->when_statement.true_body  = true_body;
+                        (*statement)->when_statement.false_body = false_body;
+                    }
+                }
+            }
+        }
+    }
+    else if (MM_EatToken(MM_Token_While))
+    {
+        if (!MM_EatToken(MM_Token_OpenParen))
+        {
+            //// ERROR: Missing open paren after while keyword in while statement
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            MM_Statement* first = 0;
+            
+            if (!MM_IsToken(MM_Token_Semicolon))
+            {
+                if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &first)) return MM_false;
+            }
+            
+            MM_Statement* init       = 0;
+            MM_Expression* condition = 0;
+            MM_Statement* step       = 0;
+            
+            if (!MM_EatToken(MM_Token_Semicolon))
+            {
+                if (first->kind_type == MM_ASTType_Expression) condition = (MM_Expression*)first;
+                else
+                {
+                    //// ERROR: Invalid use of statement/declaration as while statement condition
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+            }
+            else
+            {
+                init = first;
+                
+                if (!MM_IsToken(MM_Token_Semicolon))
+                {
+                    first = 0;
+                    if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &first)) return MM_false;
+                    else
+                    {
+                        if (first->kind_type == MM_ASTType_Expression) condition = (MM_Expression*)first;
+                        else
+                        {
+                            //// ERROR: Invalid use of statement/declaration as while statement condition
+                            MM_NOT_IMPLEMENTED;
+                            return MM_false;
+                        }
+                    }
+                }
+                
+                if (MM_EatToken(MM_Token_Semicolon))
+                {
+                    if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &step)) return MM_false;
+                }
+            }
+            
+            if (!MM_EatToken(MM_Token_CloseParen))
+            {
+                //// ERROR: Missing closing parenthesis after while statement condition
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else
+            {
+                MM_Statement* body = 0;
+                if (!MM_Parser_ParseStatement(parser, &body)) return MM_false;
+                else
+                {
+                    *statement = MM_Parser_PushNode(parser, MM_AST_While);
+                    (*statement)->while_statement.init      = init;
+                    (*statement)->while_statement.condition = condition;
+                    (*statement)->while_statement.step      = step;
+                    (*statement)->while_statement.body      = body;
+                }
+            }
+        }
+    }
+    else if (MM_IsToken(MM_Token_Continue) || MM_IsToken(MM_Token_Break))
+    {
+        MM_u32 kind = (MM_IsToken(MM_Token_Continue) ? MM_AST_Continue : MM_AST_Break);
+        
+        MM_Expression* label = 0;
+        
+        if (!MM_IsToken(MM_Token_Semicolon))
+        {
+            if (!MM_Parser_ParseExpression(parser, &label)) return MM_false;
+        }
+        
+        if (!MM_EatToken(MM_Token_Semicolon))
+        {
+            //// ERROR: Missing semicolon after jump statement
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            *statement = MM_Parser_PushNode(parser, kind);
+            (*statement)->jump_statement.label = label;
+        }
+    }
+    else if (MM_EatToken(MM_Token_Defer))
+    {
+        MM_Statement* body = 0;
+        
+        if (!MM_Parser_ParseStatement(parser, &body)) return MM_false;
+        
+        *statement = MM_Parser_PushNode(parser, MM_AST_Defer);
+        (*statement)->defer_statement.body = body;
+    }
+    else if (MM_EatToken(MM_Token_Return))
+    {
+        MM_Argument* args = 0;
+        
+        if (!MM_IsToken(MM_Token_Semicolon))
+        {
+            if (!MM_Parser_ParseArguments(parser, &args)) return MM_false;
+        }
+        
+        if (MM_EatToken(MM_Token_Semicolon))
+        {
+            //// ERROR: Missing semicolon after return statement
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            *statement = MM_Parser_PushNode(parser, MM_AST_Return);
+            (*statement)->return_statement.args = args;
+        }
+    }
+    else
+    {
+        if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, statement)) return MM_false;
+        else
+        {
+            MM_bool should_have_semi = MM_true;
+            
+            if ((*statement)->kind == MM_AST_ConstantFwdDecl) should_have_semi = MM_false;
+            else if ((*statement)->kind == MM_AST_Constant && ((MM_Constant_Declaration*)*statement)->values->next == 0)
+            {
+                MM_u32 kind = ((MM_Constant_Declaration*)*statement)->values->kind;
+                should_have_semi = (kind == MM_AST_ProcLiteral || kind == MM_AST_ProcLiteralFwdDecl ||
+                                    kind == MM_AST_Struct      || kind == MM_AST_StructFwdDecl      ||
+                                    kind == MM_AST_Union       || kind == MM_AST_UnionFwdDecl       ||
+                                    kind == MM_AST_Enum        || kind == MM_AST_EnumFwdDecl);
+            }
+            
+            if (should_have_semi)
+            {
+                if (!MM_EatToken(MM_Token_Semicolon))
+                {
+                    //// ERROR: Missing semicolon after x statement
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+            }
+            else
+            {
+                if (MM_IsToken(MM_Token_Semicolon))
+                {
+                    //// ERROR: Stray semicolon after x declaration
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+            }
+        }
+    }
+    
     MM_NOT_IMPLEMENTED;
     return MM_true;
 }

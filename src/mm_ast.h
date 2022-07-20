@@ -124,6 +124,7 @@ enum MM_AST
     
     MM_AST_Variable = MM_AST_FIRST_KIND(MM_ASTType_Declaration, MM_AST_None, MM_AST_None),
     MM_AST_Constant,
+    MM_AST_ConstantFwdDecl,
     MM_AST_Using,
     MM_AST_When,
     
@@ -430,6 +431,13 @@ typedef struct MM_Constant_Declaration
     MM_Expression* values;
 } MM_Constant_Declaration;
 
+typedef struct MM_Constant_Fwd_Declaration
+{
+    MM_DECLARATION_HEADER();
+    MM_Expression* names;
+    MM_Expression* types;
+} MM_Constant_Fwd_Declaration;
+
 typedef struct MM_Using_Declaration
 {
     MM_DECLARATION_HEADER();
@@ -452,6 +460,7 @@ typedef struct MM_Declaration
         MM_DECLARATION_HEADER();
         MM_Variable_Declaration var_decl;
         MM_Constant_Declaration const_decl;
+        MM_Constant_Fwd_Declaration const_fwd_decl;
         MM_Using_Declaration using_decl;
         MM_When_Declaration when_decl;
     };
@@ -482,6 +491,14 @@ typedef struct MM_If_Statement
     MM_Statement* true_body;
     MM_Statement* false_body;
 } MM_If_Statement;
+
+typedef struct MM_When_Statement
+{
+    MM_STATEMENT_HEADER();
+    MM_Expression* condition;
+    MM_Statement* true_body;
+    MM_Statement* false_body;
+} MM_When_Statement;
 
 typedef struct MM_While_Statement
 {
@@ -526,6 +543,7 @@ typedef struct MM_Statement
         
         MM_Block_Statement block_statement;
         MM_If_Statement if_statement;
+        MM_When_Statement when_statement;
         MM_While_Statement while_statement;
         MM_Return_Statement return_statement;
         MM_Defer_Statement defer_statement;
