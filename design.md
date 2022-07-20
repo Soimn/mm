@@ -604,13 +604,29 @@ write each stage, then decide how the API should behave
 
 
 
+Use cases:
+- text editor (syntax highlighting, intelligent code editing)
+- debugger (introspection, parsing)
+
+lex -> tokens for syntax highlighting
+parse -> for watch window and other debugger related tasks
+introspect -> for code navigation, completion, evaluation in debugger
+
+x + 2*y
+
+problem: a lot of the work in evaluating an expression in the watch window involves work the compiler does, and it seems like the compiler should provide
+more help. The problem with providing more help is that there then needs to be a way of providing the compiler with the execution context. The debugger needs to
+support debugging both M and C, and it should still support evaluating expressions in M that references something when debugging C. The debugger then needs to be responsible for prioviding the interface and feeding the compiler with the proper information, which implies the debugger should be given more control. The debugger then would need to keep track of the values and symbols in use and what they reference in a way that is language agnostic, and also have a way of evaluating M
+expressions with those values. The easiest thing to do is to use the workspace API and make the debugger insert code that it needs to evaluate and then provide
+an API for calling procedures in a workspace with arguments.
 
 
-
-
-
-
-
+lex to tokens
+compile code
+run expressions
+insert code
+update code
+introspect
 
 
 

@@ -533,7 +533,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                         {
                             if (lexer->offset >= lexer->string.size)
                             {
-                                //// ERROR: Unterminated string literal
+                                //// ERROR: Unterminated string/char literal
                                 MM_NOT_IMPLEMENTED;
                             }
                             else
@@ -691,4 +691,275 @@ MM_Token_ParseFloat(MM_Token token)
     }
     
     return result;
+}
+
+typedef enum MM_TOKEN_PARSE_ERROR_CODE
+{
+    MM_TokenParseError_None = 0,
+    MM_TokenParseError_NoCodepointInCodepointLiteral,
+    MM_TokenParseError_MissingDigitsInByteEscSeq,
+    MM_TokenParseError_MissingDigitsInShortCodepointEscSeq,
+    MM_TokenParseError_MissingDigitsInCodepointEscSeq,
+    MM_TokenParseError_InvalidDigitInByteEscSeq,
+    MM_TokenParseError_InvalidDigitInShortCodepointEscSeq,
+    MM_TokenParseError_InvalidDigitInCodepointEscSeq,
+    MM_TokenParseError_InvalidFirstByteOfUTF8,
+    MM_TokenParseError_Missing1TrailingByteUTF8,
+    MM_TokenParseError_Missing2TrailingByteUTF8,
+    MM_TokenParseError_Missing3TrailingByteUTF8,
+    MM_TokenParseError_MoreThanOneCodepoint,
+    MM_TokenParseError_CodepointOutOfRange,
+} MM_TOKEN_PARSE_ERROR_CODE;
+
+typedef struct MM_Token_Parse_Error
+{
+    MM_TOKEN_PARSE_ERROR_CODE code;
+    MM_u32 index;
+} MM_Token_Parse_Error;
+
+MM_Token_Parse_Error
+MM_Token__ParseEscSeq(MM_Token token, MM_u32* result, MM_umm* index)
+{
+    MM_umm codepoint = 0;
+    MM_umm i         = *index;
+    
+    char c = token.data[i];
+    if      (c == 'a')  i += 1, codepoint = '\a';
+    else if (c == 'b')  i += 1, codepoint = '\b';
+    else if (c == 'f')  i += 1, codepoint = '\f';
+    else if (c == 'n')  i += 1, codepoint = '\n';
+    else if (c == 'r')  i += 1, codepoint = '\r';
+    else if (c == 't')  i += 1, codepoint = '\t';
+    else if (c == 'v')  i += 1, codepoint = '\v';
+    else if (c == '\\') i += 1, codepoint = '\\';
+    else if (c == '\'') i += 1, codepoint = '\'';
+    else if (c == '"')  i += 1, codepoint = '"';
+    else if (c == 'x' || c == 'u' || c == 'U')
+    {
+        MM_umm expected_digit_count = (c == 'x' ? 2 :
+                                       c == 'u' ? 4 : 6);
+        
+        i += 1;
+        
+        for (MM_umm j = 0; j < expected_digit_count; ++j)
+        {
+            if (i + j >= token.size - 1)
+            {
+                //// ERROR
+                MM_umm edc = expected_digit_count;
+                if      (edc == 2) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_MissingDigitsInByteEscSeq,           .index = i + j };
+                else if (edc == 4) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_MissingDigitsInShortCodepointEscSeq, .index = i + j };
+                else               return (MM_Token_Parse_Error){ .code = MM_TokenParseError_MissingDigitsInCodepointEscSeq,      .index = i + j };
+            }
+            else
+            {
+                codepoint <<= 4;
+                
+                if      (c >= '0' && c <= '9') codepoint |= c & 0xF;
+                else if (c >= 'A' && c <= 'F') codepoint |= c & 0x1F + 9;
+                else
+                {
+                    //// ERROR
+                    MM_umm edc = expected_digit_count;
+                    if      (edc == 2) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_InvalidDigitInByteEscSeq,           .index = i + j };
+                    else if (edc == 4) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_InvalidDigitInShortCodepointEscSeq, .index = i + j };
+                    else               return (MM_Token_Parse_Error){ .code = MM_TokenParseError_InvalidDigitInCodepointEscSeq,      .index = i + j };
+                }
+            }
+        }
+        
+        i += expected_digit_count;
+    }
+    
+    *result = codepoint;
+    *index  = i;
+    return (MM_Token_Parse_Error){ .code = MM_TokenParseError_None };
+}
+
+MM_Token_Parse_Error
+MM_Token_ParseCodepoint(MM_Token token, MM_u32* result)
+{
+    MM_ASSERT(token.size >= 2 && token.data[0] == '\'');
+    
+    MM_u32 codepoint = 0;
+    
+    if (token.size == 2)
+    {
+        //// ERROR
+        return (MM_Token_Parse_Error){ .code = MM_TokenParseError_NoCodepointInCodepointLiteral, .index = 1 };
+    }
+    else
+    {
+        MM_ASSERT(token.size > 2);
+        
+        MM_umm i = 1;
+        char c   = token.data[i];
+        
+        if (c == '\\')
+        {
+            i += 1;
+            MM_Token_Parse_Error error = MM_Token__ParseEscSeq(token, &codepoint, &i);
+            if (error.code != MM_TokenParseError_None) return error;
+        }
+        else if ((c & 0x80) != 0)
+        {
+            MM_umm len;
+            if ((c & 0xF8) == 0xF0)
+            {
+                codepoint |= c & 0x07;
+                len = 4;
+            }
+            else if ((c & 0xF0) == 0xE0)
+            {
+                codepoint |= c & 0x0F;
+                len = 3;
+            }
+            else if ((c & 0xE0) == 0xC0)
+            {
+                codepoint |= c & 0x1F;
+                len = 2;
+            }
+            else
+            {
+                //// ERROR
+                return (MM_Token_Parse_Error){ .code = MM_TokenParseError_InvalidFirstByteOfUTF8, .index = i };
+            }
+            
+            MM_umm j = i + 1;
+            for (; j < i + len && j < token.size - 1; ++j)
+            {
+                c = token.data[j];
+                if ((c & 0xC0) == 0x80) break;
+                else
+                {
+                    codepoint <<= 6;
+                    codepoint  |= c & 0x3F;
+                }
+            }
+            
+            if (i + j == token.size - 1) i += len;
+            else
+            {
+                //// ERROR
+                MM_ASSERT(i + j < token.size);
+                MM_umm diff = (i + len) - j;
+                if      (diff == 1) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_Missing1TrailingByteUTF8, .index = i + j };
+                else if (diff == 2) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_Missing2TrailingByteUTF8, .index = i + j };
+                else if (diff == 3) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_Missing3TrailingByteUTF8, .index = i + j };
+            }
+        }
+        else
+        {
+            codepoint = c;
+            i += 1;
+        }
+        
+        if (i > token.size - 1)
+        {
+            //// ERROR
+            return (MM_Token_Parse_Error){ .code = MM_TokenParseError_MoreThanOneCodepoint, .index = i };
+        }
+        else MM_ASSERT(i == token.size - 1 && token.data[i] == '\'');
+    }
+    
+    *result = codepoint;
+    
+    return (MM_Token_Parse_Error){ .code = MM_TokenParseError_None };
+}
+
+MM_Token_Parse_Error
+MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
+{
+    MM_ASSERT(token.size >= 2 && token.data[0] == '"');
+    
+    result->data = buffer;
+    result->size = 0;
+    
+    MM_umm i = 1;
+    while (i < token.size - 1)
+    {
+        char c = token.data[i];
+        
+        if (c == '\\')
+        {
+            i += 1;
+            
+            MM_u32 codepoint;
+            MM_Token_Parse_Error error = MM_Token__ParseEscSeq(token, &codepoint, &i);
+            
+            if (error.code != MM_TokenParseError_None) return error;
+            else
+            {
+                if (codepoint <= 0x7F)
+                {
+                    result->data[result->size++] = (MM_u8)codepoint;
+                }
+                else if (codepoint <= 0x07FF)
+                {
+                    result->data[result->size++] = (MM_u8)((codepoint >> 6)   | 0xC0);
+                    result->data[result->size++] = (MM_u8)((codepoint & 0x3F) | 0x80);
+                }
+                else if (codepoint <= 0xFFFF)
+                {
+                    result->data[result->size++] = (MM_u8)((codepoint >> 12)         | 0xE0);
+                    result->data[result->size++] = (MM_u8)(((codepoint >> 6) & 0x3F) | 0x80);
+                    result->data[result->size++] = (MM_u8)((codepoint & 0x3F)        | 0x80);
+                }
+                else if (codepoint <= 0x10FFFF)
+                {
+                    result->data[result->size++] = (MM_u8)((codepoint >> 18)          | 0xF0);
+                    result->data[result->size++] = (MM_u8)(((codepoint >> 12) & 0x3F) | 0x80);
+                    result->data[result->size++] = (MM_u8)(((codepoint >> 6)  & 0x3F) | 0x80);
+                    result->data[result->size++] = (MM_u8)((codepoint & 0x3F)         | 0x80);
+                }
+                else
+                {
+                    //// ERROR
+                    return (MM_Token_Parse_Error){ .code = MM_TokenParseError_CodepointOutOfRange, .index = i };
+                }
+            }
+        }
+        else if ((c & 0x80) != 0)
+        {
+            MM_umm len;
+            if      ((c & 0xF8) == 0xF0) len = 4;
+            else if ((c & 0xF0) == 0xE0) len = 3;
+            else if ((c & 0xE0) == 0xC0) len = 2;
+            else
+            {
+                //// ERROR
+                return (MM_Token_Parse_Error){ .code = MM_TokenParseError_InvalidFirstByteOfUTF8, .index = i };
+            }
+            
+            result->data[result->size++] = c;
+            
+            MM_umm j = i + 1;
+            for (; j < i + len && j < token.size - 1; ++j)
+            {
+                c = token.data[j];
+                if ((c & 0xC0) == 0x80) break;
+                else result->data[result->size++] = c;
+            }
+            
+            if (i + j == token.size - 1) i += len;
+            else
+            {
+                //// ERROR
+                MM_ASSERT(i + j < token.size);
+                MM_umm diff = (i + len) - j;
+                if      (diff == 1) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_Missing1TrailingByteUTF8, .index = i + j };
+                else if (diff == 2) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_Missing2TrailingByteUTF8, .index = i + j };
+                else if (diff == 3) return (MM_Token_Parse_Error){ .code = MM_TokenParseError_Missing3TrailingByteUTF8, .index = i + j };
+            }
+        }
+        else
+        {
+            result->data[result->size++] = c;
+            i += 1;
+        }
+    }
+    
+    MM_ASSERT(i == token.size - 1 && token.data[i] == '"');
+    
+    return (MM_Token_Parse_Error){ .code = MM_TokenParseError_None };
 }

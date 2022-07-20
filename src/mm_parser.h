@@ -234,9 +234,21 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
     }
     else if (MM_IsToken(MM_Token_Codepoint))
     {
-        *expression = MM_Parser_PushNode(parser, MM_AST_Codepoint);
-        //(*expression)->codepoint = ;
-        MM_NOT_IMPLEMENTED;
+        MM_Token token = MM_GetToken();
+        
+        MM_u32 codepoint;
+        MM_Token_Parse_Error error = MM_Token_ParseCodepoint(token, &codepoint);
+        
+        if (error.code != MM_TokenParseError_None)
+        {
+            //// ERROR
+            MM_NOT_IMPLEMENTED;
+        }
+        else
+        {
+            *expression = MM_Parser_PushNode(parser, MM_AST_Codepoint);
+            (*expression)->codepoint = codepoint;
+        }
     }
     else if (MM_IsTokenGroup(MM_TokenGroup_Keyword))
     {
