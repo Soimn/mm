@@ -1,21 +1,24 @@
+MM_TYPEDEF_FUNC(void*, MM_Parser_push_node_func, void* user_data, MM_AST_Kind kind);
+MM_TYPEDEF_FUNC(MM_Identifier, MM_Parser_push_identifier_func, void* user_data, MM_Token token);
+MM_TYPEDEF_FUNC(MM_Token_Parse_Error, MM_Parser_push_string_func, void* user_data, MM_Token token, MM_String_Literal* result);
+
 typedef struct MM_Parser
 {
     MM_Lexer lexer;
+    void* user_data;
+    MM_Parser_push_node_func PushNode;
+    MM_Parser_push_identifier_func PushIdentifier;
+    MM_Parser_push_string_func PushString;
 } MM_Parser;
-
-inline void*
-MM_Parser_PushNode(MM_Parser* parser, MM_u32 kind)
-{
-    void* result = 0;
-    MM_NOT_IMPLEMENTED;
-    return result;
-}
 
 #define MM_GetToken() MM_Lexer_CurrentToken(&parser->lexer)
 #define MM_NextToken() MM_Lexer_NextToken(&parser->lexer)
 #define MM_IsToken(k) (MM_GetToken().kind == (k))
 #define MM_IsTokenGroup(k) (MM_GetToken().kind_group == (k))
 #define MM_EatToken(k) (MM_GetToken().kind == (k) ? MM_Lexer_NextToken(&parser->lexer), MM_true : MM_false)
+#define MM_PushNode(k) (parser->PushNode(parser->user_data, (MM_AST_Kind){ .kind = (k) }))
+#define MM_PushIdentifier(tok) (parser->PushIdentifier(parser->user_data, (tok)))
+#define MM_PushString(tok, str) (parser->PushString(parser->user_data, (tok), (str)))
 
 MM_bool MM_Parser_ParseExpression(MM_Parser* parser, MM_Expression** expression);
 MM_bool MM_Parser_ParseBlock(MM_Parser* parser, MM_Block_Statement** statement);
@@ -39,7 +42,7 @@ MM_Parser_ParseArguments(MM_Parser* parser, MM_Argument** args)
             if (!MM_Parser_ParseExpression(parser, &value)) return MM_false;
         }
         
-        *next_arg = MM_Parser_PushNode(parser, MM_AST_Argument);
+        *next_arg = MM_PushNode(MM_AST_Argument);
         (*next_arg)->name  = name;
         (*next_arg)->value = value;
         
@@ -78,7 +81,7 @@ MM_Parser_ParseParameters(MM_Parser* parser, MM_Parameter** params)
             MM_Expression* next_expr = expr->next;
             expr->next = 0;
             
-            *next_param = MM_Parser_PushNode(parser, MM_AST_Parameter);
+            *next_param = MM_PushNode(MM_AST_Parameter);
             (*next_param)->names = 0;
             (*next_param)->type  = expr;
             (*next_param)->value = 0;
@@ -114,7 +117,7 @@ MM_Parser_ParseParameters(MM_Parser* parser, MM_Parameter** params)
                         if (!MM_Parser_ParseExpression(parser, &value)) return MM_false;
                     }
                     
-                    *next_param = MM_Parser_PushNode(parser, MM_AST_Parameter);
+                    *next_param = MM_PushNode(MM_AST_Parameter);
                     (*next_param)->names = names;
                     (*next_param)->type  = type;
                     (*next_param)->value = value;
@@ -164,7 +167,7 @@ MM_Parser_ParseStructLiteral(MM_Parser* parser, MM_Expression* type, MM_Expressi
         return MM_false;
     }
     
-    *expression = MM_Parser_PushNode(parser, MM_AST_StructLiteral);
+    *expression = MM_PushNode(MM_AST_StructLiteral);
     (*expression)->unary_expr.struct_lit_expr.type = 0;
     (*expression)->unary_expr.struct_lit_expr.args = args;
     
@@ -188,7 +191,7 @@ MM_Parser_ParseArrayLiteral(MM_Parser* parser, MM_Expression* elem_type, MM_Expr
         return MM_false;
     }
     
-    *expression = MM_Parser_PushNode(parser, MM_AST_ArrayLiteral);
+    *expression = MM_PushNode(MM_AST_ArrayLiteral);
     (*expression)->unary_expr.array_lit_expr.elem_type = elem_type;
     (*expression)->unary_expr.array_lit_expr.args      = args;
     
@@ -200,8 +203,8 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
 {
     if (MM_IsToken(MM_Token_Identifier) || MM_IsToken(MM_Token_BlankIdentifier))
     {
-        // MM_AST_Identifier,
-        MM_NOT_IMPLEMENTED;
+        *expression = MM_PushNode(MM_AST_Identifier);
+        (*expression)->identifier = MM_PushIdentifier(MM_GetToken());
     }
     else if (MM_IsTokenGroup(MM_TokenGroup_Integer))
     {
@@ -210,7 +213,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         MM_u8 explicit_base = (token.kind == MM_Token_BinaryInt ? 2  :
                                token.kind == MM_Token_HexInt    ? 16 : 10);
         
-        *expression = MM_Parser_PushNode(parser, MM_AST_Int);
+        *expression = MM_PushNode(MM_AST_Int);
         (*expression)->int_expr.value         = MM_Token_ParseInt(token);
         (*expression)->int_expr.explicit_base = explicit_base;
     }
@@ -222,15 +225,24 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                                token.kind == MM_Token_HexFloat16 ? 2 :
                                token.kind == MM_Token_HexFloat32 ? 4 : 8);
         
-        *expression = MM_Parser_PushNode(parser, MM_AST_Float);
+        *expression = MM_PushNode(MM_AST_Float);
         (*expression)->float_expr.value         = MM_Token_ParseFloat(token);
         (*expression)->float_expr.explicit_size = explicit_size;
     }
     else if (MM_IsToken(MM_Token_String))
     {
-        *expression = MM_Parser_PushNode(parser, MM_AST_String);
-        //(*expression)->string = ;
-        MM_NOT_IMPLEMENTED;
+        MM_String_Literal string;
+        MM_Token_Parse_Error error = MM_PushString(MM_GetToken(), &string);
+        if (error.code != MM_TokenParseError_None)
+        {
+            //// ERROR
+            MM_NOT_IMPLEMENTED;
+        }
+        else
+        {
+            *expression = MM_PushNode(MM_AST_String);
+            (*expression)->string = string;
+        }
     }
     else if (MM_IsToken(MM_Token_Codepoint))
     {
@@ -246,7 +258,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         }
         else
         {
-            *expression = MM_Parser_PushNode(parser, MM_AST_Codepoint);
+            *expression = MM_PushNode(MM_AST_Codepoint);
             (*expression)->codepoint = codepoint;
         }
     }
@@ -257,12 +269,12 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             MM_bool boolean = MM_IsToken(MM_Token_True);
             MM_NextToken();
             
-            *expression = MM_Parser_PushNode(parser, MM_AST_Bool);
+            *expression = MM_PushNode(MM_AST_Bool);
             (*expression)->boolean = boolean;
         }
         else if (MM_EatToken(MM_Token_This))
         {
-            *expression = MM_Parser_PushNode(parser, MM_AST_This);
+            *expression = MM_PushNode(MM_AST_This);
         }
         else if (MM_EatToken(MM_Token_Proc))
         {
@@ -291,7 +303,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                     MM_Expression* type = 0;
                     if (!MM_Parser_ParseExpression(parser, &type)) return MM_false;
                     
-                    return_values = MM_Parser_PushNode(parser, MM_AST_ReturnValue);
+                    return_values = MM_PushNode(MM_AST_ReturnValue);
                     return_values->next  = 0;
                     return_values->names = 0;
                     return_values->type  = type;
@@ -321,7 +333,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                             MM_Expression* next_expr = expr->next;
                             expr->next = 0;
                             
-                            *next_ret_val = MM_Parser_PushNode(parser, MM_AST_ReturnValue);
+                            *next_ret_val = MM_PushNode(MM_AST_ReturnValue);
                             (*next_ret_val)->names = 0;
                             (*next_ret_val)->type  = expr;
                             (*next_ret_val)->value = 0;
@@ -357,7 +369,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                                         if (!MM_Parser_ParseExpression(parser, &value)) return MM_false;
                                     }
                                     
-                                    *next_ret_val = MM_Parser_PushNode(parser, MM_AST_ReturnValue);
+                                    *next_ret_val = MM_PushNode(MM_AST_ReturnValue);
                                     (*next_ret_val)->names = names;
                                     (*next_ret_val)->type  = type;
                                     (*next_ret_val)->value = value;
@@ -391,13 +403,13 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             
             if (MM_EatToken(MM_Token_TripleMinus))
             {
-                *expression = MM_Parser_PushNode(parser, MM_AST_ProcLiteralFwdDecl);
+                *expression = MM_PushNode(MM_AST_ProcLiteralFwdDecl);
                 (*expression)->proc_lit_fwd_decl_expr.params      = params;
                 (*expression)->proc_lit_fwd_decl_expr.return_vals = return_values;
             }
             else if (!MM_IsToken(MM_Token_OpenBrace))
             {
-                *expression = MM_Parser_PushNode(parser, MM_AST_Proc);
+                *expression = MM_PushNode(MM_AST_Proc);
                 (*expression)->proc_expr.params      = params;
                 (*expression)->proc_expr.return_vals = return_values;
             }
@@ -407,7 +419,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                 
                 if (!MM_Parser_ParseBlock(parser, &body)) return MM_false;
                 
-                *expression = MM_Parser_PushNode(parser, MM_AST_ProcLiteral);
+                *expression = MM_PushNode(MM_AST_ProcLiteral);
                 (*expression)->proc_lit_expr.params      = params;
                 (*expression)->proc_lit_expr.return_vals = return_values;
                 (*expression)->proc_lit_expr.body        = body;
@@ -417,7 +429,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         {
             if (MM_EatToken(MM_Token_TripleMinus))
             {
-                *expression = MM_Parser_PushNode(parser, MM_AST_ProcSetFwdDecl);
+                *expression = MM_PushNode(MM_AST_ProcSetFwdDecl);
             }
             else
             {
@@ -453,7 +465,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                     }
                     else
                     {
-                        *expression = MM_Parser_PushNode(parser, MM_AST_ProcSet);
+                        *expression = MM_PushNode(MM_AST_ProcSet);
                         (*expression)->proc_set_expr.members = members;
                     }
                 }
@@ -466,7 +478,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             
             if (MM_EatToken(MM_Token_TripleMinus))
             {
-                *expression = MM_Parser_PushNode(parser, MM_AST_StructFwdDecl);
+                *expression = MM_PushNode(MM_AST_StructFwdDecl);
             }
             else
             {
@@ -527,12 +539,12 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                     
                     if (is_struct)
                     {
-                        *expression = MM_Parser_PushNode(parser, MM_AST_Struct);
+                        *expression = MM_PushNode(MM_AST_Struct);
                         (*expression)->struct_expr.body = body;
                     }
                     else
                     {
-                        *expression = MM_Parser_PushNode(parser, MM_AST_Union);
+                        *expression = MM_PushNode(MM_AST_Union);
                         (*expression)->union_expr.body = body;
                     }
                 }
@@ -549,7 +561,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             
             if (MM_EatToken(MM_Token_TripleMinus))
             {
-                *expression = MM_Parser_PushNode(parser, MM_AST_EnumFwdDecl);
+                *expression = MM_PushNode(MM_AST_EnumFwdDecl);
                 (*expression)->enum_fwd_decl_expr.member_type = member_type;
             }
             else
@@ -579,7 +591,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                                 if (!MM_Parser_ParseExpression(parser, &value)) return MM_false;
                             }
                             
-                            *next_member = MM_Parser_PushNode(parser, MM_AST_EnumMember);
+                            *next_member = MM_PushNode(MM_AST_EnumMember);
                             (*next_member)->name  = name;
                             (*next_member)->value = value;
                             
@@ -597,7 +609,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                         return MM_false;
                     }
                     
-                    *expression = MM_Parser_PushNode(parser, MM_AST_Enum);
+                    *expression = MM_PushNode(MM_AST_Enum);
                     (*expression)->enum_expr.member_type = member_type;
                     (*expression)->enum_expr.members     = members;
                 }
@@ -643,7 +655,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             }
             else
             {
-                *expression = MM_Parser_PushNode(parser, kind.kind);
+                *expression = MM_PushNode(kind.kind);
                 (*expression)->builtin_expr.args = args;
             }
         }
@@ -660,7 +672,7 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             return MM_false;
         }
         
-        *expression = MM_Parser_PushNode(parser, MM_AST_Compound);
+        *expression = MM_PushNode(MM_AST_Compound);
         (*expression)->compound_expr.body = body;
     }
     else if (MM_EatToken(MM_Token_PeriodOpenBrace))
@@ -701,7 +713,7 @@ MM_Parser_ParsePostfixUnaryExpression(MM_Parser* parser, MM_Expression** express
         {
             MM_Expression* operand = *expression;
             
-            *expression = MM_Parser_PushNode(parser, MM_AST_Dereference);
+            *expression = MM_PushNode(MM_AST_Dereference);
             (*expression)->unary_expr.operand = operand;
         }
         else if (MM_EatToken(MM_Token_Period))
@@ -712,13 +724,16 @@ MM_Parser_ParsePostfixUnaryExpression(MM_Parser* parser, MM_Expression** express
                 MM_NOT_IMPLEMENTED;
                 return MM_false;
             }
-            
-            MM_Expression* symbol = *expression;
-            MM_Identifier member = {}; MM_NOT_IMPLEMENTED;
-            
-            *expression = MM_Parser_PushNode(parser, MM_AST_MemberAccess);
-            (*expression)->unary_expr.member_access_expr.symbol = symbol;
-            (*expression)->unary_expr.member_access_expr.member = member;
+            else
+            {
+                MM_Expression* symbol = *expression;
+                MM_Identifier member  = MM_PushIdentifier(MM_GetToken());
+                MM_NextToken();
+                
+                *expression = MM_PushNode(MM_AST_MemberAccess);
+                (*expression)->unary_expr.member_access_expr.symbol = symbol;
+                (*expression)->unary_expr.member_access_expr.member = member;
+            }
         }
         else if (MM_EatToken(MM_Token_OpenBracket))
         {
@@ -747,7 +762,7 @@ MM_Parser_ParsePostfixUnaryExpression(MM_Parser* parser, MM_Expression** express
                     return MM_false;
                 }
                 
-                *expression = MM_Parser_PushNode(parser, MM_AST_Slice);
+                *expression = MM_PushNode(MM_AST_Slice);
                 (*expression)->unary_expr.slice_expr.array    = array;
                 (*expression)->unary_expr.slice_expr.start    = start;
                 (*expression)->unary_expr.slice_expr.past_end = past_end;
@@ -761,7 +776,7 @@ MM_Parser_ParsePostfixUnaryExpression(MM_Parser* parser, MM_Expression** express
                     return MM_false;
                 }
                 
-                *expression = MM_Parser_PushNode(parser, MM_AST_Subscript);
+                *expression = MM_PushNode(MM_AST_Subscript);
                 (*expression)->unary_expr.subscript_expr.array = array;
                 (*expression)->unary_expr.subscript_expr.index = first;
             }
@@ -783,7 +798,7 @@ MM_Parser_ParsePostfixUnaryExpression(MM_Parser* parser, MM_Expression** express
                 return MM_false;
             }
             
-            *expression = MM_Parser_PushNode(parser, MM_AST_Call);
+            *expression = MM_PushNode(MM_AST_Call);
             (*expression)->unary_expr.call_expr.proc = proc;
             (*expression)->unary_expr.call_expr.args = args;
         }
@@ -808,29 +823,29 @@ MM_Parser_ParsePrefixUnaryExpression(MM_Parser* parser, MM_Expression** expressi
     {
         if (MM_EatToken(MM_Token_Hat))
         {
-            *expression = MM_Parser_PushNode(parser, MM_AST_Reference);
+            *expression = MM_PushNode(MM_AST_Reference);
             expression = &(*expression)->unary_expr.operand;
         }
         else if (MM_EatToken(MM_Token_Minus))
         {
-            *expression = MM_Parser_PushNode(parser, MM_AST_Neg);
+            *expression = MM_PushNode(MM_AST_Neg);
             expression = &(*expression)->unary_expr.operand;
         }
         else if (MM_EatToken(MM_Token_Tilde))
         {
-            *expression = MM_Parser_PushNode(parser, MM_AST_BitNot);
+            *expression = MM_PushNode(MM_AST_BitNot);
             expression = &(*expression)->unary_expr.operand;
         }
         else if (MM_EatToken(MM_Token_Bang))
         {
-            *expression = MM_Parser_PushNode(parser, MM_AST_Not);
+            *expression = MM_PushNode(MM_AST_Not);
             expression = &(*expression)->unary_expr.operand;
         }
         else if (MM_EatToken(MM_Token_OpenBracket))
         {
             if (MM_EatToken(MM_Token_CloseBracket))
             {
-                *expression = MM_Parser_PushNode(parser, MM_AST_SliceType);
+                *expression = MM_PushNode(MM_AST_SliceType);
                 expression = &(*expression)->unary_expr.operand;
             }
             else
@@ -838,7 +853,7 @@ MM_Parser_ParsePrefixUnaryExpression(MM_Parser* parser, MM_Expression** expressi
                 MM_Expression* size = 0;
                 if (!MM_Parser_ParseExpression(parser, &size)) return MM_false;
                 
-                *expression = MM_Parser_PushNode(parser, MM_AST_ArrayType);
+                *expression = MM_PushNode(MM_AST_ArrayType);
                 (*expression)->unary_expr.array_type_expr.size = size;
                 expression = &(*expression)->unary_expr.array_type_expr.elem_type;
             }
@@ -882,7 +897,7 @@ MM_Parser_ParseBinaryExpression(MM_Parser* parser, MM_Expression** expression)
             
             MM_Expression* left = *spot;
             
-            *spot = MM_Parser_PushNode(parser, kind.kind);
+            *spot = MM_PushNode(kind.kind);
             (*spot)->binary_expr.left  = left;
             (*spot)->binary_expr.right = right;
         }
@@ -913,7 +928,7 @@ MM_Parser_ParseConditionalExpression(MM_Parser* parser, MM_Expression** expressi
         
         if (!MM_Parser_ParseBinaryExpression(parser, &false_expr)) return MM_false;
         
-        *expression = MM_Parser_PushNode(parser, MM_AST_Conditional);
+        *expression = MM_PushNode(MM_AST_Conditional);
         (*expression)->conditional_expr.condition  = condition;
         (*expression)->conditional_expr.true_expr  = true_expr;
         (*expression)->conditional_expr.false_expr = false_expr;
@@ -931,14 +946,227 @@ MM_Parser_ParseExpression(MM_Parser* parser, MM_Expression** expression)
 MM_bool
 MM_Parser_ParseBlock(MM_Parser* parser, MM_Block_Statement** block)
 {
-    MM_NOT_IMPLEMENTED;
+    MM_ASSERT(MM_IsToken(MM_Token_OpenBrace));
+    MM_NextToken();
+    
+    MM_Statement* body = 0;
+    MM_Statement** next_statement = &body;
+    while (!MM_IsToken(MM_Token_CloseBrace))
+    {
+        if (MM_IsToken(MM_Token_EndOfStream))
+        {
+            //// ERROR: Hit end of stream before closing brace
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else if (!MM_Parser_ParseStatement(parser, next_statement)) return MM_false;
+        else
+        {
+            next_statement = &(*next_statement)->next;
+            continue;
+        }
+    }
+    
+    MM_ASSERT(MM_IsToken(MM_Token_CloseBrace));
+    MM_NextToken();
+    
+    *block = MM_PushNode(MM_AST_Block);
+    (*block)->body = body;
+    
     return MM_true;
 }
 
 MM_bool
 MM_Parser__ParseDeclAssignmentOrExpression(MM_Parser* parser, MM_Statement** statement)
 {
-    MM_NOT_IMPLEMENTED;
+    MM_bool is_using = MM_EatToken(MM_Token_Using);
+    
+    MM_Expression* expressions = 0;
+    MM_Expression** next_expr = &expressions;
+    while (MM_true)
+    {
+        if (!MM_Parser_ParseExpression(parser, next_expr)) return MM_false;
+        else
+        {
+            next_expr = &(*next_expr)->next;
+            
+            if (MM_EatToken(MM_Token_Comma)) continue;
+            else                             break;
+        }
+    }
+    
+    if (MM_EatToken(MM_Token_Colon))
+    {
+        MM_Expression* names = expressions;
+        MM_Expression* type  = 0;
+        
+        if (!MM_IsToken(MM_Token_Colon) && !MM_IsToken(MM_Token_Equals))
+        {
+            if (!MM_Parser_ParseExpression(parser, &type)) return MM_false;
+        }
+        
+        if (MM_EatToken(MM_Token_Colon))
+        {
+            if (MM_EatToken(MM_Token_TripleMinus))
+            {
+                if (type == 0)
+                {
+                    //// ERROR: Missing type of forward declared constant
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+                else
+                {
+                    *statement = MM_PushNode(MM_AST_ConstantFwdDecl);
+                    ((MM_Constant_Fwd_Declaration*)*statement)->names  = names;
+                    ((MM_Constant_Fwd_Declaration*)*statement)->type   = type;
+                }
+            }
+            else
+            {
+                MM_Expression* values = 0;
+                
+                MM_Expression** next_value = &values;
+                while (MM_true)
+                {
+                    if (!MM_Parser_ParseExpression(parser, next_value)) return MM_false;
+                    else
+                    {
+                        next_value = &(*next_value)->next;
+                        
+                        if (MM_EatToken(MM_Token_Comma)) continue;
+                        else                             break;
+                    }
+                }
+                
+                *statement = MM_PushNode(MM_AST_Constant);
+                ((MM_Constant_Declaration*)*statement)->names    = names;
+                ((MM_Constant_Declaration*)*statement)->type     = type;
+                ((MM_Constant_Declaration*)*statement)->values   = values;
+                ((MM_Constant_Declaration*)*statement)->is_using = is_using;
+            }
+        }
+        else
+        {
+            MM_Expression* values    = 0;
+            MM_bool is_uninitialized = MM_false;
+            if (MM_EatToken(MM_Token_Equals))
+            {
+                if (MM_EatToken(MM_Token_TripleMinus)) is_uninitialized = MM_true;
+                else
+                {
+                    MM_Expression** next_value = &values;
+                    while (MM_true)
+                    {
+                        if (!MM_Parser_ParseExpression(parser, next_value)) return MM_false;
+                        else
+                        {
+                            next_value = &(*next_value)->next;
+                            
+                            if (MM_EatToken(MM_Token_Comma)) continue;
+                            else                             break;
+                        }
+                    }
+                }
+            }
+            
+            *statement = MM_PushNode(MM_AST_Variable);
+            ((MM_Variable_Declaration*)*statement)->names            = names;
+            ((MM_Variable_Declaration*)*statement)->type             = type;
+            ((MM_Variable_Declaration*)*statement)->values           = values;
+            ((MM_Variable_Declaration*)*statement)->is_using         = is_using;
+            ((MM_Variable_Declaration*)*statement)->is_uninitialized = is_uninitialized;
+        }
+    }
+    else
+    {
+        MM_Token token = MM_GetToken();
+        
+        if (token.kind >= MM_Token_FirstAssignment && token.kind <= MM_Token_LastAssignment)
+        {
+            if (is_using)
+            {
+                //// ERROR: Invalid use of using on assignment statement
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else
+            {
+                MM_AST_Kind kind = {
+                    .kind_type      = MM_ASTType_Statement,
+                    .kind_group     = MM_ASTGroup_Assignment,
+                    .kind_sub_group = MM_AST_None,
+                    .kind_index     = token.kind_index,
+                };
+                
+                MM_NextToken();
+                
+                MM_Expression* lhs = expressions;
+                MM_Expression* rhs = 0;
+                
+                MM_Expression** next_value = &rhs;
+                while (MM_true)
+                {
+                    if (!MM_Parser_ParseExpression(parser, next_value)) return MM_false;
+                    else
+                    {
+                        next_value = &(*next_value)->next;
+                        
+                        if (MM_EatToken(MM_Token_Comma)) continue;
+                        else                             break;
+                    }
+                }
+                
+                *statement = MM_PushNode(kind.kind);
+                (*statement)->assignment_statement.lhs = lhs;
+                (*statement)->assignment_statement.rhs = rhs;
+            }
+        }
+        else if (is_using)
+        {
+            if (expressions->next != 0)
+            {
+                //// ERROR: Cannot alias multiple symbols in one using statement
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else
+            {
+                MM_Expression* symbol = expressions;
+                MM_Identifier alias   = {};
+                
+                if (MM_EatToken(MM_Token_As))
+                {
+                    if (!MM_IsToken(MM_Token_Identifier))
+                    {
+                        //// ERROR: Missing name of alias
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    else
+                    {
+                        alias = MM_PushIdentifier(MM_GetToken());
+                        MM_NextToken();
+                    }
+                }
+                
+                *statement = MM_PushNode(MM_AST_Using);
+                ((MM_Using_Declaration*)*statement)->symbol = symbol;
+                ((MM_Using_Declaration*)*statement)->alias  = alias;
+            }
+        }
+        else
+        {
+            if (expressions->next != 0)
+            {
+                //// ERROR: Illegal use of expression list by itself
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else *statement = (MM_Statement*)expressions;
+        }
+    }
+    
     return MM_true;
 }
 
@@ -956,6 +1184,34 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         //// ERROR: Else without matching if
         MM_NOT_IMPLEMENTED;
         return MM_false;
+    }
+    else if (MM_EatToken(MM_Token_Colon))
+    {
+        if (!MM_IsToken(MM_Token_Identifier))
+        {
+            //// ERROR: Missing name of label
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            MM_Identifier label = MM_PushIdentifier(MM_GetToken());
+            MM_NextToken();
+            
+            if (!MM_Parser_ParseStatement(parser, statement)) return MM_false;
+            else
+            {
+                if      ((*statement)->kind == MM_AST_If)    (*statement)->if_statement.label    = label;
+                else if ((*statement)->kind == MM_AST_While) (*statement)->while_statement.label = label;
+                else if ((*statement)->kind == MM_AST_Block) (*statement)->block_statement.label = label;
+                else
+                {
+                    //// ERROR: Statement label cannot be applied on x
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+            }
+        }
     }
     else if (MM_IsToken(MM_Token_OpenBrace))
     {
@@ -976,6 +1232,12 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
             if (!MM_IsToken(MM_Token_Semicolon))
             {
                 if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &first)) return MM_false;
+                else if (first->kind_type == MM_ASTType_Statement)
+                {
+                    //// ERROR: Invalid use of labeled statement as init in if statement
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
             }
             
             MM_Statement* init       = 0;
@@ -1016,7 +1278,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
                         if (!MM_Parser_ParseStatement(parser, &false_body)) return MM_false;
                     }
                     
-                    *statement = MM_Parser_PushNode(parser, MM_AST_If);
+                    *statement = MM_PushNode(MM_AST_If);
                     (*statement)->if_statement.init       = init;
                     (*statement)->if_statement.condition  = condition;
                     (*statement)->if_statement.true_body  = true_body;
@@ -1059,7 +1321,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
                             if (!MM_Parser_ParseStatement(parser, &false_body)) return MM_false;
                         }
                         
-                        *statement = MM_Parser_PushNode(parser, MM_AST_When);
+                        *statement = MM_PushNode(MM_AST_When);
                         (*statement)->when_statement.condition  = condition;
                         (*statement)->when_statement.true_body  = true_body;
                         (*statement)->when_statement.false_body = false_body;
@@ -1083,6 +1345,12 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
             if (!MM_IsToken(MM_Token_Semicolon))
             {
                 if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &first)) return MM_false;
+                else if (first->kind_type == MM_ASTType_Statement)
+                {
+                    //// ERROR: Invalid use of labeled statement as init in while statement
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
             }
             
             MM_Statement* init       = 0;
@@ -1122,6 +1390,12 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
                 if (MM_EatToken(MM_Token_Semicolon))
                 {
                     if (!MM_Parser__ParseDeclAssignmentOrExpression(parser, &step)) return MM_false;
+                    else if (first->kind_type == MM_ASTType_Statement)
+                    {
+                        //// ERROR: Invalid use of labeled statement as step in while statement
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
                 }
             }
             
@@ -1137,7 +1411,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
                 if (!MM_Parser_ParseStatement(parser, &body)) return MM_false;
                 else
                 {
-                    *statement = MM_Parser_PushNode(parser, MM_AST_While);
+                    *statement = MM_PushNode(MM_AST_While);
                     (*statement)->while_statement.init      = init;
                     (*statement)->while_statement.condition = condition;
                     (*statement)->while_statement.step      = step;
@@ -1150,11 +1424,22 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
     {
         MM_u32 kind = (MM_IsToken(MM_Token_Continue) ? MM_AST_Continue : MM_AST_Break);
         
-        MM_Expression* label = 0;
+        // TODO: none vs. blank vs. label
+        MM_Identifier label = {};
         
         if (!MM_IsToken(MM_Token_Semicolon))
         {
-            if (!MM_Parser_ParseExpression(parser, &label)) return MM_false;
+            if (MM_IsToken(MM_Token_Identifier))
+            {
+                label = MM_PushIdentifier(MM_GetToken());
+                MM_NextToken();
+            }
+            else
+            {
+                //// ERROR: Expected name of jump label
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
         }
         
         if (!MM_EatToken(MM_Token_Semicolon))
@@ -1165,7 +1450,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         }
         else
         {
-            *statement = MM_Parser_PushNode(parser, kind);
+            *statement = MM_PushNode(kind);
             (*statement)->jump_statement.label = label;
         }
     }
@@ -1175,7 +1460,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         
         if (!MM_Parser_ParseStatement(parser, &body)) return MM_false;
         
-        *statement = MM_Parser_PushNode(parser, MM_AST_Defer);
+        *statement = MM_PushNode(MM_AST_Defer);
         (*statement)->defer_statement.body = body;
     }
     else if (MM_EatToken(MM_Token_Return))
@@ -1195,7 +1480,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         }
         else
         {
-            *statement = MM_Parser_PushNode(parser, MM_AST_Return);
+            *statement = MM_PushNode(MM_AST_Return);
             (*statement)->return_statement.args = args;
         }
     }
@@ -1206,7 +1491,8 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         {
             MM_bool should_have_semi = MM_true;
             
-            if ((*statement)->kind == MM_AST_ConstantFwdDecl) should_have_semi = MM_false;
+            if      ((*statement)->kind_type == MM_ASTType_Statement) should_have_semi = MM_false;
+            else if ((*statement)->kind == MM_AST_ConstantFwdDecl) should_have_semi    = MM_false;
             else if ((*statement)->kind == MM_AST_Constant && ((MM_Constant_Declaration*)*statement)->values->next == 0)
             {
                 MM_u32 kind = ((MM_Constant_Declaration*)*statement)->values->kind;
@@ -1220,7 +1506,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
             {
                 if (!MM_EatToken(MM_Token_Semicolon))
                 {
-                    //// ERROR: Missing semicolon after x statement
+                    //// ERROR: Missing semicolon after x
                     MM_NOT_IMPLEMENTED;
                     return MM_false;
                 }
@@ -1229,7 +1515,7 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
             {
                 if (MM_IsToken(MM_Token_Semicolon))
                 {
-                    //// ERROR: Stray semicolon after x declaration
+                    //// ERROR: Stray semicolon after x
                     MM_NOT_IMPLEMENTED;
                     return MM_false;
                 }
@@ -1237,7 +1523,6 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         }
     }
     
-    MM_NOT_IMPLEMENTED;
     return MM_true;
 }
 
@@ -1246,3 +1531,6 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
 #undef MM_IsToken
 #undef MM_IsTokenGroup
 #undef MM_EatToken
+#undef MM_PushNode
+#undef MM_PushIdentifier
+#undef MM_PushString

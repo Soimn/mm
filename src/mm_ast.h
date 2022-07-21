@@ -418,31 +418,33 @@ typedef struct MM_Variable_Declaration
 {
     MM_DECLARATION_HEADER();
     MM_Expression* names;
-    MM_Expression* types;
+    MM_Expression* type;
     MM_Expression* values;
     MM_bool is_uninitialized;
+    MM_bool is_using;
 } MM_Variable_Declaration;
 
 typedef struct MM_Constant_Declaration
 {
     MM_DECLARATION_HEADER();
     MM_Expression* names;
-    MM_Expression* types;
+    MM_Expression* type;
     MM_Expression* values;
+    MM_bool is_using;
 } MM_Constant_Declaration;
 
 typedef struct MM_Constant_Fwd_Declaration
 {
     MM_DECLARATION_HEADER();
     MM_Expression* names;
-    MM_Expression* types;
+    MM_Expression* type;
 } MM_Constant_Fwd_Declaration;
 
 typedef struct MM_Using_Declaration
 {
     MM_DECLARATION_HEADER();
-    MM_Expression* symbols;
-    MM_Expression* aliases;
+    MM_Expression* symbol;
+    MM_Identifier alias;
 } MM_Using_Declaration;
 
 typedef struct MM_When_Declaration
@@ -480,16 +482,17 @@ typedef struct MM_Block_Statement
 {
     MM_STATEMENT_HEADER();
     MM_Statement* body;
+    MM_Identifier label;
 } MM_Block_Statement;
 
 typedef struct MM_If_Statement
 {
     MM_STATEMENT_HEADER();
-    MM_Expression* label;
     MM_Statement* init;
     MM_Expression* condition;
     MM_Statement* true_body;
     MM_Statement* false_body;
+    MM_Identifier label;
 } MM_If_Statement;
 
 typedef struct MM_When_Statement
@@ -503,11 +506,11 @@ typedef struct MM_When_Statement
 typedef struct MM_While_Statement
 {
     MM_STATEMENT_HEADER();
-    MM_Expression* label;
     MM_Statement* init;
     MM_Expression* condition;
     MM_Statement* step;
     MM_Statement* body;
+    MM_Identifier label;
 } MM_While_Statement;
 
 typedef struct MM_Return_Statement
@@ -525,7 +528,7 @@ typedef struct MM_Defer_Statement
 typedef struct MM_Jump_Statement
 {
     MM_STATEMENT_HEADER();
-    MM_Expression* label;
+    MM_Identifier label;
 } MM_Jump_Statement;
 
 typedef struct MM_Assignment_Statement

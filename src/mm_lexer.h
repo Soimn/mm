@@ -37,30 +37,20 @@ enum MM_TOKEN_KIND
     
     MM_Token_FirstAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator),
     MM_Token_Equals = MM_Token_FirstAssignment,
-    
-    MM_Token_FirstBinaryAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 1*16,
-    MM_Token_FirstMulLevelAssignment = MM_Token_FirstAssignment,
-    MM_Token_StarEquals = MM_Token_FirstMulLevelAssignment,
+    MM_Token_StarEquals,
     MM_Token_SlashEquals,
     MM_Token_PercentEquals,
     MM_Token_AndEquals,
     MM_Token_LessLessEquals,
     MM_Token_GreaterGreaterEquals,
     MM_Token_TripleGreaterEquals,
-    MM_Token_LastMulLevelAssignment = MM_Token_GreaterGreaterEquals,
-    
-    MM_Token_FirstAddLevelAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 2*16,
-    MM_Token_TildeEquals = MM_Token_FirstAddLevelAssignment,
+    MM_Token_TildeEquals,
     MM_Token_OrEquals,
     MM_Token_MinusEquals,
     MM_Token_PlusEquals,
-    MM_Token_LastAddLevelAssignment = MM_Token_PlusEquals,
-    
-    MM_Token_AndAndEquals = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 4*16,
-    
-    MM_Token_OrOrEquals = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 5*16,
-    MM_Token_LastBinaryAssignment = MM_Token_OrOrEquals,
-    MM_Token_LastAssignment = MM_Token_LastBinaryAssignment,
+    MM_Token_AndAndEquals,
+    MM_Token_OrOrEquals,
+    MM_Token_LastAssignment = MM_Token_OrOrEquals,
     
     MM_Token_FirstBinary = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator) + 6*16,
     MM_Token_FirstMulLevel = MM_Token_FirstBinary,
