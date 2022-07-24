@@ -12,17 +12,7 @@ GenHeader()
     FILE* gen_file = 0;
     fopen_s(&gen_file, ".\\mm.h", "w");
     
-    const char* includes_marker = "// IMPORTANT NOTE: DO NOT MOVE THESE INCLUDES OR EDIT ANYTHING BELOW THIS LINE.\n";
-    
     char buffer[1024] = {0};
-    while (strcmp(fgets(buffer, sizeof(buffer), src_file), includes_marker) != 0)
-    {
-        fprintf(gen_file, "%s", buffer);
-    }
-    
-    fgets(buffer, sizeof(buffer), src_file);
-    fgets(buffer, sizeof(buffer), src_file);
-    
     while (fgets(buffer, sizeof(buffer), src_file))
     {
         if (strncmp(buffer, "#include", sizeof("#include") - 1) == 0)

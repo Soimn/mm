@@ -145,10 +145,6 @@ void MM_System_DefaultFreeMemory(void* ptr);
 #define MM_SYSTEM_FREE_MEMORY(ptr) MM_System_DefaultFreeMemory(ptr)
 #endif
 
-// IMPORTANT NOTE: DO NOT MOVE THESE INCLUDES OR EDIT ANYTHING BELOW THIS LINE.
-// The build step that generates the single header replaces these includes with the file contents before the file is sent to
-// clang for compilation.
-
 #ifdef _WIN32
 #include "mm_win32.h"
 #endif

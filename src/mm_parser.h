@@ -22,12 +22,13 @@ MM_bool MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement);
 void*
 MM_Parser_PushNode(MM_Parser* parser, MM_u32 kind)
 {
+    // TODO: Maybe update this with more tightly fiting sizes
     MM_umm size;
     MM_AST_Kind k = { .kind = kind };
     if      (k.kind_type == MM_ASTType_Special)     size = sizeof(MM_Special);
     else if (k.kind_type == MM_ASTType_Expression)  size = sizeof(MM_Expression);
     else if (k.kind_type == MM_ASTType_Declaration) size = sizeof(MM_Declaration);
-    else                                               size = sizeof(MM_Statement);
+    else                                            size = sizeof(MM_Statement);
     
     void* node = MM_Arena_Push(parser->ast_arena, size, MM_ALIGNOF(void*));
     MM_Zero(node, size);
