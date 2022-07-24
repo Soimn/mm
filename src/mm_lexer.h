@@ -138,9 +138,14 @@ enum MM_TOKEN_KIND
     MM_Token_Min,
     MM_Token_Max,
     MM_Token_Len,
+    MM_Token_Memcopy,
+    MM_Token_Memmove,
+    MM_Token_Memset,
+    MM_Token_Memzero,
 };
 
 MM_STATIC_ASSERT(MM_TOKEN_BINARY_OPERATOR_BLOCK(MM_Token_FirstBinary) == 0);
+MM_STATIC_ASSERT(MM_TOKEN_BINARY_OPERATOR_BLOCK(MM_Token_LastBinary) == 4);
 
 typedef struct MM_Token
 {
@@ -577,6 +582,12 @@ MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm buffer_size)
     return i;
 }
 
+MM_String
+MM_Token_ToString(MM_Token token)
+{
+    return (MM_String){ .data = token.data, .size = token.size };
+}
+
 MM_Soft_Int
 MM_Token_ParseInt(MM_Token token)
 {
@@ -668,14 +679,14 @@ MM_Token_ParseFloat(MM_Token token)
         else if (token.kind == MM_Token_HexFloat32)
         {
             MM_f32 f32;
-            MM_Copy(&bits, &f32, sizeof(MM_f32));
+            MM_Copy(&f32, &bits, sizeof(MM_f32));
             result = f32;
         }
         else
         {
             MM_ASSERT(token.kind == MM_Token_HexFloat64);
             MM_f64 f64;
-            MM_Copy(&bits, &f64, sizeof(MM_f64));
+            MM_Copy(&f64, &bits, sizeof(MM_f64));
             result = f64;
         }
     }

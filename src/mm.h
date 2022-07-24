@@ -108,22 +108,6 @@ typedef struct MM_Slice
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-MM_bool
-MM_String_Match(MM_String s0, MM_String s1)
-{
-    MM_bool do_match = (s0.size == s1.size);
-    
-    if (s0.data != s1.data)
-    {
-        for (MM_umm i = 0; i < s0.size && do_match; ++i)
-        {
-            do_match = (s0.data[i] == s1.data[1]);
-        }
-    }
-    
-    return do_match;
-}
-
 struct MM_Lexer MM_Lexer_Init(MM_String string);
 struct MM_Token MM_Lexer_CurrentToken(struct MM_Lexer* lexer);
 struct MM_Token MM_Lexer_NextToken(struct MM_Lexer* lexer);
@@ -136,7 +120,41 @@ typedef MM_i128 MM_Soft_Int;
 typedef MM_f64 MM_Soft_Float;
 //
 
+// TODO: How should Out of Memory be handled since this is a library?
+void* MM_System_DefaultReserveMemory(MM_umm size);
+void MM_System_DefaultCommitMemory(void* ptr, MM_umm size);
+void MM_System_DefaultFreeMemory(void* ptr);
+
+#ifndef MM_SYSTEM_PAGE_SIZE
+#define MM_SYSTEM_PAGE_SIZE MM_KB(4)
+#endif
+
+#ifndef MM_SYSTEM_RESERVE_BLOCK_SIZE
+#define MM_SYSTEM_RESERVE_BLOCK_SIZE MM_KB(64)
+#endif
+
+#ifndef MM_SYSTEM_RESERVE_MEMORY
+#define MM_SYSTEM_RESERVE_MEMORY(size) MM_System_DefaultReserveMemory(size)
+#endif
+
+#ifndef MM_SYSTEM_COMMIT_MEMORY
+#define MM_SYSTEM_COMMIT_MEMORY(ptr, size) MM_System_DefaultCommitMemory((ptr), (size))
+#endif
+
+#ifndef MM_SYSTEM_FREE_MEMORY
+#define MM_SYSTEM_FREE_MEMORY(ptr) MM_System_DefaultFreeMemory(ptr)
+#endif
+
+// IMPORTANT NOTE: DO NOT MOVE THESE INCLUDES OR EDIT ANYTHING BELOW THIS LINE.
+// The build step that generates the single header replaces these includes with the file contents before the file is sent to
+// clang for compilation.
+
+#ifdef _WIN32
+#include "mm_win32.h"
+#endif
+
 #include "mm_memory.h"
+#include "mm_string.h"
 #include "mm_float.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"

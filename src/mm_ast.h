@@ -1,5 +1,4 @@
 #define MM_AST_FIRST_KIND(type, group, sub_group) (((type) << 24) | ((group) << 16) | ((sub_group) << 8) | 1)
-#define MM_AST_KIND(k) (MM_AST_Kind){.kind = (k)}
 
 enum MM_AST_TYPE
 {
@@ -40,7 +39,7 @@ enum MM_AST_SUB_GROUP
     MM_ASTSubGroup_OrLevel,
 };
 
-enum MM_AST
+enum MM_AST_KIND
 {
     MM_AST_None = 0,
     
@@ -80,6 +79,10 @@ enum MM_AST
     MM_AST_BuiltinMin,
     MM_AST_BuiltinMax,
     MM_AST_BuiltinLen,
+    MM_AST_BuiltinMemcopy,
+    MM_AST_BuiltinMemmove,
+    MM_AST_BuiltinMemset,
+    MM_AST_BuiltinMemzero,
     
     MM_AST_Dereference = MM_AST_FIRST_KIND(MM_ASTType_Expression, MM_ASTGroup_UnaryExpression, MM_ASTSubGroup_PostfixUnary),
     MM_AST_MemberAccess,
@@ -170,9 +173,18 @@ typedef struct MM_AST_Kind
     };
 } MM_AST_Kind;
 
-typedef struct MM_Argument
+typedef struct MM_Special MM_Special;
+
+typedef struct MM_Special_Header
 {
     struct MM_AST_Kind;
+} MM_Special_Header;
+
+#define MM_SPECIAL_HEADER() union { struct MM_Special_Header; MM_Special_Header header; }
+
+typedef struct MM_Argument
+{
+    MM_SPECIAL_HEADER();
     struct MM_Argument* next;
     struct MM_Expression* name;
     struct MM_Expression* value;
@@ -180,7 +192,7 @@ typedef struct MM_Argument
 
 typedef struct MM_Parameter
 {
-    struct MM_AST_Kind;
+    MM_SPECIAL_HEADER();
     struct MM_Parameter* next;
     struct MM_Expression* names;
     struct MM_Expression* type;
@@ -189,7 +201,7 @@ typedef struct MM_Parameter
 
 typedef struct MM_Return_Value
 {
-    struct MM_AST_Kind;
+    MM_SPECIAL_HEADER();
     struct MM_Return_Value* next;
     struct MM_Expression* names;
     struct MM_Expression* type;
@@ -198,11 +210,28 @@ typedef struct MM_Return_Value
 
 typedef struct MM_Enum_Member
 {
-    struct MM_AST_Kind;
+    MM_SPECIAL_HEADER();
     struct MM_Enum_Member* next;
     struct MM_Expression* name;
     struct MM_Expression* value;
 } MM_Enum_Member;
+
+typedef struct MM_Special
+{
+    union
+    {
+        struct
+        {
+            MM_SPECIAL_HEADER();
+            struct MM_Special* next;
+        };
+        
+        MM_Argument argument;
+        MM_Parameter parameter;
+        MM_Return_Value return_val;
+        MM_Enum_Member enum_member;
+    };
+} MM_Special;
 
 typedef struct MM_Expression MM_Expression;
 
@@ -554,3 +583,20 @@ typedef struct MM_Statement
         MM_Assignment_Statement assignment_statement;
     };
 } MM_Statement;
+
+typedef struct MM_AST
+{
+    union
+    {
+        struct
+        {
+            struct MM_AST_Kind;
+            struct MM_AST* next;
+        };
+        
+        MM_Special special;
+        MM_Statement statement;
+        MM_Declaration declaration;
+        MM_Expression expression;
+    };
+} MM_AST;

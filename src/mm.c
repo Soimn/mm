@@ -1,4 +1,4 @@
-#include "mm.h"
+#include "../build/mm.h" // NOTE: using the generated single header instead of mm.h directly
 
 void* memset(void* ptr, int value, unsigned __int64 size);
 void* memcpy(void* rdst, const void* rsrc, unsigned __int64 count);
