@@ -145,6 +145,13 @@ void MM_System_DefaultFreeMemory(void* ptr);
 #define MM_SYSTEM_FREE_MEMORY(ptr) MM_System_DefaultFreeMemory(ptr)
 #endif
 
+typedef struct MM_Workspace
+{
+    struct MM_Arena* workspace_arena;
+    struct MM_Arena* ast_arena;
+    struct MM_String_Intern_Table* intern_table;
+} MM_Workspace;
+
 #ifdef _WIN32
 #include "mm_win32.h"
 #endif
@@ -152,6 +159,7 @@ void MM_System_DefaultFreeMemory(void* ptr);
 #include "mm_memory.h"
 #include "mm_string.h"
 #include "mm_float.h"
+#include "mm_workspace.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"

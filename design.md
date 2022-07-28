@@ -632,3 +632,30 @@ introspect
 
 
 
+Should loose expressions be allowed at global scope? This could be useful for allowing the user to do something like
+
+#private
+{
+	A :: 0;
+	B :: 0;
+}
+
+#public
+{
+	C :: 0;
+}
+
+where private and public are user defined labels stuck on statements which serve only to provide the metaprogram with information
+
+another example is
+
+
+#add_command(Ls);
+Ls :: proc()
+{
+	print("list of files");
+}
+
+where add_command is a user defined label that tells the metaprogram to add Ls to a list of procedures to register as commands
+
+another problem is how type related stuff should be handled, since the metaprogram cannot do much with types unless it can provide custom rules to the checker

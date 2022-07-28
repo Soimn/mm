@@ -127,6 +127,7 @@ enum MM_TOKEN_KIND
     MM_Token_Inf,
     MM_Token_Qnan,
     MM_Token_Snan,
+    MM_Token_Distinct,
     
     MM_Token_Cast = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Builtin),
     MM_Token_Transmute,

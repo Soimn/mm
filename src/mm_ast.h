@@ -130,6 +130,7 @@ enum MM_AST_KIND
     MM_AST_ConstantFwdDecl,
     MM_AST_Using,
     MM_AST_When,
+    MM_AST_Include,
     
     MM_AST_Block = MM_AST_FIRST_KIND(MM_ASTType_Statement, MM_AST_None, MM_AST_None),
     MM_AST_If,
@@ -243,17 +244,43 @@ typedef struct MM_Expression_Header
 
 #define MM_EXPRESSION_HEADER() union { struct MM_Expression_Header; MM_Expression_Header header; }
 
+typedef struct MM_Identifier_Expression
+{
+    MM_EXPRESSION_HEADER();
+    MM_Identifier ident;
+} MM_Identifier_Expression;
+
 typedef struct MM_Integer_Literal_Expression
 {
+    MM_EXPRESSION_HEADER();
     MM_Soft_Int value;
     MM_u8 explicit_base; // NOTE: 0 means no explicit base, non 0 corresponds to the bases of 0x0 (16), 0d0 (10) and 0b0 (2)
 } MM_Integer_Literal_Expression;
 
 typedef struct MM_Float_Literal_Expression
 {
+    MM_EXPRESSION_HEADER();
     MM_Soft_Float value;
     MM_u8 explicit_size; // NOTE: 0 means no explicit size, non 0 corresponds to the size of HexFloat16 - 64 in bytes
 } MM_Float_Literal_Expression;
+
+typedef struct MM_String_Literal_Expression
+{
+    MM_EXPRESSION_HEADER();
+    MM_String_Literal str;
+} MM_String_Literal_Expression;
+
+typedef struct MM_Codepoint_Expression
+{
+    MM_EXPRESSION_HEADER();
+    MM_u32 value;
+} MM_Codepoint_Expression;
+
+typedef struct MM_Boolean_Expression
+{
+    MM_EXPRESSION_HEADER();
+    MM_bool value;
+} MM_Boolean_Expression;
 
 typedef struct MM_Compound_Expression
 {
@@ -372,22 +399,8 @@ typedef struct MM_Array_Type_Expression
 
 typedef struct MM_Unary_Expression
 {
-    union
-    {
-        struct
-        {
-            MM_EXPRESSION_HEADER();
-            MM_Expression* operand;
-        };
-        
-        MM_Array_Type_Expression array_type_expr;
-        MM_Array_Litteral_Expression array_lit_expr;
-        MM_Struct_Litteral_Expression struct_lit_expr;
-        MM_Call_Expression call_expr;
-        MM_Slice_Expression slice_expr;
-        MM_Subscript_Expression subscript_expr;
-        MM_Member_Access_Expression member_access_expr;
-    };
+    MM_EXPRESSION_HEADER();
+    MM_Expression* operand;
 } MM_Unary_Expression;
 
 typedef struct MM_Binary_Expression
@@ -411,12 +424,12 @@ typedef struct MM_Expression
     {
         MM_EXPRESSION_HEADER();
         
-        MM_Identifier identifier;
+        MM_Identifier_Expression ident_expr;
         MM_Integer_Literal_Expression int_expr;
         MM_Float_Literal_Expression float_expr;
-        MM_String_Literal string;
-        MM_u32 codepoint;
-        MM_bool boolean;
+        MM_String_Literal_Expression string_expr;
+        MM_Codepoint_Expression codepoint_expr;
+        MM_Boolean_Expression bool_expr;
         MM_Compound_Expression compound_expr;
         MM_Proc_Expression proc_expr;
         MM_Proc_Literal_Expression proc_lit_expr;
@@ -428,6 +441,13 @@ typedef struct MM_Expression
         MM_Enum_Fwd_Decl_Expression enum_fwd_decl_expr;
         MM_Builtin_Expression builtin_expr;
         MM_Unary_Expression unary_expr;
+        MM_Array_Type_Expression array_type_expr;
+        MM_Array_Litteral_Expression array_lit_expr;
+        MM_Struct_Litteral_Expression struct_lit_expr;
+        MM_Call_Expression call_expr;
+        MM_Slice_Expression slice_expr;
+        MM_Subscript_Expression subscript_expr;
+        MM_Member_Access_Expression member_access_expr;
         MM_Binary_Expression binary_expr;
         MM_Conditional_Expression conditional_expr;
     };
@@ -460,6 +480,7 @@ typedef struct MM_Constant_Declaration
     MM_Expression* type;
     MM_Expression* values;
     MM_bool is_using;
+    MM_bool is_distinct;
 } MM_Constant_Declaration;
 
 typedef struct MM_Constant_Fwd_Declaration
@@ -484,6 +505,12 @@ typedef struct MM_When_Declaration
     struct MM_Statement* false_body;
 } MM_When_Declaration;
 
+typedef struct MM_Include_Declaration
+{
+    MM_DECLARATION_HEADER();
+    MM_String_Literal path;
+} MM_Include_Declaration;
+
 typedef struct MM_Declaration
 {
     union
@@ -494,6 +521,7 @@ typedef struct MM_Declaration
         MM_Constant_Fwd_Declaration const_fwd_decl;
         MM_Using_Declaration using_decl;
         MM_When_Declaration when_decl;
+        MM_Include_Declaration include_decl;
     };
 } MM_Declaration;
 
@@ -523,14 +551,6 @@ typedef struct MM_If_Statement
     MM_Statement* false_body;
     MM_Identifier label;
 } MM_If_Statement;
-
-typedef struct MM_When_Statement
-{
-    MM_STATEMENT_HEADER();
-    MM_Expression* condition;
-    MM_Statement* true_body;
-    MM_Statement* false_body;
-} MM_When_Statement;
 
 typedef struct MM_While_Statement
 {
@@ -575,7 +595,6 @@ typedef struct MM_Statement
         
         MM_Block_Statement block_statement;
         MM_If_Statement if_statement;
-        MM_When_Statement when_statement;
         MM_While_Statement while_statement;
         MM_Return_Statement return_statement;
         MM_Defer_Statement defer_statement;
@@ -600,3 +619,76 @@ typedef struct MM_AST
         MM_Expression expression;
     };
 } MM_AST;
+
+inline MM_umm
+MM_AST_SizeFromKind(MM_AST_Kind kind)
+{
+    MM_umm size = 0;
+    if      (kind.kind == MM_AST_Argument)           size = sizeof(MM_Argument);
+    else if (kind.kind == MM_AST_Parameter)          size = sizeof(MM_Parameter);
+    else if (kind.kind == MM_AST_ReturnValue)        size = sizeof(MM_Return_Value);
+    else if (kind.kind == MM_AST_EnumMember)         size = sizeof(MM_Enum_Member);
+    else if (kind.kind == MM_AST_Identifier)         size = sizeof(MM_Identifier_Expression);
+    else if (kind.kind == MM_AST_Int)                size = sizeof(MM_Integer_Literal_Expression);
+    else if (kind.kind == MM_AST_Float)              size = sizeof(MM_Float_Literal_Expression);
+    else if (kind.kind == MM_AST_String)             size = sizeof(MM_String_Literal_Expression);
+    else if (kind.kind == MM_AST_Codepoint)          size = sizeof(MM_Codepoint_Expression);
+    else if (kind.kind == MM_AST_Bool)               size = sizeof(MM_Boolean_Expression);
+    else if (kind.kind == MM_AST_Compound)           size = sizeof(MM_Compound_Expression);
+    else if (kind.kind == MM_AST_This)               size = sizeof(MM_Expression_Header);
+    else if (kind.kind == MM_AST_Proc)               size = sizeof(MM_Proc_Expression);
+    else if (kind.kind == MM_AST_ProcLiteral)        size = sizeof(MM_Proc_Literal_Expression);
+    else if (kind.kind == MM_AST_ProcSet)            size = sizeof(MM_Proc_Set_Expression);
+    else if (kind.kind == MM_AST_Struct)             size = sizeof(MM_Struct_Expression);
+    else if (kind.kind == MM_AST_Union)              size = sizeof(MM_Union_Expression);
+    else if (kind.kind == MM_AST_Enum)               size = sizeof(MM_Enum_Expression);
+    else if (kind.kind == MM_AST_ProcLiteralFwdDecl) size = sizeof(MM_Proc_Literal_Fwd_Decl_Expression);
+    else if (kind.kind == MM_AST_ProcSetFwdDecl)     size = sizeof(MM_Expression_Header);
+    else if (kind.kind == MM_AST_StructFwdDecl)      size = sizeof(MM_Expression_Header);
+    else if (kind.kind == MM_AST_UnionFwdDecl)       size = sizeof(MM_Expression_Header);
+    else if (kind.kind == MM_AST_EnumFwdDecl)        size = sizeof(MM_Enum_Fwd_Decl_Expression);
+    else if (kind.kind == MM_AST_MemberAccess)       size = sizeof(MM_Member_Access_Expression);
+    else if (kind.kind == MM_AST_Subscript)          size = sizeof(MM_Subscript_Expression);
+    else if (kind.kind == MM_AST_Slice)              size = sizeof(MM_Slice_Expression);
+    else if (kind.kind == MM_AST_Call)               size = sizeof(MM_Call_Expression);
+    else if (kind.kind == MM_AST_StructLiteral)      size = sizeof(MM_Struct_Litteral_Expression);
+    else if (kind.kind == MM_AST_ArrayLiteral)       size = sizeof(MM_Array_Litteral_Expression);
+    else if (kind.kind == MM_AST_ArrayType)          size = sizeof(MM_Array_Type_Expression);
+    else if (kind.kind == MM_AST_Conditional)        size = sizeof(MM_Conditional_Expression);
+    else if (kind.kind == MM_AST_Variable)           size = sizeof(MM_Variable_Declaration);
+    else if (kind.kind == MM_AST_Constant)           size = sizeof(MM_Constant_Declaration);
+    else if (kind.kind == MM_AST_ConstantFwdDecl)    size = sizeof(MM_Constant_Fwd_Declaration);
+    else if (kind.kind == MM_AST_Using)              size = sizeof(MM_Using_Declaration);
+    else if (kind.kind == MM_AST_When)               size = sizeof(MM_When_Declaration);
+    else if (kind.kind == MM_AST_Include)            size = sizeof(MM_Include_Declaration);
+    else if (kind.kind == MM_AST_Block)              size = sizeof(MM_Block_Statement);
+    else if (kind.kind == MM_AST_If)                 size = sizeof(MM_If_Statement);
+    else if (kind.kind == MM_AST_While)              size = sizeof(MM_While_Statement);
+    else if (kind.kind == MM_AST_Return)             size = sizeof(MM_Return_Statement);
+    else if (kind.kind == MM_AST_Defer)              size = sizeof(MM_Defer_Statement);
+    else if (kind.kind_type == MM_ASTType_Expression && kind.kind_group == MM_ASTGroup_UnaryExpression)
+    {
+        size = sizeof(MM_Unary_Expression);
+    }
+    else if (kind.kind_type == MM_ASTType_Expression && kind.kind_group == MM_ASTGroup_BinaryExpression)
+    {
+        size = sizeof(MM_Binary_Expression);
+    }
+    else if (kind.kind_type == MM_ASTType_Expression && kind.kind_group == MM_ASTGroup_PrimaryExpression && kind.kind_sub_group == MM_ASTSubGroup_Builtin)
+    {
+        size = sizeof(MM_Builtin_Expression);
+    }
+    else if (kind.kind_group == MM_ASTGroup_Jump)
+    {
+        MM_ASSERT(kind.kind_type == MM_ASTType_Statement);
+        size = sizeof(MM_Jump_Statement);
+    }
+    else if (kind.kind_group == MM_ASTGroup_Assignment)
+    {
+        MM_ASSERT(kind.kind_type == MM_ASTType_Statement);
+        size = sizeof(MM_Assignment_Statement);
+    }
+    else MM_INVALID_CODE_PATH;
+    
+    return size;
+}
