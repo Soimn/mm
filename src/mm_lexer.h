@@ -85,6 +85,7 @@ enum MM_TOKEN_KIND
     MM_Token_LastBinary = MM_Token_OrOr,
     
     MM_Token_Bang,
+    MM_Token_Backslash,
     MM_Token_OpenParen,
     MM_Token_CloseParen,
     MM_Token_OpenBracket,
@@ -107,7 +108,6 @@ enum MM_TOKEN_KIND
     
     MM_Token_Include = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Keyword),
     MM_Token_Proc,
-    MM_Token_ProcSet,
     MM_Token_Struct,
     MM_Token_Union,
     MM_Token_Enum,
@@ -135,7 +135,6 @@ enum MM_TOKEN_KIND
     MM_Token_Alignof,
     MM_Token_Offsetof,
     MM_Token_Typeof,
-    MM_Token_Shadowed,
     MM_Token_Min,
     MM_Token_Max,
     MM_Token_Len,
@@ -143,6 +142,7 @@ enum MM_TOKEN_KIND
     MM_Token_Memmove,
     MM_Token_Memset,
     MM_Token_Memzero,
+    MM_Token_SourcePos
 };
 
 MM_STATIC_ASSERT(MM_TOKEN_BINARY_OPERATOR_BLOCK(MM_Token_FirstBinary) == 0);
@@ -288,17 +288,18 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
             
             switch (c[0])
             {
-                case '(': lexer->current_token.kind = MM_Token_OpenParen;    break;
-                case ')': lexer->current_token.kind = MM_Token_CloseParen;   break;
-                case '[': lexer->current_token.kind = MM_Token_OpenBracket;  break;
-                case ']': lexer->current_token.kind = MM_Token_CloseBracket; break;
-                case '{': lexer->current_token.kind = MM_Token_OpenBrace;    break;
-                case '}': lexer->current_token.kind = MM_Token_CloseBrace;   break;
-                case ':': lexer->current_token.kind = MM_Token_Colon;        break;
-                case ',': lexer->current_token.kind = MM_Token_Comma;        break;
-                case ';': lexer->current_token.kind = MM_Token_Semicolon;    break;
-                case '?': lexer->current_token.kind = MM_Token_QuestionMark; break;
-                case '^': lexer->current_token.kind = MM_Token_Hat;          break;
+                case '\\': lexer->current_token.kind = MM_Token_Backslash;    break;
+                case '(':  lexer->current_token.kind = MM_Token_OpenParen;    break;
+                case ')':  lexer->current_token.kind = MM_Token_CloseParen;   break;
+                case '[':  lexer->current_token.kind = MM_Token_OpenBracket;  break;
+                case ']':  lexer->current_token.kind = MM_Token_CloseBracket; break;
+                case '{':  lexer->current_token.kind = MM_Token_OpenBrace;    break;
+                case '}':  lexer->current_token.kind = MM_Token_CloseBrace;   break;
+                case ':':  lexer->current_token.kind = MM_Token_Colon;        break;
+                case ',':  lexer->current_token.kind = MM_Token_Comma;        break;
+                case ';':  lexer->current_token.kind = MM_Token_Semicolon;    break;
+                case '?':  lexer->current_token.kind = MM_Token_QuestionMark; break;
+                case '^':  lexer->current_token.kind = MM_Token_Hat;          break;
                 
                 case '*': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_StarEquals    : MM_Token_Star);    break;
                 case '/': lexer->current_token.kind = (c[1] == '=' ? ++lexer->offset, MM_Token_SlashEquals   : MM_Token_Slash);   break;
@@ -384,38 +385,41 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                         {
                             // TODO: Replace with hash table lookup
 #define MM_Match(S) MM_String_Match(identifier, MM_STRING(S))
-                            if      (MM_Match("include"))   lexer->current_token.kind = MM_Token_Include;
-                            else if (MM_Match("proc"))      lexer->current_token.kind = MM_Token_Proc;
-                            else if (MM_Match("proc_set"))  lexer->current_token.kind = MM_Token_ProcSet;
-                            else if (MM_Match("struct"))    lexer->current_token.kind = MM_Token_Struct;
-                            else if (MM_Match("union"))     lexer->current_token.kind = MM_Token_Union;
-                            else if (MM_Match("enum"))      lexer->current_token.kind = MM_Token_Enum;
-                            else if (MM_Match("true"))      lexer->current_token.kind = MM_Token_True;
-                            else if (MM_Match("false"))     lexer->current_token.kind = MM_Token_False;
-                            else if (MM_Match("as"))        lexer->current_token.kind = MM_Token_As;
-                            else if (MM_Match("if"))        lexer->current_token.kind = MM_Token_If;
-                            else if (MM_Match("when"))      lexer->current_token.kind = MM_Token_When;
-                            else if (MM_Match("else"))      lexer->current_token.kind = MM_Token_Else;
-                            else if (MM_Match("while"))     lexer->current_token.kind = MM_Token_While;
-                            else if (MM_Match("break"))     lexer->current_token.kind = MM_Token_Break;
-                            else if (MM_Match("continue"))  lexer->current_token.kind = MM_Token_Continue;
-                            else if (MM_Match("using"))     lexer->current_token.kind = MM_Token_Using;
-                            else if (MM_Match("defer"))     lexer->current_token.kind = MM_Token_Defer;
-                            else if (MM_Match("return"))    lexer->current_token.kind = MM_Token_Return;
-                            else if (MM_Match("this"))      lexer->current_token.kind = MM_Token_This;
-                            else if (MM_Match("inf"))       lexer->current_token.kind = MM_Token_Inf;
-                            else if (MM_Match("qnan"))      lexer->current_token.kind = MM_Token_Qnan;
-                            else if (MM_Match("snan"))      lexer->current_token.kind = MM_Token_Snan;
-                            else if (MM_Match("cast"))      lexer->current_token.kind = MM_Token_Cast;
-                            else if (MM_Match("transmute")) lexer->current_token.kind = MM_Token_Transmute;
-                            else if (MM_Match("sizeof"))    lexer->current_token.kind = MM_Token_Sizeof;
-                            else if (MM_Match("alignof"))   lexer->current_token.kind = MM_Token_Alignof;
-                            else if (MM_Match("offsetof"))  lexer->current_token.kind = MM_Token_Offsetof;
-                            else if (MM_Match("typeof"))    lexer->current_token.kind = MM_Token_Typeof;
-                            else if (MM_Match("shadowed"))  lexer->current_token.kind = MM_Token_Shadowed;
-                            else if (MM_Match("min"))       lexer->current_token.kind = MM_Token_Min;
-                            else if (MM_Match("max"))       lexer->current_token.kind = MM_Token_Max;
-                            else if (MM_Match("len"))       lexer->current_token.kind = MM_Token_Len;
+                            if      (MM_Match("include"))      lexer->current_token.kind = MM_Token_Include;
+                            else if (MM_Match("proc"))         lexer->current_token.kind = MM_Token_Proc;
+                            else if (MM_Match("struct"))       lexer->current_token.kind = MM_Token_Struct;
+                            else if (MM_Match("union"))        lexer->current_token.kind = MM_Token_Union;
+                            else if (MM_Match("enum"))         lexer->current_token.kind = MM_Token_Enum;
+                            else if (MM_Match("true"))         lexer->current_token.kind = MM_Token_True;
+                            else if (MM_Match("false"))        lexer->current_token.kind = MM_Token_False;
+                            else if (MM_Match("as"))           lexer->current_token.kind = MM_Token_As;
+                            else if (MM_Match("if"))           lexer->current_token.kind = MM_Token_If;
+                            else if (MM_Match("when"))         lexer->current_token.kind = MM_Token_When;
+                            else if (MM_Match("else"))         lexer->current_token.kind = MM_Token_Else;
+                            else if (MM_Match("while"))        lexer->current_token.kind = MM_Token_While;
+                            else if (MM_Match("break"))        lexer->current_token.kind = MM_Token_Break;
+                            else if (MM_Match("continue"))     lexer->current_token.kind = MM_Token_Continue;
+                            else if (MM_Match("using"))        lexer->current_token.kind = MM_Token_Using;
+                            else if (MM_Match("defer"))        lexer->current_token.kind = MM_Token_Defer;
+                            else if (MM_Match("return"))       lexer->current_token.kind = MM_Token_Return;
+                            else if (MM_Match("this"))         lexer->current_token.kind = MM_Token_This;
+                            else if (MM_Match("inf"))          lexer->current_token.kind = MM_Token_Inf;
+                            else if (MM_Match("qnan"))         lexer->current_token.kind = MM_Token_Qnan;
+                            else if (MM_Match("snan"))         lexer->current_token.kind = MM_Token_Snan;
+                            else if (MM_Match("cast"))         lexer->current_token.kind = MM_Token_Cast;
+                            else if (MM_Match("transmute"))    lexer->current_token.kind = MM_Token_Transmute;
+                            else if (MM_Match("sizeof"))       lexer->current_token.kind = MM_Token_Sizeof;
+                            else if (MM_Match("alignof"))      lexer->current_token.kind = MM_Token_Alignof;
+                            else if (MM_Match("offsetof"))     lexer->current_token.kind = MM_Token_Offsetof;
+                            else if (MM_Match("typeof"))       lexer->current_token.kind = MM_Token_Typeof;
+                            else if (MM_Match("min"))          lexer->current_token.kind = MM_Token_Min;
+                            else if (MM_Match("max"))          lexer->current_token.kind = MM_Token_Max;
+                            else if (MM_Match("len"))          lexer->current_token.kind = MM_Token_Len;
+                            else if (MM_Match("memcopy"))      lexer->current_token.kind = MM_Token_Memcopy;
+                            else if (MM_Match("memmove"))      lexer->current_token.kind = MM_Token_Memmove;
+                            else if (MM_Match("memset"))       lexer->current_token.kind = MM_Token_Memset;
+                            else if (MM_Match("memzero"))      lexer->current_token.kind = MM_Token_Memzero;
+                            else if (MM_Match("source_pos"))   lexer->current_token.kind = MM_Token_SourcePos;
 #undef MM_Match
                         }
                     }
@@ -594,34 +598,51 @@ MM_Token_ParseInt(MM_Token token)
 {
     MM_ASSERT(token.kind_group == MM_TokenGroup_Integer);
     
-    MM_Soft_Int result = 0;
+    MM_Soft_Int result = {};
     
     if (token.kind == MM_Token_BinaryInt)
     {
-        for (MM_umm i = 2; i < token.size; ++i)
+        for (MM_umm i = 2, digit_count = 0; i < token.size; ++i)
         {
             char c = token.data[i];
             
             if (c != '_')
             {
-                MM_ASSERT(c >= '0' && c <= '1');
-                result <<= 1;
-                result  |= c & 0xF;
+                digit_count += 1;
+                
+                if (digit_count > 256)
+                {
+                    //// ERROR: Interger literal too large
+                    MM_NOT_IMPLEMENTED;
+                }
+                else
+                {
+                    MM_ASSERT(c >= '0' && c <= '1');
+                    result = MM_SoftInt_OrU64(MM_SoftInt_ShlU64(result, 1), c & 0xF);
+                }
             }
         }
     }
     else if (token.kind == MM_Token_HexInt)
     {
-        for (MM_umm i = 2; i < token.size; ++i)
+        for (MM_umm i = 2, digit_count = 0; i < token.size; ++i)
         {
             char c = token.data[i];
             
             if (c != '_')
             {
-                MM_ASSERT(c >= '0' && c <= '9' || c >= 'A' && c <= 'F');
-                result <<= 4;
-                if (c < 'A') result |= c & 0xF;
-                else         result |= (c & 0x1F) + 9;
+                digit_count += 1;
+                
+                if (digit_count > 64)
+                {
+                    //// ERROR: Interger literal too large
+                    MM_NOT_IMPLEMENTED;
+                }
+                else
+                {
+                    MM_ASSERT(c >= '0' && c <= '9' || c >= 'A' && c <= 'F');
+                    result = MM_SoftInt_OrU64(MM_SoftInt_ShlU64(result, 4), (c < 'A' ? c & 0xF : (c & 0x1F) + 9));
+                }
             }
         }
     }
@@ -636,8 +657,16 @@ MM_Token_ParseInt(MM_Token token)
             if (c != '_')
             {
                 MM_ASSERT(c >= '0' && c <= '9');
-                result *= 10;
-                result += c & 0xF;
+                
+                MM_Soft_Int_Status status = MM_SoftIntStatus_None;
+                
+                result = MM_SoftInt_AddU64(MM_SoftInt_MulU64(result, 10, &status), c & 0xF, &status);
+                
+                if ((status & MM_SoftIntStatus_Carry) != 0)
+                {
+                    //// ERROR: Interger literal too large
+                    MM_NOT_IMPLEMENTED;
+                }
             }
         }
     }

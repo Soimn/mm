@@ -460,52 +460,6 @@ MM_Parser_ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                 (*expression)->proc_lit_expr.body        = body;
             }
         }
-        else if (MM_EatToken(MM_Token_ProcSet))
-        {
-            if (MM_EatToken(MM_Token_TripleMinus))
-            {
-                *expression = MM_PushNode(parser, MM_AST_ProcSetFwdDecl);
-            }
-            else
-            {
-                MM_Expression* members = 0;
-                
-                if (!MM_EatToken(MM_Token_OpenBrace))
-                {
-                    MM_DEBUG_PARSER_ERROR_LINE(); //// ERROR: Missing members of proc set
-                    MM_NOT_IMPLEMENTED;
-                    return MM_false;
-                }
-                else
-                {
-                    if (!MM_IsToken(MM_Token_CloseBrace))
-                    {
-                        MM_Expression** next_member = &members;
-                        while (MM_true)
-                        {
-                            if (!MM_Parser_ParseExpression(parser, next_member)) return MM_false;
-                            
-                            next_member = &(*next_member)->next;
-                            
-                            if (MM_EatToken(MM_Token_Comma)) continue;
-                            else                             break;
-                        }
-                    }
-                    
-                    if (!MM_EatToken(MM_Token_CloseBrace))
-                    {
-                        MM_DEBUG_PARSER_ERROR_LINE(); //// ERROR: Missing close brace after members in proc set
-                        MM_NOT_IMPLEMENTED;
-                        return MM_false;
-                    }
-                    else
-                    {
-                        *expression = MM_PushNode(parser, MM_AST_ProcSet);
-                        (*expression)->proc_set_expr.members = members;
-                    }
-                }
-            }
-        }
         else if (MM_IsToken(MM_Token_Struct) || MM_IsToken(MM_Token_Union))
         {
             MM_bool is_struct = MM_IsToken(MM_Token_Struct);
@@ -856,7 +810,12 @@ MM_Parser_ParsePrefixUnaryExpression(MM_Parser* parser, MM_Expression** expressi
 {
     while (MM_true)
     {
-        if (MM_EatToken(MM_Token_Hat))
+        if (MM_EatToken(MM_Token_Backslash))
+        {
+            *expression = MM_PushNode(parser, MM_AST_BackScope);
+            expression = &(*expression)->unary_expr.operand;
+        }
+        else if (MM_EatToken(MM_Token_Hat))
         {
             *expression = MM_PushNode(parser, MM_AST_Reference);
             expression = &(*expression)->unary_expr.operand;
@@ -1589,15 +1548,10 @@ MM_Parser_ParseStatement(MM_Parser* parser, MM_Statement** statement)
         {
             MM_bool should_have_semi = MM_true;
             
-            if      ((*statement)->kind_type == MM_ASTType_Statement) should_have_semi = MM_false;
-            else if ((*statement)->kind == MM_AST_ConstantFwdDecl) should_have_semi    = MM_false;
-            else if ((*statement)->kind == MM_AST_Constant && ((MM_Constant_Declaration*)*statement)->values->next == 0)
+            if ((*statement)->kind == MM_AST_Constant && ((MM_Constant_Declaration*)*statement)->values->next == 0)
             {
                 MM_u32 kind = ((MM_Constant_Declaration*)*statement)->values->kind;
-                should_have_semi = (kind == MM_AST_ProcLiteral || kind == MM_AST_ProcLiteralFwdDecl ||
-                                    kind == MM_AST_Struct      || kind == MM_AST_StructFwdDecl      ||
-                                    kind == MM_AST_Union       || kind == MM_AST_UnionFwdDecl       ||
-                                    kind == MM_AST_Enum        || kind == MM_AST_EnumFwdDecl);
+                should_have_semi = (kind == MM_AST_ProcLiteral || kind == MM_AST_Struct || kind == MM_AST_Union || kind == MM_AST_Enum);
             }
             
             if (should_have_semi)

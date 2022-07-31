@@ -58,13 +58,11 @@ enum MM_AST_KIND
     MM_AST_This,
     MM_AST_Proc,
     MM_AST_ProcLiteral,
-    MM_AST_ProcSet,
     MM_AST_Struct,
     MM_AST_Union,
     MM_AST_Enum,
     
     MM_AST_ProcLiteralFwdDecl = MM_AST_FIRST_KIND(MM_ASTType_Expression, MM_ASTGroup_PrimaryExpression, MM_ASTSubGroup_FwdDecl),
-    MM_AST_ProcSetFwdDecl,
     MM_AST_StructFwdDecl,
     MM_AST_UnionFwdDecl,
     MM_AST_EnumFwdDecl,
@@ -75,7 +73,6 @@ enum MM_AST_KIND
     MM_AST_BuiltinAlignof,
     MM_AST_BuiltinOffsetof,
     MM_AST_BuiltinTypeof,
-    MM_AST_BuiltinShadowed,
     MM_AST_BuiltinMin,
     MM_AST_BuiltinMax,
     MM_AST_BuiltinLen,
@@ -83,6 +80,7 @@ enum MM_AST_KIND
     MM_AST_BuiltinMemmove,
     MM_AST_BuiltinMemset,
     MM_AST_BuiltinMemzero,
+    MM_AST_BuiltinSourcePos,
     
     MM_AST_Dereference = MM_AST_FIRST_KIND(MM_ASTType_Expression, MM_ASTGroup_UnaryExpression, MM_ASTSubGroup_PostfixUnary),
     MM_AST_MemberAccess,
@@ -92,7 +90,8 @@ enum MM_AST_KIND
     MM_AST_StructLiteral,
     MM_AST_ArrayLiteral,
     
-    MM_AST_Reference = MM_AST_FIRST_KIND(MM_ASTType_Expression, MM_ASTGroup_UnaryExpression, MM_ASTSubGroup_PrefixUnary),
+    MM_AST_BackScope = MM_AST_FIRST_KIND(MM_ASTType_Expression, MM_ASTGroup_UnaryExpression, MM_ASTSubGroup_PrefixUnary),
+    MM_AST_Reference,
     MM_AST_ArrayType,
     MM_AST_SliceType,
     MM_AST_Neg,
@@ -303,12 +302,6 @@ typedef struct MM_Proc_Literal_Expression
     struct MM_Block_Statement* body;
 } MM_Proc_Literal_Expression;
 
-typedef struct MM_Proc_Set_Expression
-{
-    MM_EXPRESSION_HEADER();
-    MM_Expression* members;
-} MM_Proc_Set_Expression;
-
 typedef struct MM_Struct_Expression
 {
     MM_EXPRESSION_HEADER();
@@ -433,7 +426,6 @@ typedef struct MM_Expression
         MM_Compound_Expression compound_expr;
         MM_Proc_Expression proc_expr;
         MM_Proc_Literal_Expression proc_lit_expr;
-        MM_Proc_Set_Expression proc_set_expr;
         MM_Struct_Expression struct_expr;
         MM_Union_Expression union_expr;
         MM_Enum_Expression enum_expr;
@@ -638,12 +630,10 @@ MM_AST_SizeFromKind(MM_AST_Kind kind)
     else if (kind.kind == MM_AST_This)               size = sizeof(MM_Expression_Header);
     else if (kind.kind == MM_AST_Proc)               size = sizeof(MM_Proc_Expression);
     else if (kind.kind == MM_AST_ProcLiteral)        size = sizeof(MM_Proc_Literal_Expression);
-    else if (kind.kind == MM_AST_ProcSet)            size = sizeof(MM_Proc_Set_Expression);
     else if (kind.kind == MM_AST_Struct)             size = sizeof(MM_Struct_Expression);
     else if (kind.kind == MM_AST_Union)              size = sizeof(MM_Union_Expression);
     else if (kind.kind == MM_AST_Enum)               size = sizeof(MM_Enum_Expression);
     else if (kind.kind == MM_AST_ProcLiteralFwdDecl) size = sizeof(MM_Proc_Literal_Fwd_Decl_Expression);
-    else if (kind.kind == MM_AST_ProcSetFwdDecl)     size = sizeof(MM_Expression_Header);
     else if (kind.kind == MM_AST_StructFwdDecl)      size = sizeof(MM_Expression_Header);
     else if (kind.kind == MM_AST_UnionFwdDecl)       size = sizeof(MM_Expression_Header);
     else if (kind.kind == MM_AST_EnumFwdDecl)        size = sizeof(MM_Enum_Fwd_Decl_Expression);

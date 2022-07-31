@@ -116,7 +116,6 @@ MM_umm MM_Lexer_NextTokens(struct MM_Lexer* lexer, struct MM_Token* buffer, MM_u
 // TODO:
 typedef MM_String MM_Identifier;
 typedef MM_String MM_String_Literal;
-typedef MM_i128 MM_Soft_Int;
 typedef MM_f64 MM_Soft_Float;
 //
 
@@ -144,6 +143,20 @@ void MM_System_DefaultFreeMemory(void* ptr);
 #ifndef MM_SYSTEM_FREE_MEMORY
 #define MM_SYSTEM_FREE_MEMORY(ptr) MM_System_DefaultFreeMemory(ptr)
 #endif
+typedef enum MM_ENTITY_KIND
+{
+    MM_Entity_Variable,
+    MM_Entity_Constant,
+    MM_Entity_WhenDecl,
+    MM_Entity_IncludeDecl,
+} MM_ENTITY_KIND;
+
+typedef struct MM_Entity
+{
+    MM_ENTITY_KIND kind;
+    struct MM_AST* ast;
+    // TODO: tracking, history, etc.
+} MM_Entity;
 
 typedef struct MM_Workspace
 {
@@ -158,6 +171,7 @@ typedef struct MM_Workspace
 
 #include "mm_memory.h"
 #include "mm_string.h"
+#include "mm_int.h"
 #include "mm_float.h"
 #include "mm_workspace.h"
 #include "mm_lexer.h"

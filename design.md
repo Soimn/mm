@@ -659,3 +659,54 @@ Ls :: proc()
 where add_command is a user defined label that tells the metaprogram to add Ls to a list of procedures to register as commands
 
 another problem is how type related stuff should be handled, since the metaprogram cannot do much with types unless it can provide custom rules to the checker
+
+
+// implemention #caller_location
+
+main :: proc
+{
+    line := 0;
+    
+    
+    IncLine :: proc(line: ^int = ^\line)
+    {
+        line^ += 1;
+    }
+    
+    Print :: proc(msg: string, pos: Source_Pos = \source_pos())
+    {
+    }
+    
+    Advance :: proc(lexer: ^Lexer = \^lexer, amount := 1)
+    {
+        ...
+    }
+    
+    lexer := ...;
+    Advance(2);
+}
+
+
+A :: 1;
+
+B :: proc(a: int = \A, b := A)
+{
+    A :: 3;
+    
+    {
+        A :: 4;
+        
+        print(A);   // 4
+        print(\A);  // 3
+        print(a) ;  // 2
+        print(\\A); // 1
+        print(b);   // 1
+    }
+}
+
+main :: proc
+{
+    A :: 2;
+    
+    B();
+}
