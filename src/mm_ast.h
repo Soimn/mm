@@ -103,6 +103,7 @@ enum MM_AST_KIND
     MM_AST_Rem,
     MM_AST_BitAnd,
     MM_AST_BitShl,
+    MM_AST_BitSpl,
     MM_AST_BitShr,
     MM_AST_BitSar,
     
@@ -146,6 +147,7 @@ enum MM_AST_KIND
     MM_AST_RemAssignment,
     MM_AST_BitAndAssignment,
     MM_AST_BitShlAssignment,
+    MM_AST_BitSplAssignment,
     MM_AST_BitShrAssignment,
     MM_AST_BitSarAssignment,
     MM_AST_AddAssignment,

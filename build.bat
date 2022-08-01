@@ -11,7 +11,7 @@ IF NOT EXIST .\build mkdir build
 pushd .\build
 
 IF "%1"=="init" (
-	clang-cl .\..\build_src\main.c /link /out:build.exe
+	clang-cl /Od /Zo /Z7 .\..\build_src\main.c /link /out:build.exe
 ) ELSE IF "%1"=="debug" (
 	.\build.exe "debug"
 ) ELSE IF "%1"=="release" (

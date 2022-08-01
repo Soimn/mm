@@ -42,6 +42,7 @@ enum MM_TOKEN_KIND
     MM_Token_PercentEquals,
     MM_Token_AndEquals,
     MM_Token_LessLessEquals,
+    MM_Token_TripleLessEquals,
     MM_Token_GreaterGreaterEquals,
     MM_Token_TripleGreaterEquals,
     MM_Token_TildeEquals,
@@ -59,6 +60,7 @@ enum MM_TOKEN_KIND
     MM_Token_Percent,
     MM_Token_And,
     MM_Token_LessLess,
+    MM_Token_TripleLess,
     MM_Token_GreaterGreater,
     MM_Token_TripleGreater,
     MM_Token_LastMulLevel = MM_Token_TripleGreater,
@@ -340,9 +342,11 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                 case '<':
                 {
                     lexer->current_token.kind = MM_Token_Less;
-                    if (c[1] == '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_LessEquals;
-                    if (c[1] == '<' && c[2] != '=') lexer->offset += 1, lexer->current_token.kind = MM_Token_LessLess;
-                    if (c[1] == '<' && c[2] == '=') lexer->offset += 2, lexer->current_token.kind = MM_Token_LessLessEquals;
+                    if (c[1] == '=')                               lexer->offset += 1, lexer->current_token.kind = MM_Token_LessEquals;
+                    if (c[1] == '<' && c[2] != '=')                lexer->offset += 1, lexer->current_token.kind = MM_Token_LessLess;
+                    if (c[1] == '<' && c[2] == '=')                lexer->offset += 2, lexer->current_token.kind = MM_Token_LessLessEquals;
+                    if (c[1] == '<' && c[2] == '<' && c[3] != '=') lexer->offset += 2, lexer->current_token.kind = MM_Token_TripleLess;
+                    if (c[1] == '<' && c[2] == '<' && c[3] == '=') lexer->offset += 3, lexer->current_token.kind = MM_Token_TripleLessEquals;
                 } break;
                 
                 case '&':

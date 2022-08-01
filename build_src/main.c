@@ -19,22 +19,27 @@ GenHeader()
         {
             char* path = buffer;
             
-            while (*path++ != '"');
+            for (; *path != '"' && *path != '<'; ++path);
             
-            char* end = path - 1;
-            while (*++end != '"');
-            *end = 0;
-            
-            sprintf(buffer, "../src/%s", path);
-            FILE* include;
-            fopen_s(&include, buffer, "r");
-            
-            fprintf(gen_file, "// NOTE: included from: %s\n", path);
-            fprintf(gen_file, "#line 1 \"%s\"\n", path);
-            while (!feof(include)) fprintf(gen_file, "%s", fgets(buffer, sizeof(buffer), include));
-            fprintf(gen_file, "\n\n");
-            
-            fclose(include);
+            if (*path == '<') fprintf(gen_file, "%s", buffer);
+            else
+            {
+                ++path;
+                char* end = path - 1;
+                while (*++end != '"');
+                *end = 0;
+                
+                sprintf(buffer, "../src/%s", path);
+                FILE* include;
+                fopen_s(&include, buffer, "r");
+                
+                fprintf(gen_file, "// NOTE: included from: %s\n", path);
+                fprintf(gen_file, "#line 1 \"%s\"\n", path);
+                while (!feof(include)) fprintf(gen_file, "%s", fgets(buffer, sizeof(buffer), include));
+                fprintf(gen_file, "\n\n");
+                
+                fclose(include);
+            }
         }
         else
         {

@@ -19,6 +19,10 @@ typedef unsigned __int16 MM_u16;
 typedef unsigned __int32 MM_u32;
 typedef unsigned __int64 MM_u64;
 typedef unsigned __int128 MM_u128;
+
+#include <intrin.h>
+#include <immintrin.h>
+
 #else
 #error "Platform is not supported"
 #endif
