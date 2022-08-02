@@ -112,18 +112,15 @@ typedef struct MM_Slice
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+typedef MM_String MM_Identifier;
+typedef MM_String MM_String_Literal;
+typedef MM_f64 MM_Soft_Float;
+
 struct MM_Lexer MM_Lexer_Init(MM_String string);
 struct MM_Token MM_Lexer_CurrentToken(struct MM_Lexer* lexer);
 struct MM_Token MM_Lexer_NextToken(struct MM_Lexer* lexer);
 MM_umm MM_Lexer_NextTokens(struct MM_Lexer* lexer, struct MM_Token* buffer, MM_umm buffer_size);
 
-// TODO:
-typedef MM_String MM_Identifier;
-typedef MM_String MM_String_Literal;
-typedef MM_f64 MM_Soft_Float;
-//
-
-// TODO: How should Out of Memory be handled since this is a library?
 void* MM_System_DefaultReserveMemory(MM_umm size);
 void MM_System_DefaultCommitMemory(void* ptr, MM_umm size);
 void MM_System_DefaultFreeMemory(void* ptr);
@@ -177,6 +174,7 @@ typedef struct MM_Workspace
 #include "mm_string.h"
 #include "mm_int.h"
 #include "mm_float.h"
+#include "mm_error.h"
 #include "mm_workspace.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
