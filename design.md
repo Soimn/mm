@@ -710,3 +710,12 @@ main :: proc
     
     B();
 }
+
+
+
+
+
+text -> |lexer| -> tokens
+tokens -> |parser| -> ast,textpos
+
+file,offset

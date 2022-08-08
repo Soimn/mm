@@ -1,5 +1,6 @@
 #define MM_TOKEN_KIND_FIRST(group) ((MM_u16)(group) << 8)
 #define MM_TOKEN_GROUP_FROM_KIND(kind) ((kind) >> 8)
+#define MM_TOKEN_INDEX_FROM_KIND(kind) ((kind) & 0xFF)
 #define MM_TOKEN_BINARY_OPERATOR_BLOCK_SIZE 16
 #define MM_TOKEN_BINARY_OPERATOR_BLOCK(kind) ((MM_u8)(kind) / MM_TOKEN_BINARY_OPERATOR_BLOCK_SIZE - 6)
 #define MM_TOKEN_BINARY_OPERATOR_INDEX(kind) ((MM_u8)(kind) % MM_TOKEN_BINARY_OPERATOR_BLOCK_SIZE)
@@ -9,6 +10,7 @@ enum MM_TOKEN_GROUP_KIND
     MM_TokenGroup_None = 0,
     MM_TokenGroup_Integer,
     MM_TokenGroup_Float,
+    MM_TokenGroup_AssignmentOperator,
     MM_TokenGroup_Operator,
     MM_TokenGroup_Comment,
     MM_TokenGroup_Keyword,
@@ -35,7 +37,7 @@ enum MM_TOKEN_KIND
     MM_Token_HexFloat32,
     MM_Token_HexFloat64,
     
-    MM_Token_FirstAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_Operator),
+    MM_Token_FirstAssignment = MM_TOKEN_KIND_FIRST(MM_TokenGroup_AssignmentOperator),
     MM_Token_Equals = MM_Token_FirstAssignment,
     MM_Token_StarEquals,
     MM_Token_SlashEquals,
@@ -152,10 +154,12 @@ MM_STATIC_ASSERT(MM_TOKEN_BINARY_OPERATOR_BLOCK(MM_Token_LastBinary) == 4);
 
 typedef struct MM_Token
 {
-    MM_u8* data;
+    union
+    {
+        struct MM_Text_Pos;
+        MM_Text_Pos pos;
+    };
     MM_u32 size;
-    MM_u32 line;
-    MM_u32 column;
     union
     {
         struct
@@ -171,21 +175,21 @@ typedef struct MM_Lexer
 {
     MM_Token current_token;
     MM_String string;
-    MM_u32 offset;
-    MM_u32 offset_to_line;
-    MM_u32 line;
     MM_Error error;
+    union
+    {
+        struct MM_Text_Pos;
+        MM_Text_Pos pos;
+    };
 } MM_Lexer;
 
 MM_Lexer
-MM_Lexer_Init(MM_String string)
+MM_Lexer_LexFromPos(MM_String string, MM_Text_Pos pos)
 {
     MM_Lexer lexer = (MM_Lexer){
         .current_token  = {},
         .string         = string,
-        .offset         = 0,
-        .offset_to_line = 0,
-        .line           = 1,
+        .pos            = pos,
         .error          = MM_ErrorNone,
     };
     
@@ -210,12 +214,12 @@ MM_Token
 MM_Lexer__Error(MM_Lexer* lexer, MM_u32 code)
 {
     lexer->current_token.kind = MM_Token_Invalid;
-    lexer->current_token.size = (MM_u32)((lexer->string.data + lexer->offset) - lexer->current_token.data);
+    lexer->current_token.size = (MM_u32)(lexer->offset - lexer->current_token.offset);
     
     MM_ASSERT(lexer->error.code == MM_Error_None);
     lexer->error = (MM_Error){
         .code = code,
-        .text.data = lexer->current_token.data,
+        .text.data = lexer->string.data + lexer->current_token.offset,
         .text.size = lexer->current_token.size,
     };
     
@@ -237,28 +241,19 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
         
         if (c == ' '  || c == '\t' ||
             c == '\v' || c == '\f' ||
-            c == '\r')
+            c == '\r' || c == '\n')
         {
             ++lexer->offset;
-        }
-        else if (c == '\n')
-        {
-            ++lexer->offset;
-            ++lexer->line;
-            
-            lexer->offset_to_line = lexer->offset;
         }
         else break;
     }
     
     lexer->current_token = (MM_Token){
-        .data   = lexer->string.data + lexer->offset,
-        .line   = lexer->line,
-        .column = lexer->offset - lexer->offset_to_line,
+        .pos  = lexer->pos,
+        .size = 0,
         
         // NOTE: assume an erroneous token of zero length, this will be updated to match the actual token later
-        .kind     = MM_Token_Invalid,
-        .size     = 0,
+        .kind = MM_Token_Invalid,
     };
     
     if (lexer->offset >= lexer->string.size) lexer->current_token.kind = MM_Token_EndOfStream;
@@ -599,7 +594,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
             }
         }
         
-        lexer->current_token.size = (MM_u32)((lexer->string.data + lexer->offset) - lexer->current_token.data);
+        lexer->current_token.size = (MM_u32)(lexer->offset - lexer->current_token.offset);
     }
     
     return lexer->current_token;
@@ -620,35 +615,37 @@ MM_Lexer_NextTokens(MM_Lexer* lexer, MM_Token* buffer, MM_umm buffer_size)
 }
 
 MM_String
-MM_Token_ToString(MM_Token token)
+MM_Lexer_TokenString(MM_Lexer* lexer, MM_Token token)
 {
-    return (MM_String){ .data = token.data, .size = token.size };
+    return (MM_String){ .data = lexer->string.data + token.offset, .size = token.size };
 }
 
 MM_Error
-MM_TokenParseError(MM_Token token, MM_u32 code, MM_u32 index, MM_u32 size)
+MM_Lexer__TokenParseError(MM_Lexer* lexer, MM_Token token, MM_u32 code, MM_u32 index, MM_u32 size)
 {
     return (MM_Error){
         .code = code,
         .text = {
-            .data = token.data + index,
+            .data = lexer->string.data + token.offset + index,
             .size = size,
         }
     };
 }
 
 MM_Error
-MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
+MM_Lexer_ParseInt(MM_Lexer* lexer, MM_Token token, MM_Soft_Int* result)
 {
     MM_ASSERT(token.kind_group == MM_TokenGroup_Integer);
     
     MM_ZeroStruct(result);
     
+    MM_String string = MM_Lexer_TokenString(lexer, token);
+    
     if (token.kind == MM_Token_BinaryInt)
     {
         for (MM_umm i = 2, digit_count = 0; i < token.size; ++i)
         {
-            char c = token.data[i];
+            char c = string.data[i];
             
             if (c != '_')
             {
@@ -657,7 +654,7 @@ MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
                 if (digit_count > 256)
                 {
                     //// ERROR
-                    return MM_TokenParseError(token, MM_TokenParseError_IntegerLiteralTooLarge, 0, token.size);
+                    return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_IntegerLiteralTooLarge, 0, token.size);
                 }
                 else
                 {
@@ -671,7 +668,7 @@ MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
     {
         for (MM_umm i = 2, digit_count = 0; i < token.size; ++i)
         {
-            char c = token.data[i];
+            char c = string.data[i];
             
             if (c != '_')
             {
@@ -680,7 +677,7 @@ MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
                 if (digit_count > 64)
                 {
                     //// ERROR
-                    return MM_TokenParseError(token, MM_TokenParseError_IntegerLiteralTooLarge, 0, token.size);
+                    return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_IntegerLiteralTooLarge, 0, token.size);
                 }
                 else
                 {
@@ -696,7 +693,7 @@ MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
         
         for (MM_umm i = (token.kind == MM_Token_DecimalInt ? 2 : 0); i < token.size; ++i)
         {
-            char c = token.data[i];
+            char c = string.data[i];
             
             if (c != '_')
             {
@@ -709,7 +706,7 @@ MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
                 if ((status & MM_SoftIntStatus_Carry) != 0 || (status & MM_SoftIntStatus_Overflow) != 0)
                 {
                     //// ERROR
-                    return MM_TokenParseError(token, MM_TokenParseError_IntegerLiteralTooLarge, 0, token.size);
+                    return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_IntegerLiteralTooLarge, 0, token.size);
                 }
             }
         }
@@ -719,9 +716,11 @@ MM_Token_ParseInt(MM_Token token, MM_Soft_Int* result)
 }
 
 MM_Error
-MM_Token_ParseFloat(MM_Token token, MM_Soft_Float* result)
+MM_Lexer_ParseFloat(MM_Lexer* lexer, MM_Token token, MM_Soft_Float* result)
 {
     MM_ASSERT(token.kind_group == MM_TokenGroup_Float);
+    
+    MM_String string = MM_Lexer_TokenString(lexer, token);
     
     if (token.kind == MM_Token_Float)
     {
@@ -733,7 +732,7 @@ MM_Token_ParseFloat(MM_Token token, MM_Soft_Float* result)
         
         for (MM_umm i = 2; i < token.size; ++i)
         {
-            char c = token.data[i];
+            char c = string.data[i];
             
             if (c != '_')
             {
@@ -767,12 +766,14 @@ MM_Token_ParseFloat(MM_Token token, MM_Soft_Float* result)
 }
 
 MM_Error
-MM_Token__ParseEscSeq(MM_Token token, MM_u32* result, MM_umm* index)
+MM_Lexer__ParseEscSeq(MM_Lexer* lexer, MM_Token token, MM_u32* result, MM_umm* index)
 {
+    MM_String string = MM_Lexer_TokenString(lexer, token);
+    
     MM_umm codepoint = 0;
     MM_umm i         = *index;
     
-    char c = token.data[i];
+    char c = string.data[i];
     if      (c == 'a')  i += 1, codepoint = '\a';
     else if (c == 'b')  i += 1, codepoint = '\b';
     else if (c == 'f')  i += 1, codepoint = '\f';
@@ -794,13 +795,13 @@ MM_Token__ParseEscSeq(MM_Token token, MM_u32* result, MM_umm* index)
         {
             codepoint <<= 4;
             
-            c = (i + j < token.size - 1 ? token.data[i + j] : 0);
+            c = (i + j < token.size - 1 ? string.data[i + j] : 0);
             if      (c >= '0' && c <= '9') codepoint |= c & 0xF;
             else if (c >= 'A' && c <= 'F') codepoint |= c & 0x1F + 9;
             else
             {
                 //// ERROR
-                return MM_TokenParseError(token, MM_TokenParseError_MissingDigitsInEscSeq, i - 2, j + 2);
+                return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_MissingDigitsInEscSeq, i - 2, j + 2);
             }
         }
         
@@ -814,28 +815,29 @@ MM_Token__ParseEscSeq(MM_Token token, MM_u32* result, MM_umm* index)
 }
 
 MM_Error
-MM_Token_ParseCodepoint(MM_Token token, MM_u32* result)
+MM_Lexer_ParseCodepoint(MM_Lexer* lexer, MM_Token token, MM_u32* result)
 {
-    MM_ASSERT(token.size >= 2 && token.data[0] == '\'');
+    MM_String string = MM_Lexer_TokenString(lexer, token);
+    MM_ASSERT(token.size >= 2 && string.data[0] == '\'');
     
     MM_u32 codepoint = 0;
     
     if (token.size == 2)
     {
         //// ERROR
-        return MM_TokenParseError(token, MM_TokenParseError_NoCodepointInCodepointLiteral, 0, token.size);
+        return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_NoCodepointInCodepointLiteral, 0, token.size);
     }
     else
     {
         MM_ASSERT(token.size > 2);
         
         MM_umm i = 1;
-        char c   = token.data[i];
+        char c   = string.data[i];
         
         if (c == '\\')
         {
             i += 1;
-            MM_Error error = MM_Token__ParseEscSeq(token, &codepoint, &i);
+            MM_Error error = MM_Lexer__ParseEscSeq(lexer, token, &codepoint, &i);
             if (error.code != MM_Error_None) return error;
         }
         else if ((c & 0x80) != 0)
@@ -859,13 +861,13 @@ MM_Token_ParseCodepoint(MM_Token token, MM_u32* result)
             else
             {
                 //// ERROR
-                return MM_TokenParseError(token, MM_TokenParseError_InvalidFirstByteOfUTF8, i, 1);
+                return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_InvalidFirstByteOfUTF8, i, 1);
             }
             
             MM_umm j = i + 1;
             for (; j < i + len && j < token.size - 1; ++j)
             {
-                c = token.data[j];
+                c = string.data[j];
                 if ((c & 0xC0) == 0x80) break;
                 else
                 {
@@ -879,7 +881,7 @@ MM_Token_ParseCodepoint(MM_Token token, MM_u32* result)
             {
                 //// ERROR
                 MM_ASSERT(i + j < token.size);
-                return MM_TokenParseError(token, MM_TokenParseError_MissingTrailingBytesUTF8, i, j - i);
+                return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_MissingTrailingBytesUTF8, i, j - i);
             }
         }
         else
@@ -892,9 +894,9 @@ MM_Token_ParseCodepoint(MM_Token token, MM_u32* result)
         {
             MM_ASSERT(i < token.size - 1);
             //// ERROR
-            return MM_TokenParseError(token, MM_TokenParseError_MoreThanOneCodepoint, 0, token.size);
+            return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_MoreThanOneCodepoint, 0, token.size);
         }
-        else MM_ASSERT(token.data[i] == '\'');
+        else MM_ASSERT(string.data[i] == '\'');
     }
     
     *result = codepoint;
@@ -903,9 +905,10 @@ MM_Token_ParseCodepoint(MM_Token token, MM_u32* result)
 }
 
 MM_Error
-MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
+MM_Lexer_ParseString(MM_Lexer* lexer, MM_Token token, MM_u8* buffer, MM_String* result)
 {
-    MM_ASSERT(token.size >= 2 && token.data[0] == '"');
+    MM_String string = MM_Lexer_TokenString(lexer, token);
+    MM_ASSERT(token.size >= 2 && string.data[0] == '"');
     
     result->data = buffer;
     result->size = 0;
@@ -913,7 +916,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
     MM_umm i = 1;
     while (i < token.size - 1)
     {
-        char c = token.data[i];
+        char c = string.data[i];
         
         if (c == '\\')
         {
@@ -921,7 +924,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
             i += 1;
             
             MM_u32 codepoint;
-            MM_Error error = MM_Token__ParseEscSeq(token, &codepoint, &i);
+            MM_Error error = MM_Lexer__ParseEscSeq(lexer, token, &codepoint, &i);
             
             if (error.code != MM_Error_None) return error;
             else
@@ -951,7 +954,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
                 else
                 {
                     //// ERROR
-                    return MM_TokenParseError(token, MM_TokenParseError_CodepointOutOfRange, k, k - i);
+                    return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_CodepointOutOfRange, k, k - i);
                 }
             }
         }
@@ -964,7 +967,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
             else
             {
                 //// ERROR
-                return MM_TokenParseError(token, MM_TokenParseError_InvalidFirstByteOfUTF8, i, 1);
+                return MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_InvalidFirstByteOfUTF8, i, 1);
             }
             
             result->data[result->size++] = c;
@@ -972,7 +975,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
             MM_umm j = i + 1;
             for (; j < i + len && j < token.size - 1; ++j)
             {
-                c = token.data[j];
+                c = string.data[j];
                 if ((c & 0xC0) == 0x80) break;
                 else result->data[result->size++] = c;
             }
@@ -982,7 +985,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
             {
                 //// ERROR
                 MM_ASSERT(i + j < token.size);
-                MM_TokenParseError(token, MM_TokenParseError_MissingTrailingBytesUTF8, i, j - i);
+                MM_Lexer__TokenParseError(lexer, token, MM_TokenParseError_MissingTrailingBytesUTF8, i, j - i);
             }
         }
         else
@@ -992,7 +995,7 @@ MM_Token_ParseString(MM_Token token, MM_u8* buffer, MM_String* result)
         }
     }
     
-    MM_ASSERT(i == token.size - 1 && token.data[i] == '"');
+    MM_ASSERT(i == token.size - 1 && string.data[i] == '"');
     
     return MM_ErrorNone;
 }

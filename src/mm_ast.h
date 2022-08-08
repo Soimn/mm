@@ -179,6 +179,7 @@ typedef struct MM_Special MM_Special;
 
 typedef struct MM_Special_Header
 {
+    MM_Text_Pos pos;
     struct MM_AST_Kind;
 } MM_Special_Header;
 
@@ -239,6 +240,7 @@ typedef struct MM_Expression MM_Expression;
 
 typedef struct MM_Expression_Header
 {
+    MM_Text_Pos pos;
     struct MM_AST_Kind;
     MM_Expression* next;
 } MM_Expression_Header;
@@ -451,6 +453,7 @@ typedef struct MM_Declaration MM_Declaration;
 
 typedef struct MM_Declaration_Header
 {
+    MM_Text_Pos pos;
     struct MM_AST_Kind;
     MM_Declaration* next;
 } MM_Declaration_Header;
@@ -523,6 +526,7 @@ typedef struct MM_Statement MM_Statement;
 
 typedef struct MM_Statement_Header
 {
+    MM_Text_Pos pos;
     struct MM_AST_Kind;
     MM_Statement* next;
 } MM_Statement_Header;
@@ -603,6 +607,7 @@ typedef struct MM_AST
     {
         struct
         {
+            MM_Text_Pos pos;
             struct MM_AST_Kind;
             struct MM_AST* next;
         };
