@@ -30,12 +30,3 @@ MM_Workspace_Close(MM_Workspace** workspace)
     MM_Arena_Free(&(*workspace)->workspace_arena);
     *workspace = 0;
 }
-
-// unchecked
-// staging
-// checked
-
-// unchecked decls are type checked with the information available in the checked pool
-// decls in staging are type checked, but do not provide any information to the checking of unchecked decls
-// staging decls may go back into the unchecked pool or progress to the checked pool
-// if decls in the checked pool are removed or moved to the unchecked pool, their dependencies are moved to the unchecked pool

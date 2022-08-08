@@ -719,3 +719,15 @@ text -> |lexer| -> tokens
 tokens -> |parser| -> ast,textpos
 
 file,offset
+
+
+// unchecked
+// staging
+// checked
+
+// unchecked decls are type checked with the information available in the checked pool
+// decls in staging are type checked, but do not provide any information to the checking of unchecked decls
+// staging decls may go back into the unchecked pool or progress to the checked pool
+// if decls in the checked pool are removed or moved to the unchecked pool, their dependencies are moved to the unchecked pool
+
+How should comments, whitespace and syntax errors be handled?

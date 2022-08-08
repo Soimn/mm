@@ -7,8 +7,22 @@ typedef struct MM_Parser
     MM_Error error;
 } MM_Parser;
 
+// TODO: What to do about comments?
+MM_Token
+MM_Parser__NextToken(MM_Parser* parser)
+{
+    MM_Token token;
+    
+    do
+    {
+        token = MM_Lexer_NextToken(&parser->lexer);
+    } while (token.kind_group == MM_TokenGroup_Comment);
+    
+    return token;
+}
+
 #define MM_GetToken() MM_Lexer_CurrentToken(&parser->lexer)
-#define MM_NextToken() MM_Lexer_NextToken(&parser->lexer)
+#define MM_NextToken() MM_Parser__NextToken(parser)
 #define MM_IsToken(k) (MM_GetToken().kind == (k))
 #define MM_IsTokenGroup(k) (MM_GetToken().kind_group == (k))
 #define MM_EatToken(k) (MM_GetToken().kind == (k) ? MM_Lexer_NextToken(&parser->lexer), MM_true : MM_false)

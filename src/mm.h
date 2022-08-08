@@ -123,22 +123,9 @@ typedef struct MM_Text_Pos
 typedef MM_String MM_Identifier;
 typedef MM_String MM_String_Literal;
 typedef MM_f64 MM_Soft_Float;
-
 typedef struct MM_Soft_Int MM_Soft_Int;
-typedef struct MM_Lexer MM_Lexer;
-typedef struct MM_Token MM_Token;
-typedef struct MM_Error MM_Error;
 
-MM_Lexer  MM_Lexer_LexFromPos    (MM_String string, MM_Text_Pos pos);
-MM_Token  MM_Lexer_CurrentToken  (MM_Lexer* lexer);
-MM_Error  MM_Lexer_GetError      (MM_Lexer* lexer);
-MM_Token  MM_Lexer_NextToken     (MM_Lexer* lexer);
-MM_umm    MM_Lexer_NextTokens    (MM_Lexer* lexer, MM_Token* buffer, MM_umm buffer_size);
-MM_String MM_Lexer_TokenString   (MM_Lexer* lexer, MM_Token token);
-MM_Error  MM_Lexer_ParseInt      (MM_Lexer* lexer, MM_Token token, MM_Soft_Int* result);
-MM_Error  MM_Lexer_ParseFloat    (MM_Lexer* lexer, MM_Token token, MM_Soft_Float* result);
-MM_Error  MM_Lexer_ParseCodepoint(MM_Lexer* lexer, MM_Token token, MM_u32* result);
-MM_Error  MM_Lexer_ParseString   (MM_Lexer* lexer, MM_Token token, MM_u8* buffer, MM_String* result);
+typedef struct MM_Error MM_Error;
 
 void* MM_System_DefaultReserveMemory(MM_umm size);
 void  MM_System_DefaultCommitMemory (void* ptr, MM_umm size);
@@ -163,6 +150,25 @@ void  MM_System_DefaultFreeMemory   (void* ptr);
 #ifndef MM_SYSTEM_FREE_MEMORY
 #define MM_SYSTEM_FREE_MEMORY(ptr) MM_System_DefaultFreeMemory(ptr)
 #endif
+
+typedef struct MM_Lexer MM_Lexer;
+typedef struct MM_Token MM_Token;
+
+MM_Lexer  MM_Lexer_LexFromPos    (MM_String string, MM_Text_Pos pos);
+MM_Token  MM_Lexer_CurrentToken  (MM_Lexer* lexer);
+MM_Error  MM_Lexer_GetError      (MM_Lexer* lexer);
+MM_Token  MM_Lexer_NextToken     (MM_Lexer* lexer);
+MM_umm    MM_Lexer_NextTokens    (MM_Lexer* lexer, MM_Token* buffer, MM_umm buffer_size);
+MM_String MM_Lexer_TokenString   (MM_Lexer* lexer, MM_Token token);
+MM_Error  MM_Lexer_ParseInt      (MM_Lexer* lexer, MM_Token token, MM_Soft_Int* result);
+MM_Error  MM_Lexer_ParseFloat    (MM_Lexer* lexer, MM_Token token, MM_Soft_Float* result);
+MM_Error  MM_Lexer_ParseCodepoint(MM_Lexer* lexer, MM_Token token, MM_u32* result);
+MM_Error  MM_Lexer_ParseString   (MM_Lexer* lexer, MM_Token token, MM_u8* buffer, MM_String* result);
+
+MM_Error MM_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena,
+                        MM_String_Intern_Table* identifier_table, MM_String_Intern_Table* string_table,
+                        MM_AST** ast);
+
 typedef enum MM_ENTITY_KIND
 {
     MM_Entity_Variable,
