@@ -11,6 +11,7 @@ typedef enum MM_ERROR_CLASS
 typedef enum MM_ERROR_CODE
 {
     MM_Error_None = MM_ERROR_FIRST_OF_CLASS(MM_ErrorClass_None),
+    MM_Error_UnknownLabel,
 } MM_ERROR_CODE;
 
 MM_STATIC_ASSERT(MM_Error_None == 0);

@@ -58,13 +58,6 @@ MM_Zero(void* ptr, MM_umm size)
 
 #define MM_ZeroStruct(s) MM_Zero((s), sizeof(*(s)))
 
-// NOTE: The arena assumes this limit will never be reached before the system runs out of memory
-#ifndef MM_ARENA_RESERVE_SIZE
-#define MM_ARENA_RESERVE_SIZE MM_GB(32)
-#endif
-
-MM_STATIC_ASSERT(MM_ARENA_RESERVE_SIZE < MM_U64_MAX / 2); // NOTE: to avoid overflow in MM_Arena_Push
-
 typedef struct MM_Arena
 {
     MM_u64 offset;
@@ -76,12 +69,12 @@ typedef struct MM_Arena
 typedef MM_u64 MM_Arena_Marker;
 
 MM_Arena*
-MM_Arena_Init(MM_umm page_size)
+MM_Arena_Init(MM_umm page_size, MM_umm reserve_size)
 {
     MM_ASSERT(page_size % MM_SYSTEM_PAGE_SIZE == 0);
-    MM_ASSERT(MM_ARENA_RESERVE_SIZE % page_size == 0);
+    MM_ASSERT(reserve_size > 0 && reserve_size % page_size == 0);
     
-    MM_Arena* arena = MM_SYSTEM_RESERVE_MEMORY(MM_ARENA_RESERVE_SIZE);
+    MM_Arena* arena = MM_SYSTEM_RESERVE_MEMORY(reserve_size);
     MM_SYSTEM_COMMIT_MEMORY(arena, page_size);
     
     *arena = (MM_Arena){
@@ -96,10 +89,9 @@ MM_Arena_Init(MM_umm page_size)
 void*
 MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
 {
-    MM_ASSERT(size <= MM_ARENA_RESERVE_SIZE);
+    MM_ASSERT(size <= MM_U64_MAX / 2);
     
     MM_u8 align_offset = MM_AlignOffset(arena->mem_start + arena->offset, alignment);
-    MM_ASSERT(arena->offset + align_offset + size < MM_ARENA_RESERVE_SIZE);
     
     if (arena->space < size + align_offset)
     {
@@ -114,6 +106,24 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
     arena->space  -= adjustment;
     
     return result;
+}
+
+void*
+MM_Arena_PushCopy(MM_Arena* arena, void* data, MM_umm size, MM_u8 alignment)
+{
+    void* new_data = MM_Arena_Push(arena, size, alignment);
+    MM_Copy(new_data, data, size);
+    
+    return new_data;
+}
+
+void*
+MM_Arena_PushZero(MM_Arena* arena, MM_umm size, MM_u8 alignment)
+{
+    void* data = MM_Arena_Push(arena, size, alignment);
+    MM_Zero(data, size);
+    
+    return data;
 }
 
 void
@@ -152,4 +162,10 @@ MM_Arena_PopToMarker(MM_Arena* arena, MM_Arena_Marker marker)
     
     arena->space += arena->offset - marker;
     arena->offset = marker;
+}
+
+MM_umm
+MM_Arena_UsedBytes(MM_Arena* arena)
+{
+    return arena->offset;
 }

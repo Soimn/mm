@@ -48,6 +48,20 @@ typedef struct MM_String_Intern_Table
     MM_String_Intern_Entry map[MM_STRING_INTERN_TABLE_MAP_SIZE];
 } MM_String_Intern_Table;
 
+MM_String_Intern_Table*
+MM_String_InitInternTable(MM_Arena* intern_arena, MM_Arena* string_arena)
+{
+    MM_String_Intern_Table* intern_table = MM_Arena_Push(intern_arena, sizeof(MM_String_Intern_Table), MM_ALIGNOF(MM_String_Intern_Table));
+    *intern_table = (MM_String_Intern_Table){
+        .intern_arena = intern_arena,
+        .string_arena = string_arena,
+        .temp_marker  = 0,
+        .map          = {0},
+    };
+    
+    return intern_table;
+}
+
 MM_String
 MM_String_Intern(MM_String_Intern_Table* intern_table, MM_String s)
 {

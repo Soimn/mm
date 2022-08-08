@@ -97,7 +97,7 @@ typedef MM_u8 MM_bool;
 typedef struct MM_String
 {
     MM_u8* data;
-    MM_u64 size;
+    MM_u32 size;
 } MM_String;
 
 #define MM_STRING(S) (MM_String){ .data = (MM_u8*)(S), .size = sizeof(S) - 1 }
@@ -113,6 +113,7 @@ typedef struct MM_Slice
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 typedef MM_u32 MM_File_ID;
+#define MM_FILE_ID_NIL 0
 
 typedef struct MM_Text_Pos
 {
@@ -126,10 +127,15 @@ typedef MM_f64 MM_Soft_Float;
 typedef struct MM_Soft_Int MM_Soft_Int;
 
 typedef struct MM_Error MM_Error;
+typedef struct MM_Arena MM_Arena;
+typedef struct MM_String_Intern_Table MM_String_Intern_Table;
+typedef struct MM_AST MM_AST;
 
-void* MM_System_DefaultReserveMemory(MM_umm size);
-void  MM_System_DefaultCommitMemory (void* ptr, MM_umm size);
-void  MM_System_DefaultFreeMemory   (void* ptr);
+void*    MM_System_DefaultReserveMemory       (MM_umm size);
+void     MM_System_DefaultCommitMemory        (void* ptr, MM_umm size);
+void     MM_System_DefaultFreeMemory          (void* ptr);
+MM_Error MM_System_DefaultLoadFile            (MM_Arena* arena, MM_String path, MM_String* contents);
+MM_bool  MM_System_DefaultPathsPointToSameFile(MM_String p0, MM_String p1);
 
 #ifndef MM_SYSTEM_PAGE_SIZE
 #define MM_SYSTEM_PAGE_SIZE MM_KB(4)
@@ -149,6 +155,14 @@ void  MM_System_DefaultFreeMemory   (void* ptr);
 
 #ifndef MM_SYSTEM_FREE_MEMORY
 #define MM_SYSTEM_FREE_MEMORY(ptr) MM_System_DefaultFreeMemory(ptr)
+#endif
+
+#ifndef MM_SYSTEM_LOAD_FILE
+#define MM_SYSTEM_LOAD_FILE(arena, path, contents) MM_System_DefaultLoadFile((arena), (path), (contents))
+#endif
+
+#ifndef MM_SYSTEM_PATHS_POINT_TO_SAME_FILE
+#define MM_SYSTEM_PATHS_POINT_TO_SAME_FILE(p0, p1) MM_System_DefaultPathsPointToSameFile((p0), (p1))
 #endif
 
 typedef struct MM_Lexer MM_Lexer;
@@ -184,11 +198,28 @@ typedef struct MM_Entity
     // TODO: tracking, history, etc.
 } MM_Entity;
 
+typedef struct MM_Path_Label
+{
+    MM_String name;
+    MM_String path;
+} MM_Path_Label;
+
+typedef struct MM_Workspace_Options
+{
+    MM_Path_Label* path_labels;
+    MM_u32 path_label_count;
+} MM_Workspace_Options;
+
 typedef struct MM_Workspace
 {
     struct MM_Arena* workspace_arena;
     struct MM_Arena* ast_arena;
+    struct MM_Arena* intern_arena;
+    struct MM_Arena* string_arena;
+    struct MM_Arena* file_table_arena;
+    struct MM_Arena* file_content_arena;
     struct MM_String_Intern_Table* intern_table;
+    struct MM_File_Table* file_table;
 } MM_Workspace;
 
 #ifdef _WIN32
@@ -200,6 +231,7 @@ typedef struct MM_Workspace
 #include "mm_int.h"
 #include "mm_float.h"
 #include "mm_error.h"
+#include "mm_file.h"
 #include "mm_workspace.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
