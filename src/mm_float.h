@@ -205,3 +205,5 @@ MM_F64_ToF16(MM_f64 float64)
     
     return f.bits;
 }
+
+typedef MM_f64 MM_Soft_Float;

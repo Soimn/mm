@@ -1,37 +1,57 @@
-#include "../build/mm.h" // NOTE: using the generated single header instead of mm.h directly
+#ifndef MM_DEBUG
+#define MM_DEBUG 0
+#endif
 
-void* memset(void* ptr, int value, unsigned __int64 size);
-void* memcpy(void* rdst, const void* rsrc, unsigned __int64 count);
+#ifdef _WIN32
+#include "mm_win32.h"
+#else
+#error "Platform not supported"
+#endif
 
-void*
-memset(void* ptr, int value, unsigned __int64 size)
+void* MM_System_ReserveMemory(MM_umm size);
+void  MM_System_CommitMemory (void* base, MM_umm size);
+void  MM_System_FreeMemory   (void* base);
+
+#include "mm_memory.h"
+#include "mm_int.h"
+#include "mm_float.h"
+#include "mm_string.h"
+
+typedef MM_u32 MM_File_ID;
+
+typedef struct MM_Text_Pos
 {
-    unsigned __int8* bptr = ptr;
-    unsigned __int8 val   = (unsigned __int8)value;
-    
-    for (unsigned __int64 i = 0; i < size; ++i)
+    MM_File_ID file;
+    MM_u32 offset;
+} MM_Text_Pos;
+
+typedef struct MM_Text
+{
+    union
     {
-        *bptr++ = val;
-    }
-    
-    return ptr;
-}
+        struct MM_Text_Pos;
+        MM_Text_Pos pos;
+    };
+    MM_u32 size;
+} MM_Text;
 
-void*
-memcpy(void* rdst, const void* rsrc, unsigned __int64 count)
+typedef struct MM_Identifier
 {
-    unsigned __int8* dst = (unsigned __int8*)rdst;
-    const unsigned __int8* src = (const unsigned __int8*)rsrc;
-    while (count--)
-    {
-        *dst++ = *src++;
-    }
-    return dst;
-}
+} MM_Identifier;
 
-int _fltused;
-
-int __stdcall _DllMainCRTStartup(void* hinstDLL, unsigned int fdwReason, void* lpReserved)
+typedef struct MM_String_Literal
 {
-    return 1;
+} MM_String_Literal;
+
+
+typedef struct MM_Codepoint
+{
+    MM_u32 value;
+} MM_Codepoint;
+
+#include "mm_lexer.h"
+
+void
+MM_Main()
+{
 }

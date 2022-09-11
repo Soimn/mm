@@ -74,8 +74,8 @@ MM_Arena_Init(MM_umm page_size, MM_umm reserve_size)
     MM_ASSERT(page_size % MM_SYSTEM_PAGE_SIZE == 0);
     MM_ASSERT(reserve_size > 0 && reserve_size % page_size == 0);
     
-    MM_Arena* arena = MM_SYSTEM_RESERVE_MEMORY(reserve_size);
-    MM_SYSTEM_COMMIT_MEMORY(arena, page_size);
+    MM_Arena* arena = MM_System_ReserveMemory(reserve_size);
+    MM_System_CommitMemory(arena, page_size);
     
     *arena = (MM_Arena){
         .offset    = 0,
@@ -95,7 +95,7 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
     
     if (arena->space < size + align_offset)
     {
-        MM_SYSTEM_COMMIT_MEMORY(arena->mem_start + arena->offset + arena->space, arena->page_size);
+        MM_System_CommitMemory(arena->mem_start + arena->offset + arena->space, arena->page_size);
         arena->space += arena->page_size;
     }
     
@@ -145,7 +145,7 @@ MM_Arena_Clear(MM_Arena* arena)
 void
 MM_Arena_Free(MM_Arena** arena)
 {
-    MM_SYSTEM_FREE_MEMORY(*arena);
+    MM_System_FreeMemory(*arena);
     *arena = 0;
 }
 

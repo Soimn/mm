@@ -1,20 +1,59 @@
+#define UNICODE
+#define NOMINMAX            1
+#define WIN32_LEAN_AND_MEAN 1
+#define WIN32_MEAN_AND_LEAN 1
+#define VC_EXTRALEAN        1
+#include <windows.h>
+#undef NOMINMAX
+#undef WIN32_LEAN_AND_MEAN
+#undef WIN32_MEAN_AND_LEAN
+#undef VC_EXTRALEAN
+#undef far
+#undef near
+#undef MM_MIN
+#undef MM_MAX
+
+#include <intrin.h>
+#include <immintrin.h>
+
+typedef signed __int8   MM_i8;
+typedef signed __int16  MM_i16;
+typedef signed __int32  MM_i32;
+typedef signed __int64  MM_i64;
+typedef signed __int128 MM_i128;
+
+typedef unsigned __int8   MM_u8;
+typedef unsigned __int16  MM_u16;
+typedef unsigned __int32  MM_u32;
+typedef unsigned __int64  MM_u64;
+typedef unsigned __int128 MM_u128;
+
+#include "mm_common.h"
+
+#define MM_SYSTEM_PAGE_SIZE MM_KB(4)
+
 void*
-MM_System_DefaultReserveMemory(MM_umm size)
+MM_System_ReserveMemory(MM_umm size)
 {
-    void* VirtualAlloc(void* lpAddress, unsigned __int64 dwSize, unsigned __int32 flAllocationType, unsigned __int32 flProtect);
-    return VirtualAlloc(0, size, 0x00002000 /*MEM_RESERVE*/, 0x04 /*PAGE_READWRITE*/);
+    return VirtualAlloc(0, size, MEM_RESERVE, PAGE_READWRITE);
 }
 
 void
-MM_System_DefaultCommitMemory(void* ptr, MM_umm size)
+MM_System_CommitMemory(void* base, MM_umm size)
 {
-    void* VirtualAlloc(void* lpAddress, unsigned __int64 dwSize, unsigned __int32 flAllocationType, unsigned __int32 flProtect);
-    VirtualAlloc(ptr, size, 0x00001000 /*MEM_COMMIT*/, 0x04 /*PAGE_READWRITE*/);
+    VirtualAlloc(base, size, MEM_COMMIT, PAGE_READWRITE);
 }
 
 void
-MM_System_DefaultFreeMemory(void* ptr)
+MM_System_FreeMemory(void* base)
 {
-    int VirtualFree(void* lpAddress, unsigned __int64 dwSize, unsigned __int32 dwFreeType);
-    VirtualFree(ptr, 0, 0x00008000 /*MEM_RELEASE*/);
+    VirtualFree(base, 0, MEM_RELEASE);
+}
+
+int
+mainCRTStartup()
+{
+    void MM_Main();
+    MM_Main();
+    return 0;
 }
