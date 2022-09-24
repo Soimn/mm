@@ -1,148 +1,246 @@
 # The M programming language
+## Design Rambling
+I started making a lanaguage because it anoyed me how very simple things become complicated/introduce too much garbage, this is very prevailant in languages such as Java, but is still present in more sane, but still insane, languages such as C.
 
-## Information
-The M language is a systems programming language that aims to
-- be as low level as, and with less overhead compared to, C
-- have no undefined or implementation behaviour, only platform and architecture specific
-- be tool friendly
-- allow compile time execution, inspection and metaprogramming of code
+I kept on wanting to make a language because of how disgusted I was by C's UB and the alluring benefits of metaprogramming
 
-### As low level as C
-C is, as far as I am concerned, currently the best "low level" systems programming language, but that is only because the competition is garbage. Yes, C can be called "low level", but it has way too much overhead to actually comply to the notion that "low level" = "maximal control". The M language aims to rectify this by having no runtime library, no hidden overhead and give full control over calling conventions, memory layout and access,  and the resulting machine code. This will invevitably lead to more verbosity and mental overhead in some cases, but I believe this is the right choice for a systems programming language.
+I wanted to stop making languages because if I would ever be able to finish one, it would likely provide only marginal improvements on C, making the effort wasted, when it could have rather been spent on making games.
 
-### No undefined or implementation behaviour
-One of the major problems of C, and absolutely everything built around it, is undefined behaviour. This is problematic as a programmer because it breaks your assumptions about how the language works and how the compiler will treat the code, since the list of undefined behaviour is impossible to keep track of mentally (it is not even completely specified in the C standard) and that undefined behaviour is infectious. If it were not for this I would say C is a great language, with some minor flaws. However, with the addition of undefined behaviour, as well as differences in UB handling by different compilers and compiler versions, C goes from a great, to horrible flaming hot garbage of a "programming" language. The only reason why C hasn't died completely because of this, that I can think of, is that every other language does this too, either directly or indirectly by interfacing with the C ABI. I therefore believe that every new programming language should have absolutely no undefined behaviour, and that the spec should clearly define all behaviour on every supported platform and architecture, such that any difference in compiler implementation that is percievable by the programmer is considered a bug. 
+I still kept on working on the language, because my time investment was too significant, making it hard to justify stopping.
 
-To achieve this, the language restricts itself to a select number of platforms and architectures which it is designed for. Any platform and architecture that is not in that subset might be supported to a degree, but must emulate the behaviour defined for the other platforms and architectures.
+Goals: simple, sane and easy to make tools for
+Subgoal: expressive metaprogramming
 
-#### Supported platforms:
-- Windows
-- Linux
+I want the language to be simple (in the C sence, not like Lisp), because I dispise working in languages were the language complexity holds me back from doing actual work
 
-as well as bare metal (no operating system)
+I want the language to be sane and without UB, since yuck, everyone who actually trusts C++ code compiled by LLVM to be used in hard realtime systems is either a total nutjob, or the living breathing, example of the "this is fine" meme
 
-#### Supported architectures:
-- x64
-- AArch64
+The final goal is to make making tooling easy. A lot of problems with C comes from how hard it is to work with on a tooling level, since it is fucking impossible to parse correctly. Making a language easily parsable, have simple semantics and no significant leeway for differences between compilers would make debugger, text editors and other tools, way easier to develop and enable much more advanced tools , which the programmer will benefit greatly from.
 
-other architectures may be supported in the future, but never at the cost of the above list
+Expressive metaprogramming is a subgoal, since metaprogramming provides a great deal of power, but that comes at the cost of it being way too complex to wrap neatly up in a language spec without making it so hard to use correctly that the benefit of doing something meta is inly marginal. Since I, and probably everyone else, have nowhere near the experience needed to design a competent metaprogramming system, I will instead include metaprogramming as a subgoal and only design in favor of metaprogramming when it does not violate the original 3 goals.
 
-### Be tool friendly
-A lot of languages can be both complicated to parse and check. This makes things like text editors and debuggers harder to write than need be. My solution to this problem is to both make the language easy to parse and have a stable AST representation, as well as making the compiler provide facilities for both parsing, full compilation, expression evaluation and queries for symbol-, type- and general information. Furthermore, it is currently planned to record every action the compiler takes, along with everything the compiler loads and creates (text, AST, symbol tables), into a so called *workspace*. This *workspace* will then contain all state used and required for compilation, and can therefore be used to stop compilation, and continue at a later time. This seems like nonsense, but being able to do this also enables debuggers to not only access all state the compiler uses, but also backtrack how the resulting code ended up as it is. I have yet to realize this, but I believe it will be a major improvement over the awful debugging experience that C provides. 
+Preemptive decisions:
+- odin/jai like synatx, since this is easy to parse and C like
 
-### Allow compiletime execution, inspection and metaprogramming
-This feature is not strictly as neccessary as the others, and serves more as way of removing ugly hacks by standardizing how code can be analyzed, modified and generated. Compile time exection allows pregenerating data needed for runtime from code inside the program, instead of making a tool generate the data. Inspection allows user defined checking of code and enables code generation based on the program source. Metaprogramming allows modifying libraries without changing the source text, generation of code and, to some degree, user defined langauge constructs. These features make it easier to check and generate code and data, which makes hacks, like ugly cases of X-macros, unneccessary. 
+small syntax problems
+types
+compiler arch
 
+odin like syntax with some changes
+c like semantics, except types
+goto?
 
+names/symbols
+typers of values
+values
 
-## Specification
+namespacing
+type conversion, introspection, value of types
+const &, parameters
 
+start with kernel language
 
-Primitive types
-Type | Description
-------|-----------
-soft_int | soft 256-bit signed integer
-soft_float | soft 
-int | register sized signed integer
-i8 | signed 8-bit integer
-i16 | signed 16-bit integer
-i32 | signed 32-bit integer
-i64 | signed 64-bit integer
-i128 | signed 128-bit integer
-uint | register sized unsigned integer
-u8 | unsigned 8-bit integer
-u16 | unsigned 16-bit integer
-u32 | unsigned 32-bit integer
-u64 | unsigned 64-bit integer
-u128 | unsigned 128-bit integer
+```
+if (condition) statement else statement
+while (init; condition; step) statement
+return expression
+break label
+continue label
+{}
+a := 0;
+A :: 0;
+a = b;
+```
 
+```
+identifier
+0.0, 0
+"string"
+true
+struct {}
+union {} // ?
+enum {}
+proc() -> {}
 
+^, [], [N]
 
+., [N], [N:N], (), .{}, .[]
 
++, -, ~, !, &, ^
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Operators (sorted by precedence, high to low)
-```c
-// primary
-.{}, .[] // struct literal, array literal
-
-// type prefix
-^, [], [N] // pointer to, slice of, N size array of
-
-// postfix
-^, [N], [N:M], .M, (), .{}, .[] // dereference, subscript, slice, member of, proc call, struct literal, array literal
-
-// prefix
-+, -, !, ~, & // plus, neg, not, bit not, address of
-
-// binary
-*, /, %, &, <<, >>, >>> // mul, div, rem, bit and, shl, shr, sar
-+, -, |, ~ // add, sub, bit or, bit xor
-==, !=, <, <=, >, >= // eq, neq, less, less_eq, greater, greater_eq
-&& // logical and
-|| // logical or
+*, /, %, &, <<, >>, >>>
++, -, |, ~
+==, !=, <, <=, >, >=
+&&
+||
 ```
 
 ```c
-<identifier> name specifier
-.<expression> index/name specifier, .<int> index, .<string> name
-<expression>..<expression> range specifier
+const A = 0;
+var b: int = 0;
+var b = 0;
+```
 
-
-Entity :: struct
+```c
+const main = proc
 {
-	a: int;
-	b: float;
-	c: bool;
-	d: int;
-	e: int;
+	const N = 100;
+	var board_mem: [2][N*N]bool;
+	var boards := [2]^[N*N]bool.{&board_mem[0], &board_mem[1]}
+
+	while true
+	{
+		while y := 0; y < N; y += 1
+		{
+			while x := 0; x < N; x += 1
+			{
+				var min_y, max_y := max(0, y - 1), min(y + 1, N - 1);
+				var min_x, max_x := max(0, x - 1), min(x + 1, N - 1);
+
+				var neighbours := 0;
+				while ny := min_y; ny <= max_y; ny += 1
+				{
+					while nx := min_x; nx <= max_x; nx += 1
+					{
+						neighbours += cast(boards[0][ny*N + nx]);
+					}
+				}
+
+				if neighbours < 2 || neighbours > 3 do boards[1][y*N + x] = false;
+				else boards[0][y*N + x] || neighbours == 3 do boards[1][y*N + x] = true;
+			}
+		}
+
+		boards[0], boards[1] = boards[1], boards[0];
+	}
+}
+```
+
+```c
+main :: proc
+{
+	N :: 100;
+	board_mem: [2][N*N]bool;
+	boards := [2]^[N*N]bool.{&board_mem[0], &board_mem[1]}
+
+	while (true)
+	{
+		while (y := 0; y < N; y += 1)
+		{
+			while (x := 0; x < N; x += 1)
+			{
+				min_y, max_y := max(0, y - 1), min(y + 1, N - 1);
+				min_x, max_x := max(0, x - 1), min(x + 1, N - 1);
+
+				neighbours := 0;
+				while (ny := min_y; ny <= max_y; ny += 1)
+				{
+					while (nx := min_x; nx <= max_x; nx += 1)
+					{
+						neighbours += cast(boards[0][ny*N + nx]);
+					}
+				}
+
+				if   (neighbours < 2 || neighbours > 3) boards[1][y*N + x] = false;
+				else (boards[0][y*N + x] || neighbours == 3) boards[1][y*N + x] = true;
+			}
+		}
+
+		boards[0], boards[1] = boards[1], boards[0];
+	}
+}
+```
+
+
+
+```c
+defer
+using
+```
+
+
+types
+description of data layout, usage and possible transformations
+size, alignment, usage, (operations)
+
+soft types
+distinct types
+implicit conversions (only make sense for math, makes the expression more mathy and less obscure)
+
+
+soft, distinct, alias
+
+operator overloading? no
+conversion overloading? no
+
+soft int, float and bool and string
+distinct int, i8, i16, ... b8, b16, ..., string, cstring
+
+byte, word
+
+implicit conversion rules
+soft int -> int, i*, uint, u* as long as the value fits
+soft float -> f16, f32, f64 as long as the value is representable exactly
+soft bool -> b8, b16 always
+soft string -> string, cstring always
+alias of T -> T
+soft int -> float, f32, f64
+\^T -> \^byte
+\^byte -> \^T
+
+conversion rules
+implicit conversion
+int, i*, uint, u*, float, f*, bool, b* -> int, i*, uint, u*, float, f*, bool, b*
+
+^, \[N], \[], \[\^]
+^ is a pointer to a single element
+\[N] is a fixed N sized owning array, where N is known at compile time, and *owning* mean that it is not a view into memory in a range, it is the memory in that range
+^\[N] is a pointer to a fixed N sized array, which essentially works as a non owning fixed array
+\[] is a pointer and length pair
+\[^] is an array with no specified length
+
+```c
+[^:0]int
+[]int
+[:0]int
+```
+
+\^byte = rawptr
+\[]byte = \[]u8
+\[^:0]byte = cstring
+\[:0] = zstring
+\[] = string
+
+
+nil - the nothing address, 0,
+
+namespaces:
+using collapses namespaces, and aliases
+using a;
+using a as b;
+
+goto:
+labels
+defer
+
+assembly?
+asm label:;
+asm jmp label;
+
+asm mov rax, i.a;
+asm mov rbx, i.b;
+asm add rax, rax, rbx;
+asm mov c, rax;
+
+asm {
+	mov rax, i.a // comments
+	mov rbx, i.b
+	add rax, rax, rbx
+	mov c, rax
 }
 
-Entity.{ ."a" = 0, .2 = false, 3..4 = 42, b = 3.0 }
-
-.[0..N-1 = 1, .N = 0, N+1..2*N = 1]
-```
+Compiler arch:
+library centered around the concept of a "Workspace"
+the workspace holds all state
+procedures in the library may be either statefull or stateless, stateless proc: e.g. LexString, statefull proc: e.g. CheckProc
+a workspace is serializable as a M workspace file
