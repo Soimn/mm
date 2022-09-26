@@ -1,0 +1,7 @@
+GetToken()
+{
+}
+
+NextToken()
+{
+}
