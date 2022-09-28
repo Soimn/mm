@@ -10,7 +10,7 @@ set "root_dir=%cd%"
 set "build_dir=%root_dir%\build"
 set "src_dir=%root_dir%\src"
 
-set "common_comp_options=-W4 -Wno-unused-parameter -Wno-microsoft-anon-tag"
+set "common_comp_options=-W4 -Wno-unused-parameter -Wno-microsoft-anon-tag -Wno-logical-op-parentheses"
 set "common_link_options=-INCREMENTAL:no -opt:icf -opt:ref"
 
 set "common_mmc_link_options= -SUBSYSTEM:console"
