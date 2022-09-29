@@ -33,27 +33,23 @@ enum MM_TOKEN_KIND
     MM_Token_Blank,                                // _
     
     MM_Token__FirstAssignment,
-    MM_Token_Equals = MM_Token__FirstAssignment,
-    
-    MM_Token_StarEQ = MM_TOKEN_BLOCK(2),           // *=
+    MM_Token_Equals = MM_Token__FirstAssignment,   // =
+    MM_Token_StarEQ,                               // *=
     MM_Token_SlashEQ,                              // /=
     MM_Token_PercentEQ,                            // %=
     MM_Token_AndEQ,                                // &=
     MM_Token_ShlEQ,                                // <<=
     MM_Token_ShrEQ,                                // >>=
     MM_Token_SarEQ,                                // >>>=
-    
-    MM_Token_PlusEQ = MM_TOKEN_BLOCK(3),           // +=
+    MM_Token_PlusEQ,                               // +=
     MM_Token_MinusEQ,                              // -=
     MM_Token_OrEQ,                                 // |=
     MM_Token_TildeEQ,                              // ~=
+    MM_Token_AndAndEQ,                             // &&=
+    MM_Token_OrOrEQ,                               // ||=
+    MM_Token__LastAssignment = MM_Token_OrOrEQ,
     
-    MM_Token_AndAndEQ = MM_TOKEN_BLOCK(4),         // &&=
-    
-    MM_Token_OrOrEQ = MM_TOKEN_BLOCK(5),           // ||=
-    MM_Token__LastAssignment = MM_TOKEN_BLOCK(6) - 1,
-    
-    MM_Token__FirstBinary = MM_TOKEN_BLOCK(6),
+    MM_Token__FirstBinary = MM_TOKEN_BLOCK(4),
     MM_Token_Star = MM_Token__FirstBinary,         // *
     MM_Token_Slash,                                // /
     MM_Token_Percent,                              // %
@@ -62,22 +58,22 @@ enum MM_TOKEN_KIND
     MM_Token_Shr,                                  // >>
     MM_Token_Sar,                                  // >>>
     
-    MM_Token_Plus = MM_TOKEN_BLOCK(7),             // +
+    MM_Token_Plus = MM_TOKEN_BLOCK(5),             // +
     MM_Token_Minus,                                // -
     MM_Token_Or,                                   // |
     MM_Token_Tilde,                                // ~
     
-    MM_Token_EqualEQ = MM_TOKEN_BLOCK(8),          // ==
+    MM_Token_EqualEQ = MM_TOKEN_BLOCK(6),          // ==
     MM_Token_BangEQ,                               // !=
     MM_Token_Less,                                 // <
     MM_Token_LessEQ,                               // <=
     MM_Token_Greater,                              // >
     MM_Token_GreaterEQ,                            // >=
     
-    MM_Token_AndAnd = MM_TOKEN_BLOCK(9),           // &&
+    MM_Token_AndAnd = MM_TOKEN_BLOCK(7),           // &&
     
-    MM_Token_OrOr = MM_TOKEN_BLOCK(10),            // ||
-    MM_Token__LastBinary = MM_TOKEN_BLOCK(11) - 1,
+    MM_Token_OrOr = MM_TOKEN_BLOCK(8),             // ||
+    MM_Token__LastBinary = MM_TOKEN_BLOCK(9) - 1,
     
     MM_Token__FirstKeyword,
     MM_Token_If = MM_Token__FirstKeyword,          // if
@@ -90,6 +86,9 @@ enum MM_TOKEN_KIND
     MM_Token_Proc,                                 // proc
     MM_Token_Struct,                               // struct
     MM_Token_Enum,                                 // enum
+    MM_Token_True,                                 // true
+    MM_Token_False,                                // false
+    MM_Token_Nil,                                  // nil
     
     MM_Token__FirstBuiltinKeyword,
     MM_Token_Cast = MM_Token__FirstBuiltinKeyword, // cast
@@ -97,12 +96,15 @@ enum MM_TOKEN_KIND
     MM_Token_Sizeof,                               // sizeof
     MM_Token_Alignof,                              // alignof
     MM_Token_Offsetof,                             // offsetof
+    MM_Token_Typeof,                               // typeof
     MM_Token_Min,                                  // min
     MM_Token_Max,                                  // max
     MM_Token__LastBuiltinKeyword = MM_Token_Max,
     MM_Token__LastKeyword = MM_Token__LastBuiltinKeyword,
     
 };
+
+#undef MM_TOKEN_BLOCK
 
 #define MM_TOKEN_KEYWORD_LIST             \
 MM_X(MM_Token_If,        "if")        \
@@ -115,17 +117,21 @@ MM_X(MM_Token_Return,    "return")    \
 MM_X(MM_Token_Proc,      "proc")      \
 MM_X(MM_Token_Struct,    "struct")    \
 MM_X(MM_Token_Enum,      "enum")      \
+MM_X(MM_Token_True,      "true")      \
+MM_X(MM_Token_False,     "false")     \
+MM_X(MM_Token_Nil,       "nil")       \
 MM_X(MM_Token_Cast,      "cast")      \
 MM_X(MM_Token_Transmute, "transmute") \
 MM_X(MM_Token_Sizeof,    "sizeof")    \
 MM_X(MM_Token_Alignof,   "alignof")   \
 MM_X(MM_Token_Offsetof,  "offsetof")  \
+MM_X(MM_Token_Typeof,    "typeof")    \
 MM_X(MM_Token_Min,       "min")       \
 MM_X(MM_Token_Max,       "max")       \
 
-// NOTE: Testing for overlap between token blocks and preceeding tokens
-MM_STATIC_ASSERT(MM_TOKEN_BLOCK_INDEX(MM_Token_Equals) < MM_TOKEN_BLOCK_INDEX(MM_Token_StarEQ));
+// NOTE: Testing for overlap between token blocks and surrounding tokens
 MM_STATIC_ASSERT(MM_TOKEN_BLOCK_INDEX(MM_Token__LastAssignment) < MM_TOKEN_BLOCK_INDEX(MM_Token__FirstBinary));
+MM_STATIC_ASSERT(MM_TOKEN_BLOCK_INDEX(MM_Token__LastBinary) < MM_TOKEN_BLOCK_INDEX(MM_Token__FirstKeyword));
 
 typedef struct MM_Text_Pos
 {

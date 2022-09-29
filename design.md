@@ -244,3 +244,45 @@ library centered around the concept of a "Workspace"
 the workspace holds all state
 procedures in the library may be either statefull or stateless, stateless proc: e.g. LexString, statefull proc: e.g. CheckProc
 a workspace is serializable as a M workspace file
+
+
+
+argument syntax
+
+struct lit, array lit, call, return
+
+a.{ .a = 0, .b = 1, .c = 2, 4, b }
+a.{ a = 0, b = 1, c = 2, 4, b }
+a.{ a: 0, b: 1, c: 2, 4, b }
+
+```c
+printf(file: file, args: .[1, 2, 3], format: "% % %")
+
+ToCart :: proc(r, phi: f32) -> (x, y: f32)
+{
+	return x: r*sin(phi), y: r*cos(phi);
+}
+
+v4.{ x: 0, 1: 2, 2..3: 4 }
+
+int.[0: 0, 1: 1, 2..50: 50, 51: 51]
+
+
+
+
+
+internal M2
+V2_Outer(V2 v0, V2 v1)
+{
+	return (M2){.i = V2_Scale(v0, v1.x), .j = V2_Scale(v0, v1.y)};
+}
+
+internal M2
+V2_Outer(V2 v0, V2 v1)
+{
+	return (M2){i: V2_Scale(v0, v1.x), j: V2_Scale(v0, v1.y)};
+}
+
+printf("Hello % % %", args: .[1, 2, 3])
+printf("Hello % % %", args = .[1, 2, 3])
+```

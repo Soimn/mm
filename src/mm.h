@@ -85,10 +85,18 @@ int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  
 #define MM_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MM_MAX(a, b) ((a) < (b) ? (b) : (a))
 
+// TODO:
+typedef MM_u64 MM_Identifier;
+typedef MM_u64 MM_String_Literal;
+
 #include "mm_string.h"
 #include "mm_soft_int.h"
 #include "mm_float.h"
 #include "mm_tokens.h"
+#include "mm_ast.h"
+#include "mm_parser.h"
+
+MM_Token MM_Token_FirstFromString(MM_String string, MM_u32 skip, MM_Text_Pos init_pos, MM_Text_Pos* start_pos, MM_Text_Pos* end_pos);
 
 #ifdef MM_IMPLEMENTATION
 
