@@ -24,6 +24,7 @@ enum MM_TOKEN_KIND
     MM_Token_Colon,                                // :
     MM_Token_Semicolon,                            // ;
     
+    MM_Token_TpMinus,                              // ---
     MM_Token_Period,                               // .
     MM_Token_PeriodParen,                          // .(
     MM_Token_PeriodBracket,                        // .[
@@ -296,8 +297,9 @@ else token.kind = (single);                                                     
         
         case '-':
         {
-            if (i < string.size && string.data[i] == '>') token.kind = MM_Token_Arrow, ++i;
-            else                                          token.kind = MM_Token_Minus;
+            if      (i < string.size   && string.data[i] == '>')                            token.kind = MM_Token_Arrow, ++i;
+            else if (i+1 < string.size && string.data[i] == '-' && string.data[i+1] == '-') token.kind = MM_Token_TpMinus, ++i;
+            else                                                                            token.kind = MM_Token_Minus;
         } break;
         
         case '.':

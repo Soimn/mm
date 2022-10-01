@@ -5,9 +5,9 @@ enum MM_AST_KIND
 {
     MM_AST_Argument,
     MM_AST_Parameter,
-    MM_AST_Return_Value,
-    MM_AST_Struct_Member,
-    MM_AST_Enum_Member,
+    MM_AST_ReturnValue,
+    MM_AST_StructMember,
+    MM_AST_EnumMember,
     
     MM_AST__FirstExpression,
     MM_AST__FirstPrimary = MM_AST__FirstExpression,
@@ -220,7 +220,7 @@ typedef struct MM_Expression_ProcLit
     MM_EXPRESSION_HEADER();
     MM_Parameter* params;
     MM_Return_Value* ret_vals;
-    struct MM_Statement* body;
+    struct MM_Statement_Block* body;
 } MM_Expression_ProcLit;
 
 typedef struct MM_Expression_ProcType
@@ -239,6 +239,7 @@ typedef struct MM_Expression_Struct
 typedef struct MM_Expression_Enum
 {
     MM_EXPRESSION_HEADER();
+    MM_Expression* member_type;
     MM_Enum_Member* members;
 } MM_Expression_Enum;
 
@@ -394,6 +395,13 @@ typedef struct MM_Statement_Header
 
 #define MM_STATEMENT_HEADER() union { MM_Statement_Header header; struct { struct MM_Statement_Header; }; }
 
+typedef struct MM_Statement_Block
+{
+    MM_STATEMENT_HEADER();
+    MM_Identifier label;
+    MM_Statement* body;
+} MM_Statement_Block;
+
 typedef struct MM_Statement_If
 {
     MM_STATEMENT_HEADER();
@@ -447,6 +455,7 @@ typedef struct MM_Statement
         MM_Expression expression;
         MM_Declaration declaration;
         
+        MM_Statement_Block block_stmnt;
         MM_Statement_If if_stmnt;
         MM_Statement_When when_stmnt;
         MM_Statement_While while_stmnt;

@@ -26,6 +26,7 @@ MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
 #define MM_PushNode(k) MM_Parser__PushNode(parser, (k))
 
 MM_bool MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression);
+MM_bool MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block);
 
 MM_bool
 MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
@@ -51,6 +52,25 @@ MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
             (*next_arg)->value = value;;
             
             next_arg = &(*next_arg)->next;
+            
+            if (MM_EatToken(MM_Token_Comma)) continue;
+            else                             break;
+        }
+    }
+    
+    return MM_true;
+}
+
+MM_bool
+MM_Parser__ParseExpressionList(MM_Parser* parser, MM_Expression** expressions)
+{
+    MM_Expression** next_expr = expressions;
+    while (MM_true)
+    {
+        if (!MM_Parser__ParseExpression(parser, next_expr)) return MM_false;
+        else
+        {
+            next_expr = &(*next_expr)->next;
             
             if (MM_EatToken(MM_Token_Comma)) continue;
             else                             break;
@@ -96,15 +116,72 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         
         if (MM_EatToken(MM_Token_OpenParen))
         {
-            MM_Parameter** next_param = &params;
             if (!MM_IsToken(MM_Token_CloseParen))
             {
-                while (MM_true)
+                MM_Expression* expr_list;
+                if (!MM_Parser__ParseExpressionList(parser, &expr_list)) return MM_false;
+                else
                 {
-                    MM_NOT_IMPLEMENTED;
-                    
-                    if (MM_EatToken(MM_Token_Comma)) continue;
-                    else                             break;
+                    if (MM_IsToken(MM_Token_Equals))
+                    {
+                        //// ERROR: some clever error message distinguishing a, b, c = from a, b, c missing )
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    else if (!MM_IsToken(MM_Token_Colon))
+                    {
+                        MM_Parameter** next_param = &params;
+                        for (MM_Expression* expr = expr_list; expr != 0; expr = expr->next)
+                        {
+                            *next_param = MM_PushNode(MM_AST_Parameter);
+                            (*next_param)->names = 0;
+                            (*next_param)->type  = expr;
+                            (*next_param)->value = 0;
+                            
+                            next_param = &(*next_param)->next;
+                        }
+                    }
+                    else
+                    {
+                        MM_Parameter** next_param = &params;
+                        MM_Expression* names      = expr_list;
+                        while (MM_true)
+                        {
+                            if (!MM_EatToken(MM_Token_Colon))
+                            {
+                                //// ERROR: missing type of parameter[s]
+                                MM_NOT_IMPLEMENTED;
+                                return MM_false;
+                            }
+                            else
+                            {
+                                MM_Expression* type  = 0;
+                                MM_Expression* value = 0;
+                                if (!MM_IsToken(MM_Token_Equals) && !MM_Parser__ParseExpression(parser, &type)) return MM_false;
+                                else
+                                {
+                                    if (MM_EatToken(MM_Token_Equals))
+                                    {
+                                        if (!MM_Parser__ParseExpression(parser, &value)) return MM_false;
+                                    }
+                                    
+                                    *next_param = MM_PushNode(MM_AST_Parameter);
+                                    (*next_param)->names = names;
+                                    (*next_param)->type  = type;
+                                    (*next_param)->value = value;
+                                    
+                                    next_param = &(*next_param)->next;
+                                    
+                                    if (!MM_EatToken(MM_Token_Comma)) break;
+                                    else
+                                    {
+                                        if (!MM_Parser__ParseExpressionList(parser, &names)) return MM_false;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             
@@ -118,25 +195,260 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
         
         if (MM_EatToken(MM_Token_Arrow))
         {
-            if (MM_EatToken(MM_Token_OpenParen))
+            if (!MM_EatToken(MM_Token_OpenParen))
             {
-                MM_NOT_IMPLEMENTED;
+                MM_Expression* type;
+                if (MM_Parser__ParseExpression(parser, &type)) return MM_false;
+                else
+                {
+                    ret_vals = MM_PushNode(MM_AST_ReturnValue);
+                    ret_vals->names = 0;
+                    ret_vals->type  = type;
+                    ret_vals->value = 0;
+                }
             }
             else
             {
-                MM_NOT_IMPLEMENTED;
+                MM_Expression* expr_list;
+                if (!MM_Parser__ParseExpressionList(parser, &expr_list)) return MM_false;
+                else
+                {
+                    if (MM_IsToken(MM_Token_Equals))
+                    {
+                        //// ERROR: some clever error message distinguishing a, b, c = from a, b, c missing )
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    else if (!MM_IsToken(MM_Token_Colon))
+                    {
+                        MM_Return_Value** next_ret_val = &ret_vals;
+                        for (MM_Expression* expr = expr_list; expr != 0; expr = expr->next)
+                        {
+                            *next_ret_val = MM_PushNode(MM_AST_ReturnValue);
+                            (*next_ret_val)->names = 0;
+                            (*next_ret_val)->type  = expr;
+                            (*next_ret_val)->value = 0;
+                            
+                            next_ret_val = &(*next_ret_val)->next;
+                        }
+                    }
+                    else
+                    {
+                        MM_Return_Value** next_ret_val = &ret_vals;
+                        MM_Expression* names           = expr_list;
+                        while (MM_true)
+                        {
+                            if (!MM_EatToken(MM_Token_Colon))
+                            {
+                                //// ERROR: missing type of return value[s]
+                                MM_NOT_IMPLEMENTED;
+                                return MM_false;
+                            }
+                            else
+                            {
+                                MM_Expression* type  = 0;
+                                MM_Expression* value = 0;
+                                if (!MM_IsToken(MM_Token_Equals) && !MM_Parser__ParseExpression(parser, &type)) return MM_false;
+                                else
+                                {
+                                    if (MM_EatToken(MM_Token_Equals))
+                                    {
+                                        if (!MM_Parser__ParseExpression(parser, &value)) return MM_false;
+                                    }
+                                    
+                                    *next_ret_val = MM_PushNode(MM_AST_ReturnValue);
+                                    (*next_ret_val)->names = names;
+                                    (*next_ret_val)->type  = type;
+                                    (*next_ret_val)->value = value;
+                                    
+                                    next_ret_val = &(*next_ret_val)->next;
+                                    
+                                    if (!MM_EatToken(MM_Token_Comma)) break;
+                                    else
+                                    {
+                                        if (!MM_Parser__ParseExpressionList(parser, &names)) return MM_false;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (!MM_EatToken(MM_Token_CloseParen))
+                {
+                    //// ERROR: Missing closing parenthesis afer return value list
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
             }
         }
         
-        MM_NOT_IMPLEMENTED;
+        if (MM_IsToken(MM_Token_TpMinus))
+        {
+            *expression = MM_PushNode(MM_AST_ProcLit);
+            (*expression)->proc_lit_expr.params   = params;
+            (*expression)->proc_lit_expr.ret_vals = ret_vals;
+            (*expression)->proc_lit_expr.body     = 0;
+        }
+        else if (!MM_IsToken(MM_Token_OpenBrace))
+        {
+            *expression = MM_PushNode(MM_AST_ProcType);
+            (*expression)->proc_type_expr.params   = params;
+            (*expression)->proc_type_expr.ret_vals = ret_vals;
+        }
+        else
+        {
+            MM_Statement_Block* body;
+            if (!MM_Parser__ParseBlock(parser, &body)) return MM_false;
+            else
+            {
+                *expression = MM_PushNode(MM_AST_ProcLit);
+                (*expression)->proc_lit_expr.params   = params;
+                (*expression)->proc_lit_expr.ret_vals = ret_vals;
+                (*expression)->proc_lit_expr.body     = body;
+            }
+        }
     }
     else if (MM_EatToken(MM_Token_Struct))
     {
-        MM_NOT_IMPLEMENTED;
+        if (MM_EatToken(MM_Token_TpMinus))
+        {
+            MM_NOT_IMPLEMENTED;
+        }
+        else if (!MM_EatToken(MM_Token_OpenBrace))
+        {
+            //// ERROR: Missing body of struct
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            MM_Struct_Member* members = 0;
+            
+            if (!MM_IsToken(MM_Token_CloseBrace))
+            {
+                MM_Struct_Member** next_member = &members;
+                while (MM_true)
+                {
+                    MM_Expression* names;
+                    MM_Expression* type        = 0;
+                    MM_Expression* const_value = 0;
+                    
+                    if (!MM_Parser__ParseExpressionList(parser, &names)) return MM_false;
+                    else if (!MM_EatToken(MM_Token_Colon))
+                    {
+                        //// ERROR: Missing type of struct member
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    else
+                    {
+                        if (!(MM_IsToken(MM_Token_Equals) || MM_IsToken(MM_Token_Colon)))
+                        {
+                            if (!MM_Parser__ParseExpression(parser, &type)) return MM_false;
+                        }
+                        
+                        if (MM_IsToken(MM_Token_Equals))
+                        {
+                            //// ERROR: Struct members cannot have a default value
+                            MM_NOT_IMPLEMENTED;
+                            return MM_false;
+                        }
+                        else if (MM_EatToken(MM_Token_Colon))
+                        {
+                            if (!MM_Parser__ParseExpression(parser, &const_value)) return MM_false;
+                        }
+                        
+                        *next_member = MM_PushNode(MM_AST_StructMember);
+                        (*next_member)->names       = names;
+                        (*next_member)->type        = type;
+                        (*next_member)->const_value = const_value;
+                        
+                        next_member = &(*next_member)->next;
+                        
+                        if (MM_EatToken(MM_Token_Comma)) continue;
+                        else                             break;
+                    }
+                }
+            }
+            
+            if (!MM_EatToken(MM_Token_CloseBrace))
+            {
+                //// ERROR: Missing closing brace after struct members
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else
+            {
+                *expression = MM_PushNode(MM_AST_Struct);
+                (*expression)->struct_expr.members = members;
+            }
+        }
     }
     else if (MM_EatToken(MM_Token_Enum))
     {
-        MM_NOT_IMPLEMENTED;
+        MM_Expression* member_type = 0;
+        if (!MM_IsToken(MM_Token_OpenBrace))
+        {
+            if (!MM_Parser__ParseExpression(parser, &member_type)) return MM_false;
+        }
+        
+        if (!MM_EatToken(MM_Token_OpenBrace))
+        {
+            //// ERROR: Missing enum body
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            MM_Enum_Member* members = 0;
+            if (!MM_IsToken(MM_Token_CloseBrace))
+            {
+                MM_Enum_Member** next_member = &members;
+                while (MM_true)
+                {
+                    if (!MM_IsToken(MM_Token_Identifier))
+                    {
+                        //// ERROR: Missing name of enum member
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    else
+                    {
+                        MM_Identifier name = {0};
+                        MM_NOT_IMPLEMENTED;
+                        MM_Expression* value = 0;
+                        if (MM_EatToken(MM_Token_Equals))
+                        {
+                            if (!MM_Parser__ParseExpression(parser, &value)) return MM_false;
+                        }
+                        
+                        *next_member = MM_PushNode(MM_AST_EnumMember);
+                        (*next_member)->name  = name;
+                        (*next_member)->value = value;
+                        
+                        next_member = &(*next_member)->next;
+                        
+                        if (MM_EatToken(MM_Token_Comma)) continue;
+                        else                             break;
+                    }
+                }
+            }
+            
+            if (!MM_EatToken(MM_Token_CloseBrace))
+            {
+                //// ERROR: Missing closing brace after enum members
+                MM_NOT_IMPLEMENTED;
+                return MM_false;
+            }
+            else
+            {
+                *expression = MM_PushNode(MM_AST_Enum);
+                (*expression)->enum_expr.member_type = member_type;
+                (*expression)->enum_expr.members     = members;
+            }
+        }
     }
     else if (MM_EatToken(MM_Token_OpenParen))
     {
@@ -504,6 +816,13 @@ MM_bool
 MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression)
 {
     return MM_Parser__ParseBinaryExpression(parser, expression);
+}
+
+MM_bool
+MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block)
+{
+    MM_NOT_IMPLEMENTED;
+    return MM_true;
 }
 
 #undef MM_GetToken
