@@ -90,12 +90,13 @@ enum MM_AST_KIND
     MM_AST__LastDeclaration = MM_AST_Const,
     
     MM_AST__FirstStatement,
-    MM_AST_If = MM_AST__FirstStatement, // if (condition) statement, if (condition) statement else statement
-    MM_AST_When,                        // when (condition) statement, when (condition) statement else statement
-    MM_AST_While,                       // while (init; condition; step) statement, while (condition) statement
-    MM_AST_Break,                       // break, break label
-    MM_AST_Continue,                    // continue, continue label
-    MM_AST_Return,                      // return, return expression, return expressions, expression, expression, ...
+    MM_AST_Block = MM_AST__FirstStatement, // { statements }
+    MM_AST_If,                             // if (condition) statement, if (condition) statement else statement
+    MM_AST_When,                           // when (condition) statement, when (condition) statement else statement
+    MM_AST_While,                          // while (init; condition; step) statement, while (condition) statement
+    MM_AST_Break,                          // break, break label
+    MM_AST_Continue,                       // continue, continue label
+    MM_AST_Return,                         // return, return expression, return expressions, expression, expression, ...
     
     MM_AST__FirstAssignmentStatement,
     MM_AST_Equals = MM_AST__FirstAssignmentStatement, // =
@@ -422,6 +423,7 @@ typedef struct MM_Statement_When
 typedef struct MM_Statement_While
 {
     MM_STATEMENT_HEADER();
+    MM_Identifier label;
     MM_Statement* init;
     MM_Expression* condition;
     MM_Statement* step;

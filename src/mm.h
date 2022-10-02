@@ -78,8 +78,10 @@ int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  
 
 #if MM_DEBUG
 #define MM_NOT_IMPLEMENTED *(volatile int*)0 = 0
+#define MM_ILLEGAL_CODE_PATH *(volatile int*)0 = 0
 #else
 #define MM_NOT_IMPLEMENTED MM_STATIC_ASSERT(!"MM_NOT_IMPLEMENTED")
+#define MM_ILLEGAL_CODE_PATH
 #endif
 
 #define MM_MIN(a, b) ((a) < (b) ? (a) : (b))
