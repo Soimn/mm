@@ -3,20 +3,25 @@ typedef struct MM_Parser
     MM_String string;
     MM_Text_Pos pos;
     MM_Token token;
+    MM_Arena* ast_arena;
+    MM_Arena* string_arena;
 } MM_Parser;
 
-MM_Token
+inline MM_Token
 MM_Parser__NextToken(MM_Parser* parser)
 {
     parser->token = MM_Token_FirstFromString(parser->string, parser->pos.offset, parser->pos, 0, &parser->pos);
     return parser->token;
 }
 
-void*
+inline void*
 MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
 {
-    MM_NOT_IMPLEMENTED;
-    return 0;
+    MM_AST* node = MM_Arena_Push(parser->ast_arena, sizeof(MM_AST), MM_ALIGNOF(MM_AST));
+    node->kind = kind;
+    node->next = 0;
+    
+    return (void*)node;
 }
 
 #define MM_GetToken() (parser->token)
@@ -25,11 +30,108 @@ MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
 #define MM_EatToken(k) (parser->token.kind == (k) && (MM_Parser__NextToken(parser), MM_true))
 #define MM_PushNode(k) MM_Parser__PushNode(parser, (k))
 
-MM_bool MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression);
-MM_bool MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block);
-MM_bool MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement);
+inline MM_bool MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression);
+inline MM_bool MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block);
+inline MM_bool MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement);
 
-MM_bool
+inline MM_bool
+MM_Parser__ParseStringLiteral(MM_Parser* parser, MM_Token token, MM_String_Literal* string_literal)
+{
+    MM_CONTRACT_ASSERT(token.kind == MM_Token_String);
+    
+    MM_String string = token.string;
+    
+    *string_literal = (MM_String){
+        .data = MM_Arena_Push(parser->string_arena, string.size, MM_ALIGNOF(MM_u8)),
+        .size = 0,
+    };
+    
+    for (MM_umm i = 0; i < string.size; ++i)
+    {
+        if (string.data[i] != '\\') string_literal->data[string_literal->size++] = string.data[i];
+        else
+        {
+            i += 1;
+            if      (i == string.size) MM_ILLEGAL_CODE_PATH; // NOTE: Impossible, since " would be escaped
+            else if (string.data[i] == 'a')  string_literal->data[string_literal->size++] = '\a';
+            else if (string.data[i] == 'b')  string_literal->data[string_literal->size++] = '\b';
+            else if (string.data[i] == 'f')  string_literal->data[string_literal->size++] = '\f';
+            else if (string.data[i] == 'n')  string_literal->data[string_literal->size++] = '\n';
+            else if (string.data[i] == 'r')  string_literal->data[string_literal->size++] = '\r';
+            else if (string.data[i] == 't')  string_literal->data[string_literal->size++] = '\t';
+            else if (string.data[i] == 'v')  string_literal->data[string_literal->size++] = '\v';
+            else if (string.data[i] == '\\') string_literal->data[string_literal->size++] = '\\';
+            else if (string.data[i] == '\'') string_literal->data[string_literal->size++] = '\'';
+            else if (string.data[i] == '"')  string_literal->data[string_literal->size++] = '\"';
+            else if (string.data[i] == 'x' || string.data[i] == 'u' || string.data[i] == 'U')
+            {
+                MM_umm codepoint = 0;
+                
+                MM_umm remaining_digits = (string.data[i] == 'x' ? 2 : (string.data[i] == 'u' ? 4 : 8));
+                
+                for (; remaining_digits > 0 && i < string.size; --remaining_digits, ++i)
+                {
+                    MM_u8 digit = 0;
+                    
+                    if      (string.data[i] >= '0' && string.data[i] <= '9') digit = string.data[i] & 0xF;
+                    else if (string.data[i] >= 'A' && string.data[i] <= 'F') digit = (string.data[i] & 0x1F) + 9;
+                    else
+                    {
+                        //// ERROR: Not a valid hexadecimal digit
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    
+                    codepoint = (codepoint << 4) | digit;
+                }
+                
+                if (remaining_digits > 0)
+                {
+                    //// ERROR: Missing digits
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+                else
+                {
+                    if (codepoint <= 0x7F)
+                    {
+                        string_literal->data[string_literal->size++] = (MM_u8)codepoint;
+                    }
+                    else if (codepoint <= 0x7FF)
+                    {
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 6) & 0x1F) | 0xC0;
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 0) & 0x3F) | 0x80;
+                    }
+                    else if (codepoint <= 0xFFFF)
+                    {
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 12) & 0x0F) | 0xE0;
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 6)  & 0x3F) | 0x80;
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 0)  & 0x3F) | 0x80;
+                    }
+                    else if (codepoint <= 0x10FFFF)
+                    {
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 18) & 0x07) | 0xF0;
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 12) & 0x3F) | 0x80;
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 6)  & 0x3F) | 0x80;
+                        string_literal->data[string_literal->size++] = ((MM_u8)(codepoint >> 0)  & 0x3F) | 0x80;
+                    }
+                    else
+                    {
+                        //// ERROR: Codepoint is out of UTF-8 range
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                }
+            }
+        }
+    }
+    
+    MM_Arena_Pop(parser->string_arena, string.size - string_literal->size);
+    
+    return MM_true;
+}
+
+inline MM_bool
 MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
 {
     MM_Argument** next_arg = args;
@@ -50,7 +152,7 @@ MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
             
             *next_arg = MM_PushNode(MM_AST_Argument);
             (*next_arg)->label = label;
-            (*next_arg)->value = value;;
+            (*next_arg)->value = value;
             
             next_arg = &(*next_arg)->next;
             
@@ -62,7 +164,7 @@ MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseExpressionList(MM_Parser* parser, MM_Expression** expressions)
 {
     MM_Expression** next_expr = expressions;
@@ -81,16 +183,30 @@ MM_Parser__ParseExpressionList(MM_Parser* parser, MM_Expression** expressions)
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
 {
-    if (MM_IsToken(MM_Token_Identifier) || MM_IsToken(MM_Token_Blank))
+    if (MM_EatToken(MM_Token_Blank))
     {
-        MM_NOT_IMPLEMENTED;
+        *expression = MM_PushNode(MM_AST_BlankIdentifier);
+    }
+    else if (MM_IsToken(MM_Token_Identifier))
+    {
+        *expression = MM_PushNode(MM_AST_Identifier);
+        (*expression)->identifier_expr.ident = MM_GetToken().identifier;
+        MM_NextToken();
     }
     else if (MM_IsToken(MM_Token_String))
     {
-        MM_NOT_IMPLEMENTED;
+        MM_String_Literal string_lit;
+        if (!MM_Parser__ParseStringLiteral(parser, MM_GetToken(), &string_lit)) return MM_false;
+        else
+        {
+            MM_NextToken();
+            
+            *expression = MM_PushNode(MM_AST_String);
+            (*expression)->string_expr.string = string_lit;
+        }
     }
     else if (MM_IsToken(MM_Token_Int))
     {
@@ -409,7 +525,13 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                 MM_Enum_Member** next_member = &members;
                 while (MM_true)
                 {
-                    if (!MM_IsToken(MM_Token_Identifier))
+                    if (MM_IsToken(MM_Token_Blank))
+                    {
+                        //// ERROR: Name of enum member cannot be blank
+                        MM_NOT_IMPLEMENTED;
+                        return MM_false;
+                    }
+                    else if (!MM_IsToken(MM_Token_Identifier))
                     {
                         //// ERROR: Missing name of enum member
                         MM_NOT_IMPLEMENTED;
@@ -417,8 +539,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                     }
                     else
                     {
-                        MM_Identifier name = {0};
-                        MM_NOT_IMPLEMENTED;
+                        MM_Identifier name = MM_GetToken().identifier;
                         MM_NextToken();
                         
                         MM_Expression* value = 0;
@@ -559,7 +680,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseTypePrefixExpression(MM_Parser* parser, MM_Expression** expression)
 {
     while (MM_true)
@@ -603,7 +724,7 @@ MM_Parser__ParseTypePrefixExpression(MM_Parser* parser, MM_Expression** expressi
     return MM_Parser__ParsePrimaryExpression(parser, expression);
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
 {
     if (!MM_Parser__ParseTypePrefixExpression(parser, expression)) return MM_false;
@@ -681,7 +802,13 @@ MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
             }
             else if (MM_EatToken(MM_Token_Period))
             {
-                if (!MM_IsToken(MM_Token_Identifier))
+                if (MM_IsToken(MM_Token_Blank))
+                {
+                    //// ERROR: Member name cannot be blank
+                    MM_NOT_IMPLEMENTED;
+                    return MM_false;
+                }
+                else if (!MM_IsToken(MM_Token_Identifier))
                 {
                     //// ERROR: Missing name of member after '.'
                     MM_NOT_IMPLEMENTED;
@@ -742,7 +869,7 @@ MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParsePrefixExpression(MM_Parser* parser, MM_Expression** expression)
 {
     while (MM_true)
@@ -774,7 +901,7 @@ MM_Parser__ParsePrefixExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_Parser__ParsePostfixExpression(parser, expression);
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseBinaryExpression(MM_Parser* parser, MM_Expression** expression)
 {
     if (!MM_Parser__ParsePrefixExpression(parser, expression)) return MM_false;
@@ -815,38 +942,46 @@ MM_Parser__ParseBinaryExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression)
 {
     return MM_Parser__ParseBinaryExpression(parser, expression);
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block)
 {
-    if (MM_EatToken(MM_Token_OpenBrace));
-    else MM_ILLEGAL_CODE_PATH;
+    MM_bool starts_with_brace = MM_EatToken(MM_Token_OpenBrace);
+    MM_CONTRACT_ASSERT(starts_with_brace);
     
     MM_Statement* body = 0;
     MM_Statement** next_stmnt = &body;
     while (!MM_IsToken(MM_Token_CloseBrace))
     {
-        if (!MM_Parser__ParseStatement(parser, next_stmnt)) return MM_false;
-        else                                                next_stmnt = &(*next_stmnt)->next;
+        if (MM_IsToken(MM_Token_EOF))
+        {
+            //// ERROR: End of file reached before end of block
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else
+        {
+            if (!MM_Parser__ParseStatement(parser, next_stmnt)) return MM_false;
+            else                                                next_stmnt = &(*next_stmnt)->next;
+        }
     }
     
     if (MM_EatToken(MM_Token_CloseBrace));
     else MM_ILLEGAL_CODE_PATH;
     
     *block = MM_PushNode(MM_AST_Block);
-    MM_NOT_IMPLEMENTED;
-    //(*block)->label = ;
-    (*block)->body = body;
+    (*block)->label = (MM_Identifier){0};
+    (*block)->body  = body;
     
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseDeclarationExpressionOrAssignment(MM_Parser* parser, MM_Statement** statement)
 {
     MM_Expression* expr_list;
@@ -934,7 +1069,7 @@ MM_Parser__ParseDeclarationExpressionOrAssignment(MM_Parser* parser, MM_Statemen
     return MM_true;
 }
 
-MM_bool
+inline MM_bool
 MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
 {
     MM_bool check_semicolon = MM_true;
@@ -953,7 +1088,13 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
     }
     else if (MM_EatToken(MM_Token_Colon))
     {
-        if (!MM_IsToken(MM_Token_Identifier))
+        if (MM_IsToken(MM_Token_Blank))
+        {
+            //// ERROR: Name of label cannot be blank
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
+        }
+        else if (!MM_IsToken(MM_Token_Identifier))
         {
             //// ERROR: Missing name of label
             MM_NOT_IMPLEMENTED;
@@ -961,9 +1102,7 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
         }
         else
         {
-            MM_Identifier label = {0};
-            MM_NOT_IMPLEMENTED;
-            
+            MM_Identifier label = MM_GetToken().identifier;
             MM_NextToken();
             
             if (!(MM_IsToken(MM_Token_OpenBrace) || MM_IsToken(MM_Token_If) || MM_IsToken(MM_Token_While)))
@@ -1020,8 +1159,7 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
                     else
                     {
                         *statement = MM_PushNode(MM_AST_If);
-                        MM_NOT_IMPLEMENTED;
-                        //(*statement)->if_stmnt.label = ;
+                        (*statement)->if_stmnt.label      = (MM_Identifier){0};
                         (*statement)->if_stmnt.condition  = condition;
                         (*statement)->if_stmnt.true_body  = true_body;
                         (*statement)->if_stmnt.false_body = false_body;
@@ -1119,6 +1257,7 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
                 else
                 {
                     *statement = MM_PushNode(MM_AST_While);
+                    (*statement)->while_stmnt.label     = (MM_Identifier){0};
                     (*statement)->while_stmnt.init      = init;
                     (*statement)->while_stmnt.condition = condition;
                     (*statement)->while_stmnt.step      = step;
@@ -1132,11 +1271,17 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
         MM_bool is_break = MM_IsToken(MM_Token_Break);
         MM_NextToken();
         
-        MM_Identifier label;
+        MM_Identifier label = {0};
         if (MM_IsToken(MM_Token_Identifier))
         {
-            MM_NOT_IMPLEMENTED;
+            label = MM_GetToken().identifier;
             MM_NextToken();
+        }
+        else if (MM_IsToken(MM_Token_Blank))
+        {
+            //// ERROR: Label name cannot be blank
+            MM_NOT_IMPLEMENTED;
+            return MM_false;
         }
         
         *statement = MM_PushNode(is_break ? MM_AST_Break : MM_AST_Continue);
@@ -1159,6 +1304,29 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
         //// ERROR: Missing terminating semicolon after statement
         MM_NOT_IMPLEMENTED;
         return MM_false;
+    }
+    
+    return MM_true;
+}
+
+inline MM_bool
+MM_Parser_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* string_arena, MM_AST** ast)
+{
+    MM_Parser* parser = &(MM_Parser){
+        .string       = string,
+        .pos          = pos,
+        .token        = { .kind = MM_Token_Invalid },
+        .ast_arena    = ast_arena,
+        .string_arena = string_arena,
+    };
+    
+    parser->token = MM_Token_FirstFromString(parser->string, 0, parser->pos, 0, &parser->pos);
+    
+    MM_Statement** next_statement = (MM_Statement**)ast;
+    while (!MM_IsToken(MM_Token_EOF))
+    {
+        if (!MM_Parser__ParseStatement(parser, next_statement)) return MM_false;
+        else                                                    next_statement = &(*next_statement)->next;
     }
     
     return MM_true;

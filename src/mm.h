@@ -86,23 +86,34 @@ int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  
 
 #define MM_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MM_MAX(a, b) ((a) < (b) ? (b) : (a))
+#define MM_ROUND_UP(N, align) (((MM_umm)(N) + ((MM_umm)(align) - 1)) & ~((MM_umm)(align) - 1))
+#define MM_ROUND_DOWN(N, align) ((MM_umm)(N) & ~((MM_umm)(align) - 1))
+#define MM_IS_POW_2(N) ((((MM_umm)(N) - 1) & (MM_umm)(N)) == 0 && (N) > 0)
 
-// TODO:
-typedef MM_u64 MM_Identifier;
-typedef MM_u64 MM_String_Literal;
+typedef MM_String MM_Identifier;
+typedef MM_String MM_String_Literal;
+
+inline MM_bool
+MM_Identifier_IsBlank(MM_Identifier ident)
+{
+    return (ident.size == 0 || ident.size == 1 && *ident.data == '_');
+}
 
 #include "mm_string.h"
+#include "mm_memory.h"
 #include "mm_soft_int.h"
 #include "mm_float.h"
 #include "mm_tokens.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
 
-MM_Token MM_Token_FirstFromString(MM_String string, MM_u32 skip, MM_Text_Pos init_pos, MM_Text_Pos* start_pos, MM_Text_Pos* end_pos);
+// NOTE: API
+inline MM_Token MM_Token_FirstFromString(MM_String string, MM_u32 skip, MM_Text_Pos init_pos, MM_Text_Pos* start_pos, MM_Text_Pos* end_pos);
+
+inline MM_bool MM_Parser_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* string_arena, MM_AST** ast);
 
 #ifdef MM_IMPLEMENTATION
 
-#include "mm_memory.h"
 #endif
 
 #endif

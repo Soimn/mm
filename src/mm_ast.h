@@ -11,17 +11,18 @@ enum MM_AST_KIND
     
     MM_AST__FirstExpression,
     MM_AST__FirstPrimary = MM_AST__FirstExpression,
-    MM_AST_Identifier = MM_AST__FirstPrimary, // _identifier1, ident1fier
-    MM_AST_String,                            // "aæ"
-    MM_AST_Int,                               // 3, 0b11, 0o3, 0x3, 0y3, 0z3
-    MM_AST_Float,                             // 3.14, 0h4247, 0h40490FDB, 0h400921FB54442D18
-    MM_AST_Bool,                              // true, false
-    MM_AST_ProcLit,                           // proc(a, ...) -> (a, ...) {}
-    MM_AST_ProcType,                          // proc(a, ...) -> (a, ...)
-    MM_AST_Struct,                            // struct {}
-    MM_AST_Enum,                              // enum {}
-    MM_AST_Compound,                          // (a)
-    MM_AST_BuiltinCall,                       // builtin(a, ...)
+    MM_AST_BlankIdentifier = MM_AST__FirstPrimary, // _
+    MM_AST_Identifier,                             // _identifier1, ident1fier
+    MM_AST_String,                                 // "aæ"
+    MM_AST_Int,                                    // 3, 0b11, 0o3, 0x3, 0y3, 0z3
+    MM_AST_Float,                                  // 3.14, 0h4247, 0h40490FDB, 0h400921FB54442D18
+    MM_AST_Bool,                                   // true, false
+    MM_AST_ProcLit,                                // proc(a, ...) -> (a, ...) {}
+    MM_AST_ProcType,                               // proc(a, ...) -> (a, ...)
+    MM_AST_Struct,                                 // struct {}
+    MM_AST_Enum,                                   // enum {}
+    MM_AST_Compound,                               // (a)
+    MM_AST_BuiltinCall,                            // builtin(a, ...)
     MM_AST__LastPrimary = MM_AST_BuiltinCall,
     
     MM_AST__FirstTypePrefix,
@@ -189,7 +190,7 @@ typedef struct MM_Expression_Header
 typedef struct MM_Expression_Identifier
 {
     MM_EXPRESSION_HEADER();
-    MM_Identifier identifier;
+    MM_Identifier ident;
 } MM_Expression_Identifier;
 
 typedef struct MM_Expression_String

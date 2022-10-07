@@ -1,4 +1,4 @@
-MM_String
+inline MM_String
 MM_String_FromCString(char* cstring)
 {
     MM_String string = { .data = (MM_u8*)cstring };
@@ -8,7 +8,7 @@ MM_String_FromCString(char* cstring)
     return string;
 }
 
-MM_bool
+inline MM_bool
 MM_String_Match(MM_String s0, MM_String s1)
 {
     MM_bool result = MM_false;
@@ -26,7 +26,7 @@ MM_String_Match(MM_String s0, MM_String s1)
     return result;
 }
 
-MM_String
+inline MM_String
 MM_String_Skip(MM_String string, MM_u32 n)
 {
     n = MM_MIN(string.size, n);
@@ -37,7 +37,7 @@ MM_String_Skip(MM_String string, MM_u32 n)
     };
 }
 
-MM_String
+inline MM_String
 MM_String_Chop(MM_String string, MM_u32 n)
 {
     n = MM_MIN(string.size, n);
