@@ -7,14 +7,14 @@ typedef struct MM_Parser
     MM_Arena* string_arena;
 } MM_Parser;
 
-inline MM_Token
+MM_Token
 MM_Parser__NextToken(MM_Parser* parser)
 {
     parser->token = MM_Token_FirstFromString(parser->string, parser->pos.offset, parser->pos, 0, &parser->pos);
     return parser->token;
 }
 
-inline void*
+void*
 MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
 {
     MM_AST* node = MM_Arena_Push(parser->ast_arena, sizeof(MM_AST), MM_ALIGNOF(MM_AST));
@@ -30,11 +30,11 @@ MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
 #define MM_EatToken(k) (parser->token.kind == (k) && (MM_Parser__NextToken(parser), MM_true))
 #define MM_PushNode(k) MM_Parser__PushNode(parser, (k))
 
-inline MM_bool MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression);
-inline MM_bool MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block);
-inline MM_bool MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement);
+MM_bool MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression);
+MM_bool MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block);
+MM_bool MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement);
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseStringLiteral(MM_Parser* parser, MM_Token token, MM_String_Literal* string_literal)
 {
     MM_CONTRACT_ASSERT(token.kind == MM_Token_String);
@@ -131,7 +131,7 @@ MM_Parser__ParseStringLiteral(MM_Parser* parser, MM_Token token, MM_String_Liter
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
 {
     MM_Argument** next_arg = args;
@@ -164,7 +164,7 @@ MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseExpressionList(MM_Parser* parser, MM_Expression** expressions)
 {
     MM_Expression** next_expr = expressions;
@@ -183,7 +183,7 @@ MM_Parser__ParseExpressionList(MM_Parser* parser, MM_Expression** expressions)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
 {
     if (MM_EatToken(MM_Token_Blank))
@@ -680,7 +680,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseTypePrefixExpression(MM_Parser* parser, MM_Expression** expression)
 {
     while (MM_true)
@@ -724,7 +724,7 @@ MM_Parser__ParseTypePrefixExpression(MM_Parser* parser, MM_Expression** expressi
     return MM_Parser__ParsePrimaryExpression(parser, expression);
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
 {
     if (!MM_Parser__ParseTypePrefixExpression(parser, expression)) return MM_false;
@@ -869,7 +869,7 @@ MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParsePrefixExpression(MM_Parser* parser, MM_Expression** expression)
 {
     while (MM_true)
@@ -901,7 +901,7 @@ MM_Parser__ParsePrefixExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_Parser__ParsePostfixExpression(parser, expression);
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseBinaryExpression(MM_Parser* parser, MM_Expression** expression)
 {
     if (!MM_Parser__ParsePrefixExpression(parser, expression)) return MM_false;
@@ -942,13 +942,13 @@ MM_Parser__ParseBinaryExpression(MM_Parser* parser, MM_Expression** expression)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression)
 {
     return MM_Parser__ParseBinaryExpression(parser, expression);
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block)
 {
     MM_bool starts_with_brace = MM_EatToken(MM_Token_OpenBrace);
@@ -981,7 +981,7 @@ MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseDeclarationExpressionOrAssignment(MM_Parser* parser, MM_Statement** statement)
 {
     MM_Expression* expr_list;
@@ -1069,7 +1069,7 @@ MM_Parser__ParseDeclarationExpressionOrAssignment(MM_Parser* parser, MM_Statemen
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
 {
     MM_bool check_semicolon = MM_true;
@@ -1309,7 +1309,7 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
     return MM_true;
 }
 
-inline MM_bool
+MM_bool
 MM_Parser_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* string_arena, MM_AST** ast)
 {
     MM_Parser* parser = &(MM_Parser){

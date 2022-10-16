@@ -93,11 +93,13 @@ int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  
 typedef MM_String MM_Identifier;
 typedef MM_String MM_String_Literal;
 
-inline MM_bool
+MM_bool
 MM_Identifier_IsBlank(MM_Identifier ident)
 {
     return (ident.size == 0 || ident.size == 1 && *ident.data == '_');
 }
+
+#include <intrin.h>
 
 #include "mm_string.h"
 #include "mm_memory.h"
@@ -108,12 +110,8 @@ MM_Identifier_IsBlank(MM_Identifier ident)
 #include "mm_parser.h"
 
 // NOTE: API
-inline MM_Token MM_Token_FirstFromString(MM_String string, MM_u32 skip, MM_Text_Pos init_pos, MM_Text_Pos* start_pos, MM_Text_Pos* end_pos);
+MM_Token MM_Token_FirstFromString(MM_String string, MM_u32 skip, MM_Text_Pos init_pos, MM_Text_Pos* start_pos, MM_Text_Pos* end_pos);
 
-inline MM_bool MM_Parser_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* string_arena, MM_AST** ast);
-
-#ifdef MM_IMPLEMENTATION
-
-#endif
+MM_bool MM_Parser_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* string_arena, MM_AST** ast);
 
 #endif

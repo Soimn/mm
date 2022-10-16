@@ -2,7 +2,7 @@ typedef struct MM_Soft_Int
 {
     union
     {
-        MM_u64 eh[8];
+        MM_u32 eh[8];
         MM_u64 e[4];
         struct
         {
@@ -12,136 +12,184 @@ typedef struct MM_Soft_Int
     };
 } MM_Soft_Int;
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_FromU64(MM_u64 n)
 {
     return (MM_Soft_Int){ .e[0] = n };
 }
 
-inline MM_u64
+MM_u64
 MM_SoftInt_ChopToU64(MM_Soft_Int n)
 {
     return n.e[0];
 }
 
+MM_umm
+MM_SoftInt_PartCount(MM_Soft_Int n)
+{
+    unsigned long mask = !!n.e[0] | (!!n.e[1] << 1) | (!!n.e[2] << 2) | (!!n.e[3] << 3);
+    
+    unsigned long largest_index;
+    unsigned char non_zero = _BitScanReverse(&largest_index, mask);
+    
+    return largest_index + non_zero;
+}
+
+MM_umm
+MM_SoftInt_HalfPartCount(MM_Soft_Int n)
+{
+    unsigned long mask = 0;
+    for (MM_umm i = 0; i < 8; ++i) mask |= !!n.eh[0];
+    
+    unsigned long largest_index;
+    unsigned char non_zero = _BitScanReverse(&largest_index, mask);
+    
+    return largest_index + non_zero;
+}
+
 typedef MM_u8 MM_Soft_Int_Status;
 enum MM_SOFT_INT_STATUS
 {
-    MM_SoftIntStatus_CarryBit     = 1,
-    MM_SoftIntStatus_OverflowBit  = 2,
-    MM_SoftIntStatus_DivByZeroBit = 4,
+    MM_SoftIntStatus_Success = 0,
+    
+    MM_SoftIntStatus_OverflowBit  = 1,
+    MM_SoftIntStatus_DivByZeroBit = 2,
 };
 
-extern unsigned char _addcarry_u64(unsigned char, unsigned __int64, unsigned __int64, unsigned __int64*);
-extern unsigned char _subborrow_u64(unsigned char, unsigned __int64, unsigned __int64, unsigned __int64*);
-
-inline MM_Soft_Int
-MM_SoftInt_Neg(MM_Soft_Int n)
+MM_Soft_Int
+MM_SoftInt_Neg(MM_Soft_Int n, MM_Soft_Int_Status* status)
 {
-    MM_Soft_Int r;
+    MM_Soft_Int r = {
+        .e[0] = ~n.e[0] + 1,
+        .e[1] = ~n.e[1] + (n.e[0] == 0),
+        .e[2] = ~n.e[2] + (n.e[0] + n.e[1] == 0),
+        .e[3] = ~n.e[3] + (n.e[0] + n.e[1] + n.e[2] == 0)
+    };
     
-    unsigned char c1 = _addcarry_u64(1,  ~n.e[0], 0, &r.e[0]);
-    unsigned char c2 = _addcarry_u64(c1, ~n.e[1], 0, &r.e[1]);
-    unsigned char c3 = _addcarry_u64(c2, ~n.e[2], 0, &r.e[2]);
-    unsigned char c4 = _addcarry_u64(c3, ~n.e[3], 0, &r.e[3]);
-    (void)c4;
+    if (n.e[0] + n.e[1] + n.e[2] + n.e[3] == 0)
+    {
+        *status |= MM_SoftIntStatus_OverflowBit;
+    }
     
     return r;
 }
 
-inline MM_bool
+MM_bool
 MM_SoftInt_IsNeg(MM_Soft_Int n)
 {
     return ((MM_i64)n.e[3] < 0);
 }
 
-inline MM_bool
+MM_bool
 MM_SoftInt_IsZero(MM_Soft_Int n)
 {
     return (n.lo == 0 && n.hi == 0);
 }
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_AddU64(MM_Soft_Int a, MM_u64 b, MM_Soft_Int_Status* status)
 {
-    MM_Soft_Int r;
+    MM_u128 bb = (MM_u128)b;
     
-    unsigned char c1 = _addcarry_u64(0,  a.e[0], b, &r.e[0]);
-    unsigned char c2 = _addcarry_u64(c1, a.e[1], 0, &r.e[1]);
-    unsigned char c3 = _addcarry_u64(c2, a.e[2], 0, &r.e[2]);
-    unsigned char c4 = _addcarry_u64(c3, a.e[3], 0, &r.e[3]);
+    MM_u8 lo_carry = ((a.lo & bb) > (~a.lo & ~bb));
     
-    *status |= (c4 ? MM_SoftIntStatus_CarryBit : 0);
-    *status |= ((MM_i64)a.e[3] >= 0 && (MM_i64)r.e[3] < 0 ? MM_SoftIntStatus_OverflowBit : 0);
+    MM_Soft_Int r = {
+        .lo = a.lo + bb,
+        .hi = a.hi + lo_carry,
+    };
+    
+    if ((MM_i128)(~(a.hi ^ 0) & r.hi) < 0)
+    {
+        *status |= MM_SoftIntStatus_OverflowBit;
+    }
     
     return r;
 }
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_Add(MM_Soft_Int a, MM_Soft_Int b, MM_Soft_Int_Status* status)
 {
-    MM_Soft_Int r;
+    MM_u8 lo_carry = ((a.lo & b.lo) > (~a.lo & ~b.lo));
+    MM_u8 hi_carry = ((a.hi & b.hi) > (~a.hi & ~b.hi));
     
-    unsigned char c1 = _addcarry_u64(0,  a.e[0], b.e[0], &r.e[0]);
-    unsigned char c2 = _addcarry_u64(c1, a.e[1], b.e[1], &r.e[1]);
-    unsigned char c3 = _addcarry_u64(c2, a.e[2], b.e[2], &r.e[2]);
-    unsigned char c4 = _addcarry_u64(c3, a.e[3], b.e[3], &r.e[3]);
+    MM_u128 par_hi = a.hi + b.hi;
     
-    *status |= (c4 ? MM_SoftIntStatus_CarryBit : 0);
-    *status |= ((MM_i64)(a.e[3] ^ b.e[3]) >= 0 && (MM_i64)(a.e[3] ^ r.e[3]) < 0 ? MM_SoftIntStatus_OverflowBit : 0);
+    MM_Soft_Int r = {
+        .lo = a.lo + b.lo,
+        .hi = par_hi + lo_carry,
+    };
+    
+    if ((MM_i128)(~(a.hi ^ b.hi) & r.hi) < 0)
+    {
+        *status |= MM_SoftIntStatus_OverflowBit;
+    }
     
     return r;
 }
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_SubU64(MM_Soft_Int a, MM_u64 b, MM_Soft_Int_Status* status)
 {
-    MM_Soft_Int r;
+    MM_u128 bb = (MM_u128)b;
     
-    unsigned char b1 = _subborrow_u64(0,  a.e[0], b, &r.e[0]);
-    unsigned char b2 = _subborrow_u64(b1, a.e[1], 0, &r.e[1]);
-    unsigned char b3 = _subborrow_u64(b2, a.e[2], 0, &r.e[2]);
-    unsigned char b4 = _subborrow_u64(b3, a.e[3], 0, &r.e[3]);
+    MM_u8 lo_carry = ((a.lo & bb) > (~a.lo & ~bb)) | ((a.lo | bb) == MM_U128_MAX);
     
-    *status |= (b4 ? MM_SoftIntStatus_CarryBit : 0);
-    *status |= ((MM_i64)(a.e[3] ^ 0) < 0 && (MM_i64)(0 ^ r.e[3]) >= 0 ? MM_SoftIntStatus_OverflowBit : 0);
+    MM_Soft_Int r = {
+        .lo = a.lo + ~bb + 1,
+        .hi = a.hi + MM_U128_MAX + lo_carry,
+    };
+    
+    if ((MM_i128)((a.hi ^ 0) & ~(0 ^ r.hi)) < 0)
+    {
+        *status |= MM_SoftIntStatus_OverflowBit;
+    }
     
     return r;
 }
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_Sub(MM_Soft_Int a, MM_Soft_Int b, MM_Soft_Int_Status* status)
 {
+    MM_u8 lo_carry = ((a.lo & b.lo) > (~a.lo & ~b.lo)) | ((a.lo | b.lo) == MM_U128_MAX);
     
-    MM_Soft_Int r;
+    MM_Soft_Int r = {
+        .lo = a.lo + ~b.lo + 1,
+        .hi = a.hi + ~b.lo + lo_carry,
+    };
     
-    unsigned char b1 = _subborrow_u64(0,  a.e[0], b.e[0], &r.e[0]);
-    unsigned char b2 = _subborrow_u64(b1, a.e[1], b.e[1], &r.e[1]);
-    unsigned char b3 = _subborrow_u64(b2, a.e[2], b.e[2], &r.e[2]);
-    unsigned char b4 = _subborrow_u64(b3, a.e[3], b.e[3], &r.e[3]);
-    
-    *status |= (b4 ? MM_SoftIntStatus_CarryBit : 0);
-    *status |= ((MM_i64)(a.e[3] ^ b.e[3]) < 0 && (MM_i64)(b.e[3] ^ r.e[3]) >= 0 ? MM_SoftIntStatus_OverflowBit : 0);
+    if ((MM_i128)((a.hi ^ b.hi) & ~(b.hi ^ r.hi)) < 0)
+    {
+        *status |= MM_SoftIntStatus_OverflowBit;
+    }
     
     return r;
 }
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_MulU64(MM_Soft_Int a, MM_u64 b, MM_Soft_Int_Status* status)
 {
     MM_bool should_flip = MM_false;
+    
     if (MM_SoftInt_IsNeg(a))
     {
-        a           = MM_SoftInt_Neg(a);
+        a           = MM_SoftInt_Neg(a, &(MM_Soft_Int_Status){0});
         should_flip = MM_true;
     }
     
-    MM_u128 a0b0 = (MM_u128)a.e[0] * b;
-    MM_u128 a1b0 = (MM_u128)a.e[1] * b;
-    MM_u128 a2b0 = (MM_u128)a.e[2] * b;
-    MM_u128 a3b0 = (MM_u128)a.e[3] * b;
+    MM_u128 a0b0, a0b1, a0b2, a0b3;
+    MM_u128 a1b0, a1b1, a1b2;
+    MM_u128 a2b0, a2b1;
+    MM_u128 a3b0;
     
-    MM_u128 r0 = a0b0 >> 64;
+    *(MM_u64*)a0b0 = _umul128(a.e[0], b, (MM_u64*)&a0b0 + 1);
+    
+    *(MM_u64*)a1b0 = _umul128(a.e[1], b, (MM_u64*)&a1b0 + 1);
+    
+    *(MM_u64*)a2b0 = _umul128(a.e[2], b, (MM_u64*)&a2b0 + 1);
+    
+    *(MM_u64*)a3b0 = _umul128(a.e[3], b, (MM_u64*)&a3b0 + 1);
+    
+    MM_u128 r0 = a0b0;
     MM_u128 r1 = a1b0 + (r0 >> 64);
     MM_u128 r2 = a2b0 + (r1 >> 64);
     MM_u128 r3 = a3b0 + (r2 >> 64);
@@ -153,261 +201,132 @@ MM_SoftInt_MulU64(MM_Soft_Int a, MM_u64 b, MM_Soft_Int_Status* status)
         .e[3] = (MM_u64)r3,
     };
     
-    if ((r3 >> 64) != 0)
-    {
-        *status |= MM_SoftIntStatus_CarryBit | MM_SoftIntStatus_OverflowBit;
-    }
-    else if (r.e[3] > ((MM_u64)1 << 63) && should_flip)
+    if (r3 >> 64 != 0 || should_flip && MM_SoftInt_IsNeg(r))
     {
         *status |= MM_SoftIntStatus_OverflowBit;
     }
     
-    if (should_flip) r = MM_SoftInt_Neg(r);
-    
-    return r;
+    return (should_flip ? MM_SoftInt_Neg(r, &(MM_Soft_Int_Status){0}) : r);
 }
 
-inline MM_Soft_Int
+MM_Soft_Int
 MM_SoftInt_Mul(MM_Soft_Int a, MM_Soft_Int b, MM_Soft_Int_Status* status)
 {
     MM_bool should_flip = MM_false;
+    
     if (MM_SoftInt_IsNeg(a))
     {
-        a           = MM_SoftInt_Neg(a);
+        a           = MM_SoftInt_Neg(a, &(MM_Soft_Int_Status){0});
         should_flip = MM_true;
     }
     
     if (MM_SoftInt_IsNeg(b))
     {
-        b           = MM_SoftInt_Neg(b);
+        b           = MM_SoftInt_Neg(b, &(MM_Soft_Int_Status){0});
         should_flip = !should_flip;
     }
     
-    MM_u128 a0b0 = (MM_u128)a.e[0] * b.e[0];
-    MM_u128 a1b0 = (MM_u128)a.e[1] * b.e[0];
-    MM_u128 a2b0 = (MM_u128)a.e[2] * b.e[0];
-    MM_u128 a3b0 = (MM_u128)a.e[3] * b.e[0];
+    MM_u128 a0b0, a0b1, a0b2, a0b3;
+    MM_u128 a1b0, a1b1, a1b2;
+    MM_u128 a2b0, a2b1;
+    MM_u128 a3b0;
     
-    MM_u128 a0b1 = (MM_u128)a.e[0] * b.e[1];
-    MM_u128 a1b1 = (MM_u128)a.e[1] * b.e[1];
-    MM_u128 a2b1 = (MM_u128)a.e[2] * b.e[1];
-    MM_u128 a3b1 = (MM_u128)a.e[3] * b.e[1];
+    *(MM_u64*)a0b0 = _umul128(a.e[0], b.e[0], (MM_u64*)&a0b0 + 1);
+    *(MM_u64*)a0b1 = _umul128(a.e[0], b.e[1], (MM_u64*)&a0b1 + 1);
+    *(MM_u64*)a0b2 = _umul128(a.e[0], b.e[2], (MM_u64*)&a0b2 + 1);
+    *(MM_u64*)a0b3 = _umul128(a.e[0], b.e[3], (MM_u64*)&a0b3 + 1);
     
-    MM_u128 a0b2 = (MM_u128)a.e[0] * b.e[2];
-    MM_u128 a1b2 = (MM_u128)a.e[1] * b.e[2];
-    MM_u128 a2b2 = (MM_u128)a.e[2] * b.e[2];
-    MM_u128 a3b2 = (MM_u128)a.e[3] * b.e[2];
+    *(MM_u64*)a1b0 = _umul128(a.e[1], b.e[0], (MM_u64*)&a1b0 + 1);
+    *(MM_u64*)a1b1 = _umul128(a.e[1], b.e[1], (MM_u64*)&a1b1 + 1);
+    *(MM_u64*)a1b2 = _umul128(a.e[1], b.e[2], (MM_u64*)&a1b2 + 1);
     
-    MM_u128 a0b3 = (MM_u128)a.e[0] * b.e[3];
-    MM_u128 a1b3 = (MM_u128)a.e[1] * b.e[3];
-    MM_u128 a2b3 = (MM_u128)a.e[2] * b.e[3];
-    MM_u128 a3b3 = (MM_u128)a.e[3] * b.e[3];
+    *(MM_u64*)a2b0 = _umul128(a.e[2], b.e[0], (MM_u64*)&a2b0 + 1);
+    *(MM_u64*)a2b1 = _umul128(a.e[2], b.e[1], (MM_u64*)&a2b1 + 1);
     
-#define MM_LO(X) ((X) & MM_U64_MAX)
-#define MM_HI(X) ((X) >> 64)
+    *(MM_u64*)a3b0 = _umul128(a.e[3], b.e[0], (MM_u64*)&a3b0 + 1);
     
-    MM_u128 r0_lo = MM_LO(a0b0);
-    MM_u128 r0_hi = MM_HI(a0b0);
-    MM_u128 r1_lo = r0_hi + MM_LO(a1b0) + MM_LO(a0b1);
-    MM_u128 r1_hi = MM_HI(r1_lo) + MM_HI(a1b0) + MM_HI(a0b1);
-    MM_u128 r2_lo = r1_hi + MM_LO(a2b0) + MM_LO(a1b1) + MM_LO(a0b2);
-    MM_u128 r2_hi = MM_HI(r2_lo) + MM_HI(a2b0) + MM_HI(a1b1) + MM_HI(a0b2);
-    MM_u128 r3_lo = r2_hi + MM_LO(a3b0) + MM_LO(a2b1) + MM_LO(a1b2) + MM_LO(a0b3);
-    MM_u128 r3_hi = MM_HI(r3_lo) + MM_HI(a3b0) + MM_HI(a2b1) + MM_HI(a1b2) + MM_HI(a0b3);
-    
-#undef MM_LO
-#undef MM_HI
+    MM_u128 r0 = a0b0;
+    MM_u128 r1 = a1b0 + a0b1 +               (r0 >> 64);
+    MM_u128 r2 = a2b0 + a1b1 + a0b2 +        (r1 >> 64);
+    MM_u128 r3 = a3b0 + a2b1 + a1b2 + a0b3 + (r2 >> 64);
     
     MM_Soft_Int r = {
-        .e[0] = (MM_u64)r0_lo,
-        .e[1] = (MM_u64)r1_lo,
-        .e[2] = (MM_u64)r2_lo,
-        .e[3] = (MM_u64)r3_lo,
+        .e[0] = (MM_u64)r0,
+        .e[1] = (MM_u64)r1,
+        .e[2] = (MM_u64)r2,
+        .e[3] = (MM_u64)r3,
     };
     
-    if (r3_hi != 0 || a3b3 != 0 || a3b2 != 0 || a3b1 != 0 || a2b3 != 0 || a2b2 != 0 || a1b3 != 0)
-    {
-        *status |= MM_SoftIntStatus_CarryBit | MM_SoftIntStatus_OverflowBit;
-    }
-    else if (r.e[3] > ((MM_u64)1 << 63) && should_flip)
+    MM_umm len_a = MM_SoftInt_PartCount(a);
+    MM_umm len_b = MM_SoftInt_PartCount(b);
+    
+    if (r3 >> 64 != 0 || len_a + len_b > 3 || should_flip && MM_SoftInt_IsNeg(r))
     {
         *status |= MM_SoftIntStatus_OverflowBit;
     }
     
-    if (should_flip) r = MM_SoftInt_Neg(r);
-    
-    return r;
-}
-// NOTE: Based on divmnu64 from Hacker's Delight
-MM_Soft_Int
-MM_SoftInt_DivU32(MM_Soft_Int val, MM_u32 u32, MM_u32* remainder, MM_Soft_Int_Status* status)
-{
-    MM_Soft_Int result = {0};
-    
-    MM_bool should_flip = MM_false;
-    if (MM_SoftInt_IsNeg(a))
-    {
-        a           = MM_SoftInt_Neg(a);
-        should_flip = MM_true;
-    }
-    
-    if (u32 == 0) *status |= MM_SoftIntStatus_DivByZeroBit;
-    else
-    {
-        MM_u64 k = 0;
-        for (MM_imm i = 8; i >= 0; --i)
-        {
-            MM_u32 dividend_digits = k << 32 | val.e[i];
-            
-            result.e[i] = dividend_digits / u32;
-            k           = dividend_digits % u32;
-        }
-        
-        *remainder = (MM_u32)k;
-    }
-    
-    // TODO: update flags
-    MM_NOT_IMPLEMENTED;
-    
-    if (should_flip) result = MM_SoftInt_Neg(result);
-    
-    return result;
+    return (should_flip ? MM_SoftInt_Neg(r, &(MM_Soft_Int_Status){0}) : r);
 }
 
-// NOTE: Based on divmnu64 from Hacker's Delight
 MM_Soft_Int
 MM_SoftInt_Div(MM_Soft_Int a, MM_Soft_Int b, MM_Soft_Int* remainder, MM_Soft_Int_Status* status)
 {
-    MM_ZeroStruct(remainder);
-    
+    MM_bool flipped_a   = MM_false;
     MM_bool should_flip = MM_false;
+    
     if (MM_SoftInt_IsNeg(a))
     {
-        a           = MM_SoftInt_Neg(a);
+        a           = MM_SoftInt_Neg(a, &(MM_Soft_Int_Status){0});
         should_flip = MM_true;
+        flipped_a   = MM_true;
     }
     
     if (MM_SoftInt_IsNeg(b))
     {
-        b           = MM_SoftInt_Neg(b);
+        b           = MM_SoftInt_Neg(b, &(MM_Soft_Int_Status){0});
         should_flip = !should_flip;
     }
     
-    // NOTE: An attempt at computing the number of digits without introducing way too many branches
-    MM_umm n;
+    MM_umm len_a = MM_SoftInt_HalfPartCount(a);
+    MM_umm len_b = MM_SoftInt_HalfPartCount(b);
+    
+    MM_Soft_Int r;
+    if (len_b == 0)
     {
-        MM_u32 nn = 1;
-        nn |= (b.e[3] != 0) << 4;
-        nn |= (b.e[2] != 0) << 3;
-        nn |= (b.e[1] != 0) << 2;
-        
-        n = __builtin_clzll(nn);
-        n = 2*(32 - n);
-        n -= (b.eh[n - 1] == 0);
+        *status |= MM_SoftIntStatus_DivByZeroBit;
     }
-    
-    MM_Soft_Int result = {0};
-    
-    if (n == 1) result = MM_SoftInt_DivU32(a, b.e[0], (MM_u32*)&remainder->e[0], status);
+    else if (len_b > len_a)
+    {
+        MM_ZeroStruct(&r);
+        *remainder = b;
+    }
+    else if (len_b == 1)
+    {
+        MM_u64 rem = 0;
+        for (MM_imm i = 7; i >= 0; --i)
+        {
+            r.eh[i] = ((rem << 32) | a.eh[i]) / b.e[0];
+            rem     = a.eh[i] % b.e[0];
+        }
+        
+        *remainder = (MM_Soft_Int){ .eh[0] = rem };
+    }
     else
     {
-        // NOTE: Shift a and b up by the amount of leading zeros in b's leading digit.
-        //       a is renamed to u, b is renamed to v (to fit the naming in Hacker's Delight).
-        MM_umm shift_amount = __builtin_clzll(b.e[n - 1]);
-        
-        MM_u32 u[9];
-        {
-            u[0] = a.eh[0] << shift_amount;
-            for (MM_umm i = 1; i < 8; ++i)
-            {
-                u[i] = a.eh[i] << shift_amount | (MM_u64)a.eh[i - 1] >> (32 - shift_amount);
-            }
-            u[8] = a.eh[7] >> (32 - shift_amount);
-        }
-        
-        MM_u32 v[8];
-        {
-            v[0] = b.eh[0] << shift_amount;
-            for (MM_umm i = 1; i < 8; ++i)
-            {
-                v[i] = b.eh[i] << shift_amount | (MM_u64)b.eh[i - 1] >> (32 - shift_amount);
-            }
-        }
-        
-        // NOTE: For each leading zero digit in v and v's leading non-zero digit, compute the
-        //       division of u's j and j-1 th digit on v's leading digit. This is an estimate for
-        //       the quotient, and is at most 2 off. The quotient is then refined.
-        for (MM_imm j = 8 - n; j >= 0; --j)
-        {
-            MM_u64 dividend_digits = (MM_u64)u[j + n] << 32 | u[j + n - 1];
-            MM_u64 qhat = dividend_digits / v[n - 1];
-            MM_u64 rhat = dividend_digits % v[n - 1];
-            
-            // NOTE: Eliminate all cases where the quotient is 2 too high, and most where it is 1 too high
-            do
-            {
-                if (qhat > MM_U32_MAX || qhat * v[n - 2] > (rhat << 32 | u[j + n - 2]))
-                {
-                    qhat -= 1;
-                    rhat += v[n - 1];
-                }
-            } while (rhat < ((MM_u64)1 << 32));
-            
-            // NOTE: Multiply v by qhat and subtract it from u
-            MM_i64 t = 0;
-            {
-                MM_i64 k = 0;
-                for (MM_umm i = 0; i < n; ++i)
-                {
-                    MM_u64 p = qhat * v[i];
-                    t = u[i + j] - k - (MM_u32)p;
-                    
-                    u[i + j] = (MM_u32)t;
-                    k        = (p >> 32) - (t >> 32);
-                    // NOTE: I think "- (t >> 32)" is another way of saying +1 if t is negative (in other words, borrow 1 from the next digit)
-                }
-                
-                t        = u[j + n] - k;
-                u[j + n] = (MM_u32)t;
-                
-                result.eh[j] = (MM_u32)qhat;
-            }
-            
-            // NOTE: Decrement quotient and add v to u if u ended up negative after subtracting qhat*v.
-            //       u is negative iff t is negative.
-            if (t < 0)
-            {
-                result.eh[j] -= 1;
-                
-                MM_u64 k = 0;
-                for (MM_umm i = 0; i < n; ++i)
-                {
-                    t = (MM_u64)u[i + j] + v[i] + k;
-                    
-                    u[i + j] = t;
-                    k        = t >> 32;
-                }
-                
-                u[j + n] += k;
-            }
-            
-        }
-        
-        // NOTE: assign u shifted down by the normalization shift amount to the remainder
-        for (MM_umm i = 0; i < n - 1; ++i)
-        {
-            remainder->eh[i] = (u[i] >> shift_amount) | ((MM_u64)u[i + 1] << (32 - shift_amount));
-        }
-        
-        remainder->eh[n - 1] = u[n - 1] >> shift_amount;
+        MM_NOT_IMPLEMENTED;
     }
     
-    // TODO: update flags
-    MM_NOT_IMPLEMENTED;
+    if (should_flip)
+    {
+        if (MM_SoftInt_IsNeg(r)) *status |= MM_SoftIntStatus_OverflowBit;
+        else
+        {
+            r = MM_SoftInt_Neg(r, status);
+            if (flipped_a) *remainder = MM_SoftInt_Neg(*remainder, status);
+        }
+    }
     
-    if (should_flip) result = MM_SoftInt_Neg(result);
-    
-    return result;
+    return r;
 }
 
 MM_Soft_Int

@@ -154,7 +154,7 @@ typedef struct MM_Token
     };
 } MM_Token;
 
-inline MM_Token
+MM_Token
 MM_Token_FirstFromString(MM_String string, MM_u32 skip, MM_Text_Pos init_pos, MM_Text_Pos* start_pos, MM_Text_Pos* end_pos)
 {
     MM_CONTRACT_ASSERT(string.size >= skip && (MM_u64)(string.size - skip) + (MM_u64)init_pos.offset <= MM_U32_MAX);

@@ -17,14 +17,14 @@ typedef struct MM_f16
     };
 } MM_f16;
 
-inline MM_f64
+MM_f64
 MM_F16_ToF64(MM_f16 f16)
 {
     MM_NOT_IMPLEMENTED;
     return 0;
 }
 
-inline MM_f16
+MM_f16
 MM_F16_FromF64(MM_f64 f64)
 {
     MM_NOT_IMPLEMENTED;
