@@ -1,18 +1,9 @@
 typedef struct MM_Parser
 {
-    MM_String string;
-    MM_Text_Pos pos;
-    MM_Token token;
+    MM_Lexer lexer;
     MM_Arena* ast_arena;
     MM_Arena* string_arena;
 } MM_Parser;
-
-MM_Token
-MM_Parser__NextToken(MM_Parser* parser)
-{
-    parser->token = MM_Token_FirstFromString(parser->string, parser->pos.offset, parser->pos, 0, &parser->pos);
-    return parser->token;
-}
 
 void*
 MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
@@ -24,10 +15,10 @@ MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
     return (void*)node;
 }
 
-#define MM_GetToken() (parser->token)
-#define MM_IsToken(k) (parser->token.kind == (k))
-#define MM_NextToken() MM_Parser__NextToken(parser)
-#define MM_EatToken(k) (parser->token.kind == (k) && (MM_Parser__NextToken(parser), MM_true))
+#define MM_GetToken() (MM_Lexer_GetToken(&parser->lexer))
+#define MM_IsToken(k) (MM_Lexer_GetToken(&parser->lexer).kind == (k))
+#define MM_NextToken() MM_Lexer_NextToken(&parser->lexer)
+#define MM_EatToken(k) (MM_Lexer_GetToken(&parser->lexer).kind == (k) && (MM_Lexer_NextToken(&parser->lexer), MM_true))
 #define MM_PushNode(k) MM_Parser__PushNode(parser, (k))
 
 MM_bool MM_Parser__ParseExpression(MM_Parser* parser, MM_Expression** expression);
@@ -37,7 +28,7 @@ MM_bool MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement);
 MM_bool
 MM_Parser__ParseStringLiteral(MM_Parser* parser, MM_Token token, MM_String_Literal* string_literal)
 {
-    MM_CONTRACT_ASSERT(token.kind == MM_Token_String);
+    MM_ASSERT(token.kind == MM_Token_String);
     
     MM_String string = token.string;
     
@@ -75,6 +66,7 @@ MM_Parser__ParseStringLiteral(MM_Parser* parser, MM_Token token, MM_String_Liter
                     
                     if      (string.data[i] >= '0' && string.data[i] <= '9') digit = string.data[i] & 0xF;
                     else if (string.data[i] >= 'A' && string.data[i] <= 'F') digit = (string.data[i] & 0x1F) + 9;
+                    else if (string.data[i] >= 'a' && string.data[i] <= 'f') digit = (string.data[i] & 0x1F) + 9;
                     else
                     {
                         //// ERROR: Not a valid hexadecimal digit
@@ -85,6 +77,7 @@ MM_Parser__ParseStringLiteral(MM_Parser* parser, MM_Token token, MM_String_Liter
                     codepoint = (codepoint << 4) | digit;
                 }
                 
+                MM_ASSERT(remaining_digits >= 0);
                 if (remaining_digits > 0)
                 {
                     //// ERROR: Missing digits
@@ -135,7 +128,7 @@ MM_bool
 MM_Parser__ParseArguments(MM_Parser* parser, MM_Argument** args)
 {
     MM_Argument** next_arg = args;
-    while (MM_true)
+    for (;;)
     {
         MM_Expression* first;
         if (!MM_Parser__ParseExpression(parser, &first)) return MM_false;
@@ -168,7 +161,7 @@ MM_bool
 MM_Parser__ParseExpressionList(MM_Parser* parser, MM_Expression** expressions)
 {
     MM_Expression** next_expr = expressions;
-    while (MM_true)
+    for (;;)
     {
         if (!MM_Parser__ParseExpression(parser, next_expr)) return MM_false;
         else
@@ -262,7 +255,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                     {
                         MM_Parameter** next_param = &params;
                         MM_Expression* names      = expr_list;
-                        while (MM_true)
+                        for (;;)
                         {
                             if (!MM_EatToken(MM_Token_Colon))
                             {
@@ -353,7 +346,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
                     {
                         MM_Return_Value** next_ret_val = &ret_vals;
                         MM_Expression* names           = expr_list;
-                        while (MM_true)
+                        for (;;)
                         {
                             if (!MM_EatToken(MM_Token_Colon))
                             {
@@ -446,7 +439,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             if (!MM_IsToken(MM_Token_CloseBrace))
             {
                 MM_Struct_Member** next_member = &members;
-                while (MM_true)
+                for (;;)
                 {
                     MM_Expression* names;
                     MM_Expression* type        = 0;
@@ -523,7 +516,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
             if (!MM_IsToken(MM_Token_CloseBrace))
             {
                 MM_Enum_Member** next_member = &members;
-                while (MM_true)
+                for (;;)
                 {
                     if (MM_IsToken(MM_Token_Blank))
                     {
@@ -683,7 +676,7 @@ MM_Parser__ParsePrimaryExpression(MM_Parser* parser, MM_Expression** expression)
 MM_bool
 MM_Parser__ParseTypePrefixExpression(MM_Parser* parser, MM_Expression** expression)
 {
-    while (MM_true)
+    for (;;)
     {
         if (MM_EatToken(MM_Token_Hat))
         {
@@ -730,7 +723,7 @@ MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
     if (!MM_Parser__ParseTypePrefixExpression(parser, expression)) return MM_false;
     else
     {
-        while (MM_true)
+        for (;;)
         {
             MM_Expression* operand = *expression;
             
@@ -872,7 +865,7 @@ MM_Parser__ParsePostfixExpression(MM_Parser* parser, MM_Expression** expression)
 MM_bool
 MM_Parser__ParsePrefixExpression(MM_Parser* parser, MM_Expression** expression)
 {
-    while (MM_true)
+    for (;;)
     {
         if      (MM_EatToken(MM_Token_Plus));
         else if (MM_EatToken(MM_Token_Minus))
@@ -907,7 +900,7 @@ MM_Parser__ParseBinaryExpression(MM_Parser* parser, MM_Expression** expression)
     if (!MM_Parser__ParsePrefixExpression(parser, expression)) return MM_false;
     else
     {
-        while (MM_true)
+        for (;;)
         {
             MM_Token token = MM_GetToken();
             if (!(token.kind >= MM_Token__FirstBinary && token.kind <= MM_Token__LastBinary)) break;
@@ -952,7 +945,7 @@ MM_bool
 MM_Parser__ParseBlock(MM_Parser* parser, MM_Statement_Block** block)
 {
     MM_bool starts_with_brace = MM_EatToken(MM_Token_OpenBrace);
-    MM_CONTRACT_ASSERT(starts_with_brace);
+    MM_ASSERT(starts_with_brace);
     
     MM_Statement* body = 0;
     MM_Statement** next_stmnt = &body;
@@ -1313,14 +1306,10 @@ MM_bool
 MM_Parser_ParseString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* string_arena, MM_AST** ast)
 {
     MM_Parser* parser = &(MM_Parser){
-        .string       = string,
-        .pos          = pos,
-        .token        = { .kind = MM_Token_Invalid },
+        .lexer        = MM_Lexer_Init(string, pos),
         .ast_arena    = ast_arena,
         .string_arena = string_arena,
     };
-    
-    parser->token = MM_Token_FirstFromString(parser->string, 0, parser->pos, 0, &parser->pos);
     
     MM_Statement** next_statement = (MM_Statement**)ast;
     while (!MM_IsToken(MM_Token_EOF))

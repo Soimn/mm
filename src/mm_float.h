@@ -28,5 +28,10 @@ MM_f16
 MM_F16_FromF64(MM_f64 f64)
 {
     MM_NOT_IMPLEMENTED;
-    return (MM_f16){};
+    return (MM_f16){0};
 }
+
+typedef struct MM_Soft_Float
+{
+    MM_f64 f64;
+} MM_Soft_Float;
