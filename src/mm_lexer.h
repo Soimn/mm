@@ -276,7 +276,8 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                 
                 MM_i128 integer    = {0};
                 MM_umm digit_count = 0;
-                if (base == 10)
+                if (base != 10) MM_Lexer__Advance(lexer, 1);
+                else
                 {
                     digit_count += 1;
                     integer      = MM_i128_FromU64(c - '0');
@@ -288,8 +289,8 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                     MM_u8 digit = 0;
                     
                     if      (MM_Lexer__IsDigit(d)) digit = d - '0';
-                    else if (d >= 'A' && d <= 'F') digit = (d - 'A') + 9;
-                    else if (d >= 'a' && d <= 'f') digit = (d - 'A') + 9;
+                    else if (d >= 'A' && d <= 'F') digit = (d - 'A') + 10;
+                    else if (d >= 'a' && d <= 'f') digit = (d - 'a') + 10;
                     else if (d == '_')
                     {
                         MM_Lexer__Advance(lexer, 1);
@@ -317,6 +318,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
                             token.kind = MM_Token_Invalid;
                             break;
                         }
+                        else MM_Lexer__Advance(lexer, 1);
                     }
                 }
                 

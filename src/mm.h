@@ -52,6 +52,9 @@ typedef struct MM_String
 
 #define MM_ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
+#define MM_STRINGIFY_(s) #s
+#define MM_STRINGIFY(s) MM_STRINGIFY_(s)
+
 #define MM_CONCAT_(a, b) a##b
 #define MM_CONCAT(a, b) MM_CONCAT_(a, b)
 #define MM_STATIC_ASSERT(EX)                                                            \
