@@ -10,18 +10,17 @@ set "root_dir=%cd%"
 set "build_dir=%root_dir%\build"
 set "src_dir=%root_dir%\src"
 
-set "common_comp_options=/W4 /wd4201"
-set "common_link_options=/INCREMENTAL:no /opt:icf /opt:ref"
+set "temp_link_libs=Shlwapi.lib"
 
-set "common_mm_comp_options= /GS- /Oi"
-set "common_mm_link_options= /INCREMENTAL:NO /opt:icf /opt:ref /fixed /SUBSYSTEM:console libvcruntime.lib kernel32.lib"
+set "common_comp_options=/GS- /Oi /W4 /wd4201"
+set "common_link_options=/INCREMENTAL:no /opt:icf /opt:ref /fixed /SUBSYSTEM:console libvcruntime.lib kernel32.lib %temp_link_libs%"
 
 if "%1"=="debug" (
-	set "mm_comp_options=%common_comp_options% %common_mm_comp_options% /DMM_DEBUG=1 /Od /Zo /Z7 /MTd /RTC1 /wd4100"
-	set "mm_link_options=%common_link_options% %common_mm_link_options% libucrtd.lib libvcruntimed.lib"
+	set "mm_comp_options=%common_comp_options% /DMM_DEBUG=1 /Od /Zo /Z7 /MTd /RTC1 /wd4100"
+	set "mm_link_options=%common_link_options% libucrtd.lib libvcruntimed.lib"
 ) else if "%1"=="release" (
-	set "mm_comp_options=%common_comp_options% %common_mm_comp_options%"
-	set "mm_link_options=%common_link_options% %common_mm_link_options%"
+	set "mm_comp_options=%common_comp_options% /O2"
+	set "mm_link_options=%common_link_options%"
 ) else (
 	echo Illegal first argument^, must be one of ^<debug^|release^>
 	goto end

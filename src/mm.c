@@ -1,135 +1,173 @@
-#define UNICODE
-#define NOMINMAX            1
-#define WIN32_LEAN_AND_MEAN 1
-#define WIN32_MEAN_AND_LEAN 1
-#define VC_EXTRALEAN        1
-#include <windows.h>
-#undef NOMINMAX
-#undef WIN32_LEAN_AND_MEAN
-#undef WIN32_MEAN_AND_LEAN
-#undef VC_EXTRALEAN
-#undef far
-#undef near
-#undef MM_MIN
-#undef MM_MAX
-
+#include <stdarg.h>
 #include <intrin.h>
-#include <immintrin.h>
 
-#ifndef MM_DEBUG
-#define MM_DEBUG 0
-#endif
-
-#ifndef MM_RELEASE_ASSERT
-#define MM_RELEASE_ASSERT 0
-#endif
-
-typedef signed __int8   MM_i8;
-typedef signed __int16  MM_i16;
-typedef signed __int32  MM_i32;
-typedef signed __int64  MM_i64;
-
-typedef unsigned __int8   MM_u8;
-typedef unsigned __int16  MM_u16;
-typedef unsigned __int32  MM_u32;
-typedef unsigned __int64  MM_u64;
-
-typedef MM_u64 MM_umm;
-typedef MM_i64 MM_imm;
-
-typedef float  MM_f32;
-typedef double MM_f64;
-
-typedef MM_u8 MM_bool;
-
-#define MM_true (MM_bool)(1)
-#define MM_false (MM_bool)(0)
-
-#define MM_U8_MAX   (MM_u8)  0xFF
-#define MM_U16_MAX  (MM_u16) 0xFFFF
-#define MM_U32_MAX  (MM_u32) 0xFFFFFFFF
-#define MM_U64_MAX  (MM_u64) 0xFFFFFFFFFFFFFFFF
-
-#define MM_I8_MIN   (MM_i8)  0x80
-#define MM_I16_MIN  (MM_i16) 0x8000
-#define MM_I32_MIN  (MM_i32) 0x80000000
-#define MM_I64_MIN  (MM_i64) 0x8000000000000000
-
-#define MM_I8_MAX   (MM_i8)  0x7F
-#define MM_I16_MAX  (MM_i16) 0x7FFF
-#define MM_I32_MAX  (MM_i32) 0x7FFFFFFF
-#define MM_I64_MAX  (MM_i64) 0x7FFFFFFFFFFFFFFF
-
-typedef struct MM_String
-{
-    MM_u8* data;
-    MM_u32 size;
-} MM_String;
-
-#define MM_STRING(str_lit) (MM_String){ .data = (MM_u8*)(str_lit), .size = sizeof(str_lit) - 1 }
-
-#define MM_ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
-
-#define MM_CONCAT_(a, b) a##b
-#define MM_CONCAT(a, b) MM_CONCAT_(a, b)
-#define MM_STATIC_ASSERT(EX)                                                            \
-struct MM_CONCAT(MM_STATIC_ASSERT_, MM_CONCAT(__COUNTER__, MM_CONCAT(_, __LINE__))) \
-{                                                                                   \
-int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  \
-}
-
-#if MM_DEBUG | MM_RELEASE_ASSERT
-#define MM_ASSERT(EX) ((EX) ? 1 : (*(volatile int*)0 = 0))
-#define MM_NOT_IMPLEMENTED MM_ASSERT(!"MM_NOT_IMPLEMENTED")
-#define MM_ILLEGAL_CODE_PATH MM_ASSERT(!"MM_ILLEGAL_CODE_PATH")
-#else
-#define MM_ASSERT(EX)
-#define MM_NOT_IMPLEMENTED MM_STATIC_ASSERT(!"MM_NOT_IMPLEMENTED")
-#define MM_ILLEGAL_CODE_PATH
-#endif
-
-#define MM_MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MM_MAX(a, b) ((a) < (b) ? (b) : (a))
-#define MM_ROUND_UP(N, align) (((MM_umm)(N) + ((MM_umm)(align) - 1)) & ~((MM_umm)(align) - 1))
-#define MM_ROUND_DOWN(N, align) ((MM_umm)(N) & ~((MM_umm)(align) - 1))
-#define MM_IS_POW_2(N) ((((MM_umm)(N) - 1) & (MM_umm)(N)) == 0 && (N) > 0)
-
-void* MM_System_ReserveMemory(MM_umm size);
-void  MM_System_CommitMemory (void* base, MM_umm size);
-void  MM_System_FreeMemory   (void* base);
-
-typedef MM_String MM_Identifier;
-typedef MM_String MM_String_Literal;
-
-#include "mm_memory.h"
+#include "mm.h"
 #include "mm_int.h"
-#include "mm_float.h"
 #include "mm_string.h"
 #include "mm_tokens.h"
 #include "mm_lexer.h"
-#include "mm_ast.h"
-#include "mm_parser.h"
 
-void*
-MM_System_ReserveMemory(MM_umm size)
+int wvnsprintfA(char* dest, int size, const char* format, va_list args);
+void OutputDebugStringA(const char* str);
+void* __stdcall GetStdHandle(unsigned long handle);
+int __stdcall WriteConsoleA(void*, const void*, unsigned long, unsigned long, void*);
+
+int
+Sprint(char* buffer, MM_u32 size, const char* msg, ...)
 {
-    return VirtualAlloc(0, size, MEM_RESERVE, PAGE_READWRITE);
+    va_list args;
+    va_start(args, msg);
+    int result = wvnsprintfA(buffer, size, msg, args);
+    va_end(args);
+    
+    return result;
 }
 
 void
-MM_System_CommitMemory(void* base, MM_umm size)
+Print(const char* msg, ...)
 {
-    VirtualAlloc(base, size, MEM_COMMIT, PAGE_READWRITE);
+    char buffer[1024];
+    
+    va_list args;
+    va_start(args, msg);
+    wvnsprintfA(buffer, sizeof(buffer), msg, args);
+    va_end(args);
+    
+    OutputDebugStringA(buffer);
+    WriteConsoleA(GetStdHandle(((unsigned long)-11)), buffer, (unsigned long)MM_Cstring_Length(buffer), 0, 0);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+// IMPORTANT NOTE: THESE ARE NOT TESTS IN THE FORMAL SENSE, THEY ARE "TEST IF THIS WORKS", which is
+//                 kind of everything a test is when you remove the important methodology around it.
+//                 Additionally, the code is shit, it will definitely be replaced with something
+//                 more proper when there is actually something interesting to test
+
+MM_bool
+TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm expected_kind_count)
+{
+    MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+    
+    Print("TestLexer_TokenKinds\t\t-- ");
+    
+    MM_Token token = MM_Lexer_NextToken(&lexer);
+    MM_umm i       = 0;
+    for (; i < expected_kind_count && token.kind != MM_Token_EOF; token = MM_Lexer_NextToken(&lexer), ++i)
+    {
+        if (token.kind != expected_kinds[i])
+        {
+            MM_String expected = MM_Token_NameList[expected_kinds[i]];
+            MM_String got      = MM_Token_NameList[token.kind];
+            
+            Print("FAILED. (%u,%u): expected %.*s got %.*s\n", token.line, token.col, expected.size, expected.data, got.size, got.data);
+            return MM_false;
+        }
+    }
+    
+    if (i < expected_kind_count)
+    {
+        MM_String expected = MM_Token_NameList[expected_kinds[i]];
+        Print("FAILED. (%u,%u): expected %.*s got MM_Token_EOF\n", token.line, token.col, expected.size, expected.data);
+        return MM_false;
+    }
+    else if (token.kind != MM_Token_EOF)
+    {
+        MM_String got = MM_Token_NameList[token.kind];
+        Print("FAILED. (%u,%u): expected MM_Token_EOF got %.*s\n", token.line, token.col, got.size, got.data);
+        return MM_false;
+    }
+    else
+    {
+        Print("SUCCEEDED.\n");
+        return MM_true;
+    }
+}
+
+MM_bool
+TestLexer_Reconstruction(MM_String string, MM_bool print)
+{
+    MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+    
+    char buffer[4096];
+    int buffer_space = MM_ARRAY_SIZE(buffer);
+    
+    MM_Text_Pos prev = { .offset = 0, .line = 1, .col = 1 };
+    for (MM_Token token = MM_Lexer_NextToken(&lexer); token.kind != MM_Token_EOF; token = MM_Lexer_NextToken(&lexer))
+    {
+        MM_u8 token_string_buffer[42];
+        MM_String token_string = MM_STRING("(null)");
+        
+        if (token.kind == MM_Token_Identifier                                           ||
+            token.kind >= MM_Token__FirstKeyword && token.kind <= MM_Token__LastKeyword ||
+            token.kind >= MM_Token__FirstBuiltin && token.kind <= MM_Token__LastBuiltin)
+        {
+            token_string = token.string;
+        }
+        else if (token.kind == MM_Token_String) MM_NOT_IMPLEMENTED;
+        else if (token.kind == MM_Token_Float)  MM_NOT_IMPLEMENTED;
+        else if (token.kind == MM_Token_Int)
+        {
+            if (token.i128.hi != 0) MM_NOT_IMPLEMENTED;
+            else
+            {
+                token_string.data = token_string_buffer;
+                token_string.size = Sprint((char*)token_string_buffer, MM_ARRAY_SIZE(token_string_buffer), "%llu", token.i128.lo);
+                MM_ASSERT(token_string.size > 0 && token_string.size < MM_ARRAY_SIZE(token_string_buffer));
+            }
+        }
+        else token_string = MM_Token_SymbolStringList[token.kind];
+        
+        for (MM_umm i = 0; i < token.line - prev.line; ++i)
+        {
+            int result = Sprint(buffer + (MM_ARRAY_SIZE(buffer) - buffer_space), buffer_space, "\n");
+            MM_ASSERT(result == 1);
+            buffer_space -= result;
+        }
+        
+        int result = Sprint(buffer + (MM_ARRAY_SIZE(buffer) - buffer_space), buffer_space,
+                            "%*s%.*s", (token.line != prev.line ? token.col - 1 : token.col - prev.col), "", token_string.size, token_string.data);
+        
+        MM_ASSERT(result > 0 && result < buffer_space);
+        buffer_space -= result;
+        
+        prev      = token.text_pos;
+        prev.col += token.size;
+    }
+    
+    if (print) Print("%s\n\n", buffer);
+    
+    MM_bool succeeded = MM_String_Cstring_Match(string, buffer);
+    
+    Print("TestLexer_Reconstruction\t\t-- %s.\n", (succeeded ? "SUCCEEDED" : "FAILED"));
+    
+    return succeeded;
 }
 
 void
-MM_System_FreeMemory(void* base)
+TestLexer(MM_bool print)
 {
-    VirtualFree(base, 0, MEM_RELEASE);
+    MM_String string = MM_STRING("factorial :: proc(n: int) -> int\n{\n\tif (n <= 2) return n;\n\telse return n*factorial(n-1);\n}\n\nmain :: proc\n{\n\tx: int = factorial(5);\n}");
+    MM_Token_Kind expected_kinds[] = {
+        MM_Token_Identifier, MM_Token_Colon, MM_Token_Colon, MM_Token_Proc, MM_Token_OpenParen, MM_Token_Identifier, MM_Token_Colon, MM_Token_Identifier,
+        MM_Token_CloseParen, MM_Token_Arrow, MM_Token_Identifier, MM_Token_OpenBrace, MM_Token_If, MM_Token_OpenParen, MM_Token_Identifier, MM_Token_LessEQ, MM_Token_Int,
+        MM_Token_CloseParen, MM_Token_Return, MM_Token_Identifier, MM_Token_Semicolon, MM_Token_Else, MM_Token_Return, MM_Token_Identifier, MM_Token_Star,
+        MM_Token_Identifier, MM_Token_OpenParen, MM_Token_Identifier, MM_Token_Minus, MM_Token_Int, MM_Token_CloseParen, MM_Token_Semicolon, MM_Token_CloseBrace,
+        MM_Token_Identifier, MM_Token_Colon, MM_Token_Colon, MM_Token_Proc, MM_Token_OpenBrace, MM_Token_Identifier, MM_Token_Colon, MM_Token_Identifier, MM_Token_Equals,
+        MM_Token_Identifier, MM_Token_OpenParen, MM_Token_Int, MM_Token_CloseParen, MM_Token_Semicolon, MM_Token_CloseBrace
+    };
+    
+    MM_umm ran       = 0;
+    MM_umm succeeded = 0;
+    ++ran, succeeded += (MM_umm)TestLexer_TokenKinds(string, expected_kinds, MM_ARRAY_SIZE(expected_kinds));
+    ++ran, succeeded += (MM_umm)TestLexer_Reconstruction(string, print);
+    
+    Print("%u out of %u succeeded\n", succeeded, ran);
 }
 
 int
 mainCRTStartup()
 {
+    TestLexer(MM_true);
+    
     return 0;
 }

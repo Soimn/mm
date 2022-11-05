@@ -1,288 +1,303 @@
-# The M programming language
-## Design Rambling
-I started making a lanaguage because it anoyed me how very simple things become complicated/introduce too much garbage, this is very prevailant in languages such as Java, but is still present in more sane, but still insane, languages such as C.
-
-I kept on wanting to make a language because of how disgusted I was by C's UB and the alluring benefits of metaprogramming
-
-I wanted to stop making languages because if I would ever be able to finish one, it would likely provide only marginal improvements on C, making the effort wasted, when it could have rather been spent on making games.
-
-I still kept on working on the language, because my time investment was too significant, making it hard to justify stopping.
-
-Goals: simple, sane and easy to make tools for
-Subgoal: expressive metaprogramming
-
-I want the language to be simple (in the C sence, not like Lisp), because I dispise working in languages were the language complexity holds me back from doing actual work
-
-I want the language to be sane and without UB, since yuck, everyone who actually trusts C++ code compiled by LLVM to be used in hard realtime systems is either a total nutjob, or the living breathing, example of the "this is fine" meme
-
-The final goal is to make making tooling easy. A lot of problems with C comes from how hard it is to work with on a tooling level, since it is fucking impossible to parse correctly. Making a language easily parsable, have simple semantics and no significant leeway for differences between compilers would make debugger, text editors and other tools, way easier to develop and enable much more advanced tools , which the programmer will benefit greatly from.
-
-Expressive metaprogramming is a subgoal, since metaprogramming provides a great deal of power, but that comes at the cost of it being way too complex to wrap neatly up in a language spec without making it so hard to use correctly that the benefit of doing something meta is inly marginal. Since I, and probably everyone else, have nowhere near the experience needed to design a competent metaprogramming system, I will instead include metaprogramming as a subgoal and only design in favor of metaprogramming when it does not violate the original 3 goals.
-
-Preemptive decisions:
-- odin/jai like synatx, since this is easy to parse and C like
-
-small syntax problems
-types
-compiler arch
-
-odin like syntax with some changes
-c like semantics, except types
-goto?
-
-names/symbols
-typers of values
-values
-
-namespacing
-type conversion, introspection, value of types
-const &, parameters
-
-start with kernel language
-
-```
-if (condition) statement else statement
-while (init; condition; step) statement
-return expression
-break label
-continue label
-{}
-a := 0;
-A :: 0;
-a = b;
-```
-
-```
-identifier
-0.0, 0
-"string"
-true
-struct {}
-union {} // ?
-enum {}
-proc() -> {}
-
-^, [], [N]
-
-., [N], [N:N], (), .{}, .[]
-
-+, -, ~, !, &, ^
-
-*, /, %, &, <<, >>, >>>
-+, -, |, ~
-==, !=, <, <=, >, >=
-&&
-||
-```
-
-```c
-const A = 0;
-var b: int = 0;
-var b = 0;
-```
-
-```c
-const main = proc
-{
-	const N = 100;
-	var board_mem: [2][N*N]bool;
-	var boards := [2]^[N*N]bool.{&board_mem[0], &board_mem[1]}
-
-	while true
-	{
-		while y := 0; y < N; y += 1
-		{
-			while x := 0; x < N; x += 1
-			{
-				var min_y, max_y := max(0, y - 1), min(y + 1, N - 1);
-				var min_x, max_x := max(0, x - 1), min(x + 1, N - 1);
-
-				var neighbours := 0;
-				while ny := min_y; ny <= max_y; ny += 1
-				{
-					while nx := min_x; nx <= max_x; nx += 1
-					{
-						neighbours += cast(boards[0][ny*N + nx]);
-					}
-				}
-
-				if neighbours < 2 || neighbours > 3 do boards[1][y*N + x] = false;
-				else boards[0][y*N + x] || neighbours == 3 do boards[1][y*N + x] = true;
-			}
-		}
-
-		boards[0], boards[1] = boards[1], boards[0];
-	}
-}
-```
-
-```c
-main :: proc
-{
-	N :: 100;
-	board_mem: [2][N*N]bool;
-	boards := [2]^[N*N]bool.{&board_mem[0], &board_mem[1]}
-
-	while (true)
-	{
-		while (y := 0; y < N; y += 1)
-		{
-			while (x := 0; x < N; x += 1)
-			{
-				min_y, max_y := max(0, y - 1), min(y + 1, N - 1);
-				min_x, max_x := max(0, x - 1), min(x + 1, N - 1);
-
-				neighbours := 0;
-				while (ny := min_y; ny <= max_y; ny += 1)
-				{
-					while (nx := min_x; nx <= max_x; nx += 1)
-					{
-						neighbours += cast(boards[0][ny*N + nx]);
-					}
-				}
-
-				if   (neighbours < 2 || neighbours > 3) boards[1][y*N + x] = false;
-				else (boards[0][y*N + x] || neighbours == 3) boards[1][y*N + x] = true;
-			}
-		}
-
-		boards[0], boards[1] = boards[1], boards[0];
-	}
-}
-```
-
-
-
-```c
-defer
-using
-```
-
-
-types
-description of data layout, usage and possible transformations
-size, alignment, usage, (operations)
-
-soft types
-distinct types
-implicit conversions (only make sense for math, makes the expression more mathy and less obscure)
-
-
-soft, distinct, alias
-
-operator overloading? no
-conversion overloading? no
-
-soft int, float and bool and string
-distinct int, i8, i16, ... b8, b16, ..., string, cstring
-
-byte, word
-
-implicit conversion rules
-soft int -> int, i*, uint, u* as long as the value fits
-soft float -> f16, f32, f64 as long as the value is representable exactly
-soft bool -> b8, b16 always
-soft string -> string, cstring always
-alias of T -> T
-soft int -> float, f32, f64
-\^T -> \^byte
-\^byte -> \^T
-
-conversion rules
-implicit conversion
-int, i*, uint, u*, float, f*, bool, b* -> int, i*, uint, u*, float, f*, bool, b*
-
-^, \[N], \[], \[\^]
-^ is a pointer to a single element
-\[N] is a fixed N sized owning array, where N is known at compile time, and *owning* mean that it is not a view into memory in a range, it is the memory in that range
-^\[N] is a pointer to a fixed N sized array, which essentially works as a non owning fixed array
-\[] is a pointer and length pair
-\[^] is an array with no specified length
-
-```c
-[^:0]int
-[]int
-[:0]int
-```
-
-\^byte = rawptr
-\[]byte = \[]u8
-\[^:0]byte = cstring
-\[:0] = zstring
-\[] = string
-
-
-nil - the nothing address, 0,
-
-namespaces:
-using collapses namespaces, and aliases
-using a;
-using a as b;
-
-goto:
-labels
-defer
-
-assembly?
-asm label:;
-asm jmp label;
-
-asm mov rax, i.a;
-asm mov rbx, i.b;
-asm add rax, rax, rbx;
-asm mov c, rax;
-
-asm {
-	mov rax, i.a // comments
-	mov rbx, i.b
-	add rax, rax, rbx
-	mov c, rax
-}
-
-Compiler arch:
-library centered around the concept of a "Workspace"
-the workspace holds all state
-procedures in the library may be either statefull or stateless, stateless proc: e.g. LexString, statefull proc: e.g. CheckProc
-a workspace is serializable as a M workspace file
-
-
-
-argument syntax
-
-struct lit, array lit, call, return
-
-a.{ .a = 0, .b = 1, .c = 2, 4, b }
-a.{ a = 0, b = 1, c = 2, 4, b }
-a.{ a: 0, b: 1, c: 2, 4, b }
-
-```c
-printf(file: file, args: .[1, 2, 3], format: "% % %")
-
-ToCart :: proc(r, phi: f32) -> (x, y: f32)
-{
-	return x: r*sin(phi), y: r*cos(phi);
-}
-
-v4.{ x: 0, 1: 2, 2..3: 4 }
-
-int.[0: 0, 1: 1, 2..50: 50, 51: 51]
-
-
-
-
-
-internal M2
-V2_Outer(V2 v0, V2 v1)
-{
-	return (M2){.i = V2_Scale(v0, v1.x), .j = V2_Scale(v0, v1.y)};
-}
-
-internal M2
-V2_Outer(V2 v0, V2 v1)
-{
-	return (M2){i: V2_Scale(v0, v1.x), j: V2_Scale(v0, v1.y)};
-}
-
-printf("Hello % % %", args: .[1, 2, 3])
-printf("Hello % % %", args = .[1, 2, 3])
+# The M Programming Language
+
+## Motivation
+The motivation for this language was to enable high degrees of metaprogramming with a simple language and compiler. However, during development it became increasingly clear that reliability, which was stated as an obvious sub-goal, turned out to be way more important. I had underestimated how fragile the current ecosystem is, and how large a problem undefined behavior is. To illustrate, when talking about reliable systems languages, Rust is often mentioned as a "safe" alternative to C++. However, any talk about Rust being "more safe" is largely bullshit. This is because both languages not only have undefined behavior, but the specs have also no exhaustive list of all cases leading to this behavior. Every guarantee the Rust borrow checker, and other language facilities, give you are therefore invalid, because they can be at any point be violated. Furthermore, both languages rely on optimizing compilers built around taking advantage of UB. This is bad as it is, but what is even worse, is that LLVM is used by languages like Julia for scientific computing. A core principle of science is doing experiments in a controlled environment, which necessitates a control over how the program is translated to machine code and executed. Using LLVM is therefore a bad idea, because, void of undefined behavior, it is still way too complex. Saying this, a likely retort is that the experiments have to be run through an optimizer, because hand optimizing them slows down iteration, and running unoptimized will take an unreasonable amount of time. My answer? Speed does not matter if the result cannot be trusted. Garbage is still garbage, however fast it is produced (and it smells way worse in heaps). I therefore firmly believe that there should be a great reset in the programming world, where new languages and optimizers are designed without bullshit like UB, and scientific computing is based on something that have actual guarantees that can be trusted. Do I believe this will ever happen? No, because I have lost all faith in modern programmers being reasonable after seeing everything move closer and closer to insanity. Although something might after a few planes fall from the sky, and the large hadron collider blows up, because of "optimizations". Either way, I have decided that I have had enough of this, and will therefore design a new language that tries to mitigate these flaws, despite being way too inexperienced to actually achieve this, and that no one will actually use the resulting language. The major goal of the language is to be simple and clearly defined, with no undefined behavior or implementation differences. Therefore, the language will have a spec, implementation and standard library, as well as being easy to make tooling for by being easily parsed, compiled and provide an API for talking with the compiler.
+
+## Major Design Decisions
+Since I want to finish this project in a reasonable amount of time, and the target audience is, well, myself, I have elected to decide upfront the below design points. This is generally a bad idea, since it reduces the solution space, possibly eliminating optimal solutions. However, since the design space for languages is so large, and I lack experience, starting from scratch will most likely end in me reenacting history. I am instead basing the design on C, since it has proven to be useful, and I personally like large parts of the programming model it imposes. The following design decisions are therefore based on what I have experienced to be good and bad properties of C, along with some personal preferences.
+- the language will be a procedural structured systems-programming language
+- the syntax will be largely similar to Odin and Jai (because this is close to C, and solves a lot of parsing and expression issues)
+- the semantics will be largely similar to C, with notable exceptions being undefined behavior, types, "objects", calling convention and language runtime/startup
+
+## Roadmap
+- start with simple syntax and c like semantics
+- working compiler
+- iteratively modify the compiler and language
+- write a debugger
+- standardize the compiler + debugger API
+- first stable language + compiler, write spec
+
+## Syntax
+I am starting with syntax, because I have a vague idea of how the semantics will work, but I have yet to actually test this. Therefore, I am deciding on a somewhat temporary syntax, so that I can implement a working compiler, and play with the semantics in conjunction with the syntax.
+
+Comments are considered whitespace (this may be changed later on, since comments could provide value to the AST)
+Comments come in two forms:
+- single line comments: "//", which end at either a newline or end of file
+- multi line comments: "/\*" opens, "\*/" closes, can be nested, must be closed before end of file 
+Syntax is described with modified EBNF, concatenation is implicit, lexical tokens are prefixed with T\_ , H\_ denote helper non-terminals, whitespace is ignored between but not within tokens, N\*something means repeating the something N times
+```ebnf
+H_letter       = ? alphabetical ASCII characters ?
+H_digit        = ? numerical ASCII characters ?
+H_binary_digit = "0" | "1"
+H_hex_digit    = H_digit | ? upper or lower case A-F ?
+
+T_identifier = H_letter {H_digit | H_letter | "_"}
+             | "_" (H_digit | H_letter | "_") {H_digit | H_letter | "_"}
+T_blank      = "_"
+T_integer    = H_digit {H_digit | "_"}
+             | "0b" {"_"} H_binary_digit {H_binary_digit | "_"}
+             | "0x" {"_"} H_hex_digit {H_hex_digit | "_"}
+
+H_float_exponent  = "e" ["+" | "-"] {"_"} H_digit {H_digit | "_"}
+H_float_fraction  = {"_"} H_digit {digit | "_"}
+H_hex_float_digit = {"_"} H_hex_digit
+T_float           = H_digit {H_digit | "_"} "." H_float_fraction [float_exponent]
+                  | "0h" 4*H_hex_float_digit
+                  | "0h" 8*H_hex_float_digit
+                  | "0h" 16*H_hex_float_digit
+
+H_escape_sequence = "\\" "\\"
+                  | "\\" '"'
+                  | "\\" "'"
+                  | "\\" "a"
+                  | "\\" "b"
+                  | "\\" "f"
+                  | "\\" "n"
+                  | "\\" "r"
+                  | "\\" "t"
+                  | "\\" "v"
+                  | "\\" "x" 2*hex_digit
+                  | "\\" "u" 4*hex_digit
+                  | "\\" "U" 8*hex_digit
+T_string = '"' (H_escape_sequence | ? any UTF-8 unicode codepoint except '"' ?) '"'
+
+T_Struct    = "struct"
+T_True      = "true"
+T_False     = "false"
+T_Nil       = "nil"
+T_If        = "if"
+T_When      = "when"
+T_Else      = "else"
+T_While     = "while"
+T_Break     = "break"
+T_Continue  = "continue"
+T_Return    = "return"
+
+T_Cast      = "cast"
+T_Transmute = "transmute"
+T_Sizeof    = "sizeof"
+T_Alignof   = "alignof"
+T_Offsetof  = "offsetof"
+
+H_Builtin   = T_Cast
+            | T_Transmute
+            | T_Sizeof
+            | T_Alignof
+            | T_Offsetof
+
+
+T_OpenParen     = "("
+T_CloseParen    = ")"
+T_OpenBracket   = "["
+T_CloseBracket  = "]"
+T_OpenBrace     = "{"
+T_CloseBrace    = "}"
+T_Hat           = "^"
+T_Comma         = ","
+T_Colon         = ":"
+T_Semicolon     = ";"
+T_TpMinus       = "---"
+T_Period        = "."
+T_PeriodParen   = ".("
+T_PeriodBracket = ".["
+T_PeriodBrace   = ".{"
+T_Bang          = "!"
+T_Arrow         = "->"
+T_Blank         = "_"
+T_StarEQ        = "*="
+T_SlashEQ       = "/="
+T_PercentEQ     = "%="
+T_AndEQ         = "&="
+T_ShlEQ         = "<<="
+T_ShrEQ         = ">>="
+T_SarEQ         = ">>>="
+T_PlusEQ        = "+="
+T_MinusEQ       = "-="
+T_OrEQ          = "|="
+T_TildeEQ       = "~="
+T_AndAndEQ      = "&&="
+T_OrOrEQ        = "||="
+T_Star          = "*"
+T_Slash         = "/"
+T_Percent       = "%"
+T_And           = "&"
+T_Shl           = "<<"
+T_Shr           = ">>"
+T_Sar           = ">>>"
+T_Plus          = "+"
+T_Minus         = "-"
+T_Or            = "|"
+T_Tilde         = "~"
+T_EqualEQ       = "=="
+T_BangEQ        = "!="
+T_Less          = "<"
+T_LessEQ        = "<="
+T_Greater       = ">"
+T_GreaterEQ     = ">="
+T_AndAnd        = "&&"
+T_OrOr          = "||"
+
+identifier   = T_identifier | T_blank
+string       = T_string
+int          = T_integer
+float        = T_float
+bool         = T_True | T_False
+proc_type    = T_proc [T_OpenParen paramter_list T_CloseParen] [T_Arrow (expression | T_OpenParen parameter_list T_CloseParen)]
+proc_lit     = proc_type (block_statement | T_TpMinus)
+struct       = T_Struct (block_statement | T_TpMinus)
+compound     = T_OpenParen expression T_CloseParen
+builtin_call = H_Builtin T_OpenParen argument_list T_CloseParen
+struct_lit_inferred = T_PeriodOpenBrace arugment_list T_CloseBrace
+array_lit_inferred  = T_PeriodOpenBracket argument_list T_CloseBracket
+
+primary_expression = identifier
+                   | string
+                   | int
+                   | float
+                   | bool
+                   | proc_type
+                   | proc_lit
+                   | struct
+                   | compound
+                   | builtin_call
+                   | struct_lit_inferred
+                   | array_lit_inferred
+                   
+argument      = [expression T_Comma] expression
+argument_list = [argument] {T_Comma argument}
+
+parameter      = expression {T_Comma expression} T_Colon expression
+               | expression {T_Comma expression} T_Colon [expression] T_Equals expression
+parameter_list = [expression] {T_Comma expression}
+               | parameter {T_Comma parameter}
+
+pointer_to = T_Hat type_prefix
+slice_of   = T_OpenBracket T_CloseBracket type_prefix
+array_of   = T_OpenBracket expression T_CloseBracket type_prefix
+type_prefix = pointer_to
+            | slice_of
+            | array_of
+
+dereference = postfix_expression T_Hat
+subscript   = postfix_expression T_OpenBracket expression T_CloseBracket
+slice       = postfix_expression T_OpenBracket [expression] T_Colon [expression] T_CloseBracket
+call        = postfix_expression T_OpenParen argument_list T_CloseParen
+member      = postfix_expression T_Period identifier
+struct_lit  = postfix_expression T_PeriodOpenBrace arugment_list T_CloseBrace
+array_lit   = postfix_expression T_PeriodOpenBracket argument_list T_CloseBracket
+postfix_expression = dereference
+                   | subscript
+                   | slice
+                   | call
+                   | member
+                   | struct_lit
+                   | array_lit
+                   | primary_expression
+
+neg       = T_Minus prefix_expression
+not       = T_Bang prefix_expression
+bit_not   = T_Tilde prefix_expression
+reference = T_And prefix_expression
+prefix_expression = neg
+                  | not
+                  | bit_not
+                  | reference
+                  | postfix_expression
+
+mul     = mul_level_binary_expression T_Star prefix_expression
+div     = mul_level_binary_expression T_Slash prefix_expression
+rem     = mul_level_binary_expression T_Percent prefix_expression
+bit_and = mul_level_binary_expression T_And prefix_expression
+bit_shl = mul_level_binary_expression T_Shl prefix_expression
+bit_shr = mul_level_binary_expression T_Shr prefix_expression
+bit_sar = mul_level_binary_expression T_Sar prefix_expression
+mul_level_binary_expression = mul
+                            | div
+                            | rem
+                            | bit_and
+                            | bit_shl
+                            | bit_shr
+                            | bit_sar
+                            | prefix_expression
+
+add     = add_level_binary_expression T_Plus mul_level_binary_expression
+sub     = add_level_binary_expression T_Minus mul_level_binary_expression
+bit_or  = add_level_binary_expression T_Or mul_level_binary_expression
+bit_xor = add_level_binary_expression T_Tilde mul_level_binary_expression
+add_level_binary_expression = add
+                            | sub
+                            | bit_or
+                            | bit_xor
+                            | mul_level_binary_expression
+
+cmp_equal     = add_level_binary_expression T_EqualEquals add_level_binary_expression
+cmp_noteq     = add_level_binary_expression T_BangEQ add_level_binary_expression
+cmp_less      = add_level_binary_expression T_Less add_level_binary_expression
+cmp_lesseq    = add_level_binary_expression T_LessEQ add_level_binary_expression
+cmp_greater   = add_level_binary_expression T_Greater add_level_binary_expression
+cmp_greatereq = add_level_binary_expression T_GreaterEQ add_level_binary_expression
+cmp_level_binary_expression = cmp_equal
+                            | cmp_noteq
+                            | cmp_less
+                            | cmp_lesseq
+                            | cmp_greater
+                            | cmp_greatereq
+                            | add_level_binary_expression
+
+and = and_level_binary_expression T_AndAnd cmp_level_binary_expression
+and_level_binary_expression = and
+                            | cmp_level_binary_expression
+
+or = or_level_binary_expression T_OrOr and_level_binary_expression
+or_level_binary_expression = or
+                           | and_level_binary_expression
+
+expression = or_level_binary_expression
+
+var          = expression {T_Comma expression} T_Colon expression
+             | expression {T_Comma expression} T_Colon [expression] T_Equals (T_TpMinus | expression {T_Comma expression})
+const        = expression {T_Comma expression} T_Colon [expression] T_Colon expression {T_Comma expression})
+const_nosemi = expression {T_Comma expression} T_Colon [expression] T_Colon (proc_lit | struct)
+declaration = var
+            | const
+            | const_nosemi
+            
+block      = [T_Colon identifier] T_OpenBrace {statement} T_CloseBrace
+if         = [T_Colon identifier] T_If T_OpenParen [(declaration | assignment | expression) T_Semicolon] expression T_CloseParen statement [T_Else statement]
+when       = T_When T_OpenParen expression T_CloseParen statement [T_Else statement]
+while      = [T_Colon identifier] T_While T_OpenParen expression T_CloseParen statement
+           | T_While T_OpenParen (declaration | assignment | expression) T_Semicolon expression [T_Semicolon (assignment | expression)] T_CloseParen statement
+break      = T_Break [identifier]
+continue   = T_Continue [identifier]
+return     = T_Return argument_list
+H_assignment_token = T_StarEQ
+                   | T_SlashEQ
+                   | T_PercentEQ
+                   | T_AndEQ
+                   | T_ShlEQ
+                   | T_ShrEQ
+                   | T_SarEQ
+                   | T_PlusEQ
+                   | T_MinusEQ
+                   | T_OrEQ
+                   | T_TildeEQ
+                   | T_AndAndEQ
+                   | T_OrOrEQ       
+assignment = expression {T_Comma expression} H_assignment_token expression {T_Comma expression}
+statement = block
+          | if
+          | when
+          | while
+          | break T_Semicolon
+          | continue T_Semicolon
+          | return T_Semicolon
+          | assignment T_Semicolon
+          | var T_Semicolon
+          | const T_Semicolon
+          | const_nosemi
+          | expression T_Semicolon
+
+program = var T_Semicolon
+        | const T_Semicolon
+        | const_nosemi
 ```

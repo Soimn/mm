@@ -1,371 +1,379 @@
 typedef struct MM_Lexer
 {
-    MM_String string;
-    MM_Text_Pos pos;
-    MM_Token token;
+    union { struct MM_String; MM_String string; };
+    union { struct MM_Text_Pos; MM_Text_Pos pos; };
 } MM_Lexer;
 
-MM_Token MM_Lexer_NextToken(MM_Lexer* lexer);
-
 MM_Lexer
-MM_Lexer_Init(MM_String string, MM_Text_Pos init_pos)
+MM_Lexer_Init(MM_String string, MM_Text_Pos start_pos)
 {
-    MM_ASSERT(string.size + init_pos.offset <= MM_U32_MAX);
-    // NOTE: sanity checks, non exhaustive
-    MM_ASSERT(init_pos.line <= init_pos.offset);
-    MM_ASSERT(init_pos.col  <= init_pos.offset);
-    MM_ASSERT(init_pos.line > 0 && init_pos.col > 0);
+    MM_ASSERT(start_pos.line > 0 && start_pos.col > 0);
     
-    MM_Lexer lexer = {
+    return (MM_Lexer){
         .string = string,
-        .pos    = init_pos,
+        .pos    = start_pos,
     };
-    
-    lexer.token = MM_Lexer_NextToken(&lexer);
-    
-    return lexer;
-}
-
-MM_Token
-MM_Lexer_GetToken(MM_Lexer* lexer)
-{
-    return lexer->token;
 }
 
 void
-MM_Lexer__Refresh(MM_Lexer* lexer, MM_u8* cursor, MM_u8 (*peek)[3])
+MM_Lexer__Advance(MM_Lexer* lexer, MM_u32 amount)
 {
-    MM_umm peek_len = MM_MIN(lexer->string.size, MM_ARRAY_SIZE(*peek));
-    MM_Memcopy(*peek, lexer->string.data, peek_len);
-    MM_Memzero(*peek + peek_len, MM_ARRAY_SIZE(*peek) - peek_len);
-    
-    *cursor = (*peek)[0];
+    // NOTE: newlines are detected before advancing, and handled after. See first while loop of NextToken
+    MM_ASSERT(amount <= lexer->string.size);
+    lexer->size   -= amount;
+    lexer->data   += amount;
+    lexer->offset += amount;
+    lexer->col    += amount;
 }
 
 void
-MM_Lexer__Advance(MM_Lexer* lexer, MM_u32* offset_to_line, MM_u8* cursor, MM_u8 (*peek)[3], MM_u32 advancement)
+MM_Lexer__Revert(MM_Lexer* lexer, MM_Text_Pos pos)
 {
-    advancement = MM_MIN(advancement, lexer->string.size);
+    MM_imm amount = lexer->offset - pos.offset;
+    MM_ASSERT(amount >= 0);
     
-    for (MM_umm i = 0; i < advancement; ++i)
-    {
-        if (lexer->string.data[i] == '\n')
-        {
-            lexer->pos.line += 1;
-            lexer->pos.col   = 0; // NOTE: Incremented to 1 later in the loop
-            *offset_to_line  = 0;
-        }
-        
-        lexer->pos.col += 1;
-    }
-    
-    lexer->string.data += advancement;
-    lexer->string.size -= advancement;
-    
-    MM_Lexer__Refresh(lexer, cursor, peek);
+    lexer->size -= (MM_u32)amount;
+    lexer->data += (MM_u32)amount;
+    lexer->pos   = pos;
+}
+
+MM_bool
+MM_Lexer__IsAlpha(char c)
+{
+    return (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z');
+}
+
+MM_bool
+MM_Lexer__IsDigit(char c)
+{
+    return (c >= '0' && c <= '9');
 }
 
 MM_Token
 MM_Lexer_NextToken(MM_Lexer* lexer)
 {
-    if (ERROR) return lexer->token;
-    else
+    MM_Token token = { .kind = MM_Token_Invalid };
+    
+    MM_umm comment_depth = 0;
+    while (lexer->size)
     {
-        MM_Token token = { .kind = MM_Token_Invalid };
-        
-        MM_u8 peek[3];
-        MM_u8 cursor;
-        MM_u32 offset_to_line = lexer->pos.offset - lexer->pos.col;
-        MM_Lexer__Refresh(lexer, &cursor, &peek);
-        
-#define MM_Advance(N) MM_Lexer__Advance(lexer, &offset_to_line, &cursor, &peek, (N))
-        
-        MM_u32 comment_depth  = 0;
-        while (cursor != 0)
+        char c = lexer->data[0];
+        if (c == '\n')
         {
-            if (cursor == ' '  || cursor == '\t' ||
-                cursor == '\v' || cursor == '\f' ||
-                cursor == '\r' || cursor == '\n')
-            {
-                MM_Advance(1);
-            }
-            else if (cursor == '/' && peek[1] == '/')
-            {
-                while (cursor != 0 && cursor != '\n') MM_Advance(1);
-            }
-            else if (cursor == '/' && peek[1] == '*')
-            {
-                MM_Advance(2);
-                comment_depth += 1;
-            }
-            else if (comment_depth > 0 && cursor == '*' && peek[1] == '/')
-            {
-                MM_Advance(2);
-                comment_depth -= 1;
-            }
-            else
-            {
-                if (comment_depth > 0) MM_Advance(1);
-                else                   break;
-            }
+            MM_Lexer__Advance(lexer, 1);
+            
+            lexer->line += 1;
+            lexer->col   = 1;
         }
-        
-        // NOTE: End of range is set before returning
-        token.text.start = lexer->pos;
-        
-        // NOTE: Assume 1 character long token, advancement past end is stopped by MM_Advance
-        MM_u8 c = cursor;
-        MM_Advance(1);
-        
-        switch (c)
+        else if (c == ' '  || c == '\t' ||
+                 c == '\v' || c == '\f' ||
+                 c == '\r')
         {
-            case 0: token.kind = MM_Token_EOF; break;
-            
-            case '(': token.kind = MM_Token_OpenParen;    break;
-            case ')': token.kind = MM_Token_CloseParen;   break;
-            case '[': token.kind = MM_Token_OpenBracket;  break;
-            case ']': token.kind = MM_Token_CloseBracket; break;
-            case '{': token.kind = MM_Token_OpenBrace;    break;
-            case '}': token.kind = MM_Token_CloseBrace;   break;
-            case '^': token.kind = MM_Token_Hat;          break;
-            case ',': token.kind = MM_Token_Comma;        break;
-            case ':': token.kind = MM_Token_Colon;        break;
-            case ';': token.kind = MM_Token_Semicolon;    break;
-            
-#define MM_TOKEN_SINGLE_OR_EQ(ch, single, eq)                 \
-case (ch):                                                \
-{                                                         \
-if (peek[1] == '=') token.kind = (eq), MM_Advance(1); \
-else                token.kind = (single);            \
-} break
-            
-            MM_TOKEN_SINGLE_OR_EQ('+', MM_Token_Plus,  MM_Token_PlusEQ);
-            MM_TOKEN_SINGLE_OR_EQ('~', MM_Token_Tilde, MM_Token_TildeEQ);
-            MM_TOKEN_SINGLE_OR_EQ('*', MM_Token_Star,  MM_Token_StarEQ);
-            MM_TOKEN_SINGLE_OR_EQ('/', MM_Token_Slash, MM_Token_SlashEQ);
-            MM_TOKEN_SINGLE_OR_EQ('!', MM_Token_Bang,  MM_Token_BangEQ);
-            
-#undef MM_TOKEN_SINGLE_OR_EQ
-            
-#define MM_TOKEN_SINGLE_DOUBLE_OR_EQ(ch, single, singleeq, dub, dubeq) \
-case (ch):                                                         \
-{                                                                  \
-if (peek[1] == '=') token.kind = (singleeq), MM_Advance(1);    \
-else if (peek[1] == (ch))                                      \
-{                                                              \
-if (peek[2] == '=') token.kind = (dubeq), MM_Advance(2);   \
-else                token.kind = (dub),   MM_Advance(1);   \
-}                                                              \
-else token.kind = (single);                                    \
-} break
-            
-            MM_TOKEN_SINGLE_DOUBLE_OR_EQ('&', MM_Token_And, MM_Token_AndEQ, MM_Token_AndAnd, MM_Token_AndAndEQ);
-            MM_TOKEN_SINGLE_DOUBLE_OR_EQ('|', MM_Token_Or, MM_Token_OrEQ, MM_Token_OrOr, MM_Token_OrOrEQ);
-            
-#undef MM_TOKEN_SINGLE_DOUBLE_OR_EQ
-            
-            case '<':
+            MM_Lexer__Advance(lexer, 1);
+        }
+        else if (lexer->size > 1 && lexer->data[0] == '/' && lexer->data[1] == '/')
+        {
+            while (lexer->size && lexer->data[0] != '\n') MM_Lexer__Advance(lexer, 1);
+        }
+        else if (lexer->size > 1 && lexer->data[0] == '/' && lexer->data[1] == '*')
+        {
+            MM_Lexer__Advance(lexer, 2);
+            comment_depth += 1;
+        }
+        else if (comment_depth > 0 && lexer->size > 1 && lexer->data[0] == '*' && lexer->data[1] == '/')
+        {
+            MM_Lexer__Advance(lexer, 2);
+            comment_depth -= 1;
+        }
+        else
+        {
+            if (comment_depth > 0) continue;
+            else                   break;
+        }
+    }
+    
+    MM_Text_Pos start_pos = lexer->pos;
+    
+    char c = 0;
+    if (lexer->size)
+    {
+        c = lexer->data[0];
+        MM_Lexer__Advance(lexer, 1);
+    }
+    
+    switch (c)
+    {
+        case 0: token.kind = MM_Token_EOF; break;
+        
+        case '(': token.kind = MM_Token_OpenParen;    break;
+        case ')': token.kind = MM_Token_CloseParen;   break;
+        case '[': token.kind = MM_Token_OpenBracket;  break;
+        case ']': token.kind = MM_Token_CloseBracket; break;
+        case '{': token.kind = MM_Token_OpenBrace;    break;
+        case '}': token.kind = MM_Token_CloseBrace;   break;
+        case '^': token.kind = MM_Token_Hat;          break;
+        case ',': token.kind = MM_Token_Comma;        break;
+        case ':': token.kind = MM_Token_Colon;        break;
+        case ';': token.kind = MM_Token_Semicolon;    break;
+        
+        // NOTE: Handled separately, since = does not belong to a token block
+        case '=':
+        {
+            if (lexer->size && lexer->data[0] == '=') token.kind = MM_Token_EqualEQ, MM_Lexer__Advance(lexer, 1);
+            else                                      token.kind = MM_Token_Equals;
+        } break;
+        
+        case '+':
+        case '~':
+        case '*':
+        case '/':
+        case '!':
+        {
+            MM_Token_Kind base_kind;
+            switch (c)
             {
-                if      (peek[1] == '=') token.kind = MM_Token_LessEQ, MM_Advance(1);
-                else if (peek[1] == '<')
+                case '+': base_kind = MM_Token_Plus;  break;
+                case '~': base_kind = MM_Token_Tilde; break;
+                case '*': base_kind = MM_Token_Star;  break;
+                case '/': base_kind = MM_Token_Slash; break;
+                default:  base_kind = MM_Token_Bang;  break;
+            }
+            
+            if (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Lexer__Advance(lexer, 1);
+            else                                      token.kind = base_kind;
+        } break;
+        
+        case '&':
+        case '|':
+        {
+            MM_Token_Kind base_kind = (c == '&' ? MM_Token_And : MM_Token_Or);
+            
+            if (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Lexer__Advance(lexer, 1);
+            else if (lexer->size && lexer->data[0] == c)
+            {
+                MM_Lexer__Advance(lexer, 1);
+                
+                base_kind = (c == '&' ? MM_Token_AndAnd : MM_Token_OrOr);
+                
+                if (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Lexer__Advance(lexer, 1);
+                else                                      token.kind = base_kind;
+            }
+            else token.kind = base_kind;
+        } break;
+        
+        case '<':
+        {
+            MM_Token_Kind base_kind = MM_Token_Less;
+            
+            if      (lexer->size && lexer->data[0] == '=') token.kind = MM_Token_LessEQ, MM_Lexer__Advance(lexer, 1);
+            else if (lexer->size && lexer->data[0] == c)
+            {
+                MM_Lexer__Advance(lexer, 1);
+                
+                base_kind = MM_Token_Shr;
+                
+                if (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Lexer__Advance(lexer, 1);
+                else                                      token.kind = base_kind;
+            }
+            else token.kind = base_kind;
+        } break;
+        
+        case '>':
+        {
+            MM_Token_Kind base_kind = MM_Token_Greater;
+            
+            if      (lexer->size && lexer->data[0] == '=') token.kind = MM_Token_GreaterEQ, MM_Lexer__Advance(lexer, 1);
+            else if (lexer->size && lexer->data[0] == c)
+            {
+                MM_Lexer__Advance(lexer, 1);
+                
+                base_kind = MM_Token_Shr;
+                
+                if      (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Lexer__Advance(lexer, 1);
+                else if (lexer->size && lexer->data[0] == c)
                 {
-                    if (peek[2] == '=') token.kind = MM_Token_ShlEQ, MM_Advance(2);
-                    else                token.kind = MM_Token_Shl,   MM_Advance(1);
-                }
-                else token.kind = MM_Token_Less;
-            } break;
-            
-            case '>':
-            {
-                if      (peek[1] == '=') token.kind = MM_Token_GreaterEQ, MM_Advance(1);
-                else if (peek[1] == '>')
-                {
-                    if      (peek[2] == '=') token.kind = MM_Token_ShrEQ, MM_Advance(2);
-                    else if (peek[2] == '>')
-                    {
-                        if (peek[3] == '=') token.kind = MM_Token_SarEQ, MM_Advance(3);
-                        else                token.kind = MM_Token_Sar,   MM_Advance(2);
-                    }
-                    else token.kind = MM_Token_Shr, MM_Advance(1);
-                }
-                else token.kind = MM_Token_Greater;
-            } break;
-            
-            case '-':
-            {
-                if      (peek[1] == '>')                   token.kind = MM_Token_Arrow,   MM_Advance(1);
-                else if (peek[1] == '-' && peek[2] == '-') token.kind = MM_Token_TpMinus, MM_Advance(2);
-                else                                       token.kind = MM_Token_Minus;
-            } break;
-            
-            case '.':
-            {
-                if      (peek[1] == '(') token.kind = MM_Token_PeriodParen,   MM_Advance(1);
-                else if (peek[1] == '[') token.kind = MM_Token_PeriodBracket, MM_Advance(1);
-                else if (peek[1] == '{') token.kind = MM_Token_PeriodBrace,   MM_Advance(1);
-                else                     token.kind = MM_Token_Period;
-            } break;
-            
-            default:
-            {
-                if (c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z')
-                {
-                    MM_String identifier = {
-                        .data = lexer->string.data - 1, // NOTE: cursor is the first element of string.data
-                        .size = 1
-                    };
+                    MM_Lexer__Advance(lexer, 1);
                     
-                    while (cursor == '_'                  ||
-                           cursor >= 'A' && cursor <= 'Z' ||
-                           cursor >= 'a' && cursor <= 'z' ||
-                           cursor >= '0' && cursor <= '9')
-                    {
-                        MM_Advance(1);
-                        identifier.size += 1;
-                    }
+                    base_kind = MM_Token_Sar;
                     
-                    if (MM_String_Match(identifier, MM_STRING("_"))) token.kind = MM_Token_Blank;
-                    else
-                    {
-                        
-                        // NOTE: This is very ugly because of MSVC bullshit
-                        // TODO: replace with hash table or something more clever
-                        
-#define MM_X(e, str) [(e) - MM_Token__FirstKeyword] = (MM_u8*)(str),
-                        static MM_u8* keyword_cstrings[MM_Token__LastKeyword - MM_Token__FirstKeyword + 1] = {
-                            MM_TOKEN_KEYWORD_LIST
-                        };
-#undef MM_X
-                        
-#define MM_X(e, str) [(e) - MM_Token__FirstKeyword] = sizeof(str) - 1,
-                        static MM_u32 keyword_lengths[MM_Token__LastKeyword - MM_Token__FirstKeyword + 1] = {
-                            MM_TOKEN_KEYWORD_LIST
-                        };
-#undef MM_X
-                        
-                        token.kind = MM_Token_Identifier;
-                        for (MM_umm i = 0; i < MM_ARRAY_SIZE(keyword_cstrings); ++i)
+                    if (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Lexer__Advance(lexer, 1);
+                    else                                      token.kind = base_kind;
+                }
+                else token.kind = base_kind;
+            }
+            else token.kind = base_kind;
+        } break;
+        
+        case '-':
+        {
+            if      (lexer->size     && lexer->data[0] == '=')                      token.kind = MM_Token_MinusEQ, MM_Lexer__Advance(lexer, 1);
+            else if (lexer->size     && lexer->data[0] == '>')                      token.kind = MM_Token_Arrow,   MM_Lexer__Advance(lexer, 1);
+            else if (lexer->size > 1 && lexer->data[0] == c && lexer->data[1] == c) token.kind = MM_Token_TpMinus, MM_Lexer__Advance(lexer, 2);
+            else                                                                    token.kind = MM_Token_Minus;
+        } break;
+        
+        case '.':
+        {
+            if      (lexer->size && lexer->data[0] == '{') token.kind = MM_Token_PeriodBrace,   MM_Lexer__Advance(lexer, 1);
+            else if (lexer->size && lexer->data[0] == '[') token.kind = MM_Token_PeriodBracket, MM_Lexer__Advance(lexer, 1);
+            else                                           token.kind = MM_Token_Period;
+        } break;
+        
+        default:
+        {
+            if (c == '_' || MM_Lexer__IsAlpha(c))
+            {
+                MM_String identifier = { .data = lexer->data - 1, .size = 1 };
+                
+                while (lexer->size && (lexer->data[0] == '_'             ||
+                                       MM_Lexer__IsAlpha(lexer->data[0]) ||
+                                       MM_Lexer__IsDigit(lexer->data[0])))
+                {
+                    MM_Lexer__Advance(lexer, 1);
+                    identifier.size += 1;
+                }
+                
+                if (identifier.size == 1 && identifier.data[0] == '_') token.kind = MM_Token_Blank;
+                else
+                {
+                    { // NOTE: labeled break done with goto identifier_end
+                        for (MM_umm i = 0; i < MM_ARRAY_SIZE(MM_Token_KeywordList); ++i)
                         {
-                            MM_String keyword = { .data = keyword_cstrings[i], .size = keyword_lengths[i] };
-                            if (MM_String_Match(identifier, keyword))
+                            if (MM_String_Match(identifier, MM_Token_KeywordList[i]))
                             {
                                 token.kind = (MM_Token_Kind)(MM_Token__FirstKeyword + i);
-                                break;
+                                goto identifier_end;
                             }
                         }
-                        //
+                        
+                        for (MM_umm i = 0; i < MM_ARRAY_SIZE(MM_Token_BuiltinList); ++i)
+                        {
+                            if (MM_String_Match(identifier, MM_Token_BuiltinList[i]))
+                            {
+                                token.kind = (MM_Token_Kind)(MM_Token__FirstBuiltin + i);
+                                goto identifier_end;
+                            }
+                        }
+                        
+                        token.kind = MM_Token_Identifier;
+                        
+                        identifier_end:;
+                        token.identifier = identifier;
                     }
                 }
-                else if (c >= '0' && c <= '9')
+            }
+            else if (MM_Lexer__IsDigit(c))
+            {
+                MM_u8 base       = 10;
+                MM_bool is_float = MM_false;
+                
+                if (c == '0' && lexer->size)
                 {
-                    MM_bool is_float = MM_false;
-                    MM_bool has_exp  = MM_false;
-                    MM_bool exp_neg  = MM_false;
-                    MM_umm base      = 10;
-                    
-                    if (c == '0')
-                    {
-                        if      (cursor == 'b') base = 2;
-                        else if (cursor == 'o') base = 8;
-                        else if (cursor == 'x') base = 16;
-                        else if (cursor == 'h') base = 16, is_float = MM_true;
-                        else if (cursor == 'y') base = 32;
-                    }
-                    
-                    // NOTE: digit count is only useful for hexfloats and floats. The type of a hexfloat is determined by its
-                    //       size. Digit count for regular floats is only used to report missing fractional or exponent parts
-                    MM_umm digit_count;
-                    MM_umm init;
-                    if (base != 10) init = 0,       digit_count = 0, MM_Advance(1);
-                    else            init = c & 0xF, digit_count = 1;
-                    
-                    MM_Soft_Int integral   = MM_SoftInt_FromU64(init);
-                    MM_Soft_Int fractional = MM_SoftInt_FromU64(0);
-                    MM_Soft_Int exponent   = MM_SoftInt_FromU64(0);
-                    
-                    MM_Soft_Int* integer = &integral;
-                    
-                    for (;;)
-                    {
-                        MM_umm digit;
-                        
-                        if      (cursor >= '0' && cursor <= '9') digit = cursor & 0xF;
-                        else if (cursor >= 'A' && cursor <= 'F') digit = (cursor & 0x1F) + 9;
-                        else if (cursor >= 'a' && cursor <= 'f') digit = (cursor & 0x1F) + 9;
-                        else if (cursor == '_')
-                        {
-                            MM_Advance(1);
-                            continue;
-                        }
-                        else if (!is_float && cursor == '.')
-                        {
-                            is_float = MM_true;
-                            integer  = &fractional;
-                            
-                            // NOTE: reset to catch missing digits in fractional part
-                            digit_count = 0;
-                            
-                            MM_Advance(1);
-                            continue;
-                        }
-                        else if (is_float && cursor == 'e')
-                        {
-                            MM_Advance(1);
-                            
-                            exp_neg = (cursor == '-');
-                            if (cursor == '-' || cursor == '+') MM_Advance(1);
-                            
-                            integer = &exponent;
-                            
-                            // NOTE: reset to catch missing digits in exponent part
-                            digit_count = 0;
-                            
-                            continue;
-                        }
-                        else break;
-                        
-                        MM_SoftInt_Mul();
-                    }
-                    MM_NOT_IMPLEMENTED;
+                    if      (lexer->data[0] == 'b') base = 2;
+                    else if (lexer->data[0] == 'x') base = 16;
+                    else if (lexer->data[0] == 'h') base = 16, is_float = MM_true;
                 }
-                else if (c == '"')
+                
+                MM_i128 integer    = {0};
+                MM_umm digit_count = 0;
+                if (base == 10)
                 {
-                    MM_String string = {
-                        .data = lexer->string.data, // NOTE: cursor is the first element of string.data
-                        .size = 0
-                    };
+                    digit_count += 1;
+                    integer      = MM_i128_FromU64(c - '0');
+                }
+                
+                while (lexer->size)
+                {
+                    char d      = lexer->data[0];
+                    MM_u8 digit = 0;
                     
-                    while (cursor != 0 && cursor != '\"')
+                    if      (MM_Lexer__IsDigit(d)) digit = d - '0';
+                    else if (d >= 'A' && d <= 'F') digit = (d - 'A') + 9;
+                    else if (d >= 'a' && d <= 'f') digit = (d - 'A') + 9;
+                    else if (d == '_')
                     {
-                        if (cursor == '\\') MM_Advance(2); // NOTE: skip \"
-                        else                MM_Advance(1);
+                        MM_Lexer__Advance(lexer, 1);
+                        continue;
                     }
-                    
-                    if (cursor != '\"')
+                    else if (d == '.')
                     {
-                        //// ERROR: Unterminated string literal
+                        MM_Lexer__Advance(lexer, 1);
                         MM_NOT_IMPLEMENTED;
+                    }
+                    else break;
+                    
+                    if (digit >= base)
+                    {
+                        //// ERROR: Digit is too large for base
+                        token.kind = MM_Token_Invalid;
+                        break;
                     }
                     else
                     {
-                        MM_Advance(1);
-                        
-                        token.kind   = MM_Token_String;
-                        token.string = string;
+                        digit_count += 1;
+                        if (!MM_i128_AppendDigit(&integer, base, digit))
+                        {
+                            //// ERROR: Numeric literal contains too many digits
+                            token.kind = MM_Token_Invalid;
+                            break;
+                        }
+                    }
+                }
+                
+                if (digit_count == 0)
+                {
+                    //// ERROR: Numeric literals should contain at least 1 digit
+                    token.kind = MM_Token_Invalid;
+                }
+                else if (is_float)
+                {
+                    if (base == 16)
+                    {
+                        if (digit_count == 4)
+                        {
+                            MM_NOT_IMPLEMENTED;
+                        }
+                        else if (digit_count == 8)
+                        {
+                            MM_NOT_IMPLEMENTED;
+                        }
+                        else if (digit_count == 16)
+                        {
+                            MM_NOT_IMPLEMENTED;
+                        }
+                        else
+                        {
+                            //// ERROR: Invalid hex float digit count. Must be either 4, 8 or 16, corresponding to f16, f32 and f64 respectively
+                            token.kind = MM_Token_Invalid;
+                        }
+                    }
+                    else
+                    {
+                        MM_NOT_IMPLEMENTED;
                     }
                 }
                 else
                 {
-                    //// ERROR: Unknown symbol
-                    MM_NOT_IMPLEMENTED;
+                    token.kind = MM_Token_Int;
+                    token.i128 = integer;
                 }
-            } break;
-        }
-        
-        token.text.past_end = lexer->pos;
-        
-        return token;
+            }
+            else if (c == '"')
+            {
+                MM_NOT_IMPLEMENTED;
+            }
+            else
+            {
+                //// ERROR: Unknown symbol
+                token.kind = MM_Token_Invalid;
+            }
+        } break;
     }
+    
+    token.text_pos = start_pos;
+    token.size     = lexer->offset - token.offset;
+    
+    if (token.kind == MM_Token_Invalid) MM_Lexer__Revert(lexer, start_pos);
+    
+    return token;
 }
-
-#undef MM_Advance
