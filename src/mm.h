@@ -84,4 +84,5 @@ int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  
 #include "mm_tokens.h"
 #include "mm_lexer.h"
 #include "mm_ast.h"
+#include "mm_memory.h"
 #include "mm_parser.h"
