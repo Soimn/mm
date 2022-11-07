@@ -7,6 +7,8 @@ int wvnsprintfA(char* dest, int size, const char* format, va_list args);
 void OutputDebugStringA(const char* str);
 void* __stdcall GetStdHandle(unsigned long handle);
 int __stdcall WriteConsoleA(void*, const void*, unsigned long, unsigned long, void*);
+void* VirtualAlloc(void*, unsigned __int64, unsigned long, unsigned long);
+int VirtualFree(void*, unsigned __int64, unsigned long);
 
 int
 Sprint(char* buffer, MM_u32 size, const char* msg, ...)
@@ -31,6 +33,24 @@ Print(const char* msg, ...)
     
     OutputDebugStringA(buffer);
     WriteConsoleA(GetStdHandle(((unsigned long)-11)), buffer, (unsigned long)MM_Cstring_Length(buffer), 0, 0);
+}
+
+void*
+MM_System_ReserveMemory(MM_umm size)
+{
+    return VirtualAlloc(0, size, 0x00002000 /*MEM_RESERVE*/, 0x04 /*PAGE_READWRITE*/);
+}
+
+void
+MM_System_CommitMemory(void* ptr, MM_umm size)
+{
+    VirtualAlloc(ptr, size, 0x00001000 /*MEM_COMMIT*/, 0x04 /*PAGE_READWRITE*/);
+}
+
+void
+MM_System_ReleaseMemory(void* ptr)
+{
+    VirtualFree(ptr, 0, 0x00008000 /*MEM_RELEASE*/);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,6 +207,7 @@ TestLexer_NumericLiterals(MM_bool print)
 void
 TestLexer(MM_bool print)
 {
+    Print("TESTING LEXER\n--------------------------------------------\n");
     MM_String string = MM_STRING("factorial :: proc(n: int) -> int\n{\n    if (n <= 2) return n;\n    else return n*factorial(n-1);\n}\n\nmain :: proc\n{\n    x: int = factorial(5);\n}");
     MM_Token_Kind expected_kinds[] = {
         MM_Token_Identifier, MM_Token_Colon, MM_Token_Colon, MM_Token_Proc, MM_Token_OpenParen, MM_Token_Identifier, MM_Token_Colon, MM_Token_Identifier,
@@ -203,13 +224,70 @@ TestLexer(MM_bool print)
     ++ran, succeeded += (MM_umm)TestLexer_Reconstruction(string, print);
     ++ran, succeeded += (MM_umm)TestLexer_NumericLiterals(print);
     
-    Print("%u out of %u succeeded\n", succeeded, ran);
+    Print("%u out of %u succeeded\n\n", succeeded, ran);
+}
+
+MM_bool
+TestParser_BasicPrecedence()
+{
+    MM_Arena* arena = MM_Arena_Create(4*1024*1024*1024);
+    
+    MM_String string        = MM_STRING("1 + 2 * 4 / 5 == 3 << (4 + -2)");
+    MM_Expression* expected = MM_BinaryExpression(MM_AST_CmpEqual,
+                                                  MM_BinaryExpression(MM_AST_Add,
+                                                                      MM_IntExpression(1),
+                                                                      MM_BinaryExpression(MM_AST_Div,
+                                                                                          MM_BinaryExpression(MM_AST_Mul,
+                                                                                                              MM_IntExpression(2),
+                                                                                                              MM_IntExpression(4)),
+                                                                                          MM_IntExpression(5))),
+                                                  
+                                                  MM_BinaryExpression(MM_AST_BitShl,
+                                                                      MM_IntExpression(3),
+                                                                      MM_CompoundExpression(MM_BinaryExpression(MM_AST_Add,
+                                                                                                                MM_IntExpression(4),
+                                                                                                                MM_NegExpression(MM_IntExpression(2))))));
+    
+    MM_Parser parser = {
+        .lexer     = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }),
+        .ast_arena = arena,
+    };
+    
+    MM_Expression* got;
+    if (!MM_Parser__ParseExpression(&parser, &got))
+    {
+        Print("TestParser_BasicPrecedence -- FAILED. Failed to parse\n");
+        return MM_false;
+    }
+    else if (!MM_AST_Match(got, expected))
+    {
+        Print("TestParser_BasicPrecedence -- FAILED. Parse trees don't match\n");
+        return MM_false;
+    }
+    else
+    {
+        Print("TestParser_BasicPrecedence -- SUCCEEDED.\n");
+        return MM_true;
+    }
+}
+
+void
+TestParser()
+{
+    Print("TESTING PARSER\n--------------------------------------------\n");
+    
+    MM_umm ran       = 0;
+    MM_umm succeeded = 0;
+    ++ran, succeeded += (MM_umm)TestParser_BasicPrecedence();
+    
+    Print("%u out of %u succeeded\n\n", succeeded, ran);
 }
 
 int
 mainCRTStartup()
 {
     TestLexer(MM_false);
+    TestParser();
     
     return 0;
 }

@@ -1,13 +1,17 @@
 typedef struct MM_Parser
 {
     MM_Lexer lexer;
+    MM_Arena* ast_arena;
 } MM_Parser;
 
 void*
 MM_Parser__PushNode(MM_Parser* parser, MM_AST_Kind kind)
 {
-    MM_NOT_IMPLEMENTED;
-    return 0;
+    MM_AST* node = MM_Arena_Push(parser->ast_arena, sizeof(MM_AST), MM_ALIGNOF(MM_AST));
+    node->kind = kind;
+    node->next = 0;
+    
+    return node;
 }
 
 #define MM_NextToken() MM_Lexer_NextToken(&parser->lexer)
@@ -647,9 +651,19 @@ MM_Parser__ParseBinary(MM_Parser* parser, MM_Expression** expression)
                     }
                     
                     MM_Expression* left = *slot;
-                    *slot = MM_PushNode(kind);
-                    (*slot)->binary_expr.left  = left;
-                    (*slot)->binary_expr.right = right;
+                    
+                    if (MM_AST_BLOCK_INDEX(left->kind) == MM_AST_CMP_BLOCK_INDEX &&
+                        MM_AST_BLOCK_INDEX(kind)       == MM_AST_CMP_BLOCK_INDEX)
+                    {
+                        //// ERROR: Comparison operators cannot be chained
+                        return MM_false;
+                    }
+                    else
+                    {
+                        *slot = MM_PushNode(kind);
+                        (*slot)->binary_expr.left  = left;
+                        (*slot)->binary_expr.right = right;
+                    }
                 }
             }
         }

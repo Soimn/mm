@@ -14,6 +14,7 @@ typedef struct MM_String_Literal
 #define MM_AST_BLOCK(I) ((I) << 4)
 #define MM_AST_BLOCK_INDEX(K) ((K) >> 4)
 #define MM_AST_BLOCK_OFFSET(K) ((K) & 0xF)
+#define MM_AST_CMP_BLOCK_INDEX 11
 
 typedef enum MM_AST_Kind
 {
@@ -104,6 +105,8 @@ typedef enum MM_AST_Kind
     MM_AST_Assignment,
     MM_AST__LastStatement = MM_AST_Assignment,
 } MM_AST_Kind;
+
+MM_STATIC_ASSERT(MM_AST_BLOCK(MM_AST_CMP_BLOCK_INDEX) == MM_AST_CmpEqual);
 
 typedef struct MM_Expression MM_Expression;
 typedef struct MM_Declaration MM_Declaration;
@@ -359,3 +362,18 @@ typedef struct MM_Statement
         MM_Assignment_Statement assignment_stmnt;
     };
 } MM_Statement;
+
+
+
+
+typedef struct MM_AST
+{
+    union
+    {
+        MM_AST_HEADER(MM_AST);
+        
+        MM_Expression expression;
+        MM_Declaration declaration;
+        MM_Statement statement;
+    };
+} MM_AST;

@@ -13,8 +13,8 @@ MM_Lexer_Init(MM_String string, MM_Text_Pos start_pos)
     MM_ASSERT(start_pos.line > 0 && start_pos.col > 0);
     
     MM_Lexer lexer = {
-        .string = string,
-        .pos    = start_pos,
+        .string    = string,
+        .pos       = start_pos,
     };
     
     MM_Lexer_NextToken(&lexer);
