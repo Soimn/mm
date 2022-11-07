@@ -142,9 +142,9 @@ string       = T_string
 int          = T_integer
 float        = T_float
 bool         = T_True | T_False
-proc_type    = T_proc [T_OpenParen paramter_list T_CloseParen] [T_Arrow (expression | T_OpenParen parameter_list T_CloseParen)]
+proc_type    = T_proc [T_OpenParen paramter_list T_CloseParen] [T_Arrow return_value_list]
 proc_lit     = proc_type (block_statement | T_TpMinus)
-struct       = T_Struct (block_statement | T_TpMinus)
+struct_type  = T_Struct (block_statement)
 compound     = T_OpenParen expression T_CloseParen
 builtin_call = H_Builtin T_OpenParen argument_list T_CloseParen
 struct_lit_inferred = T_PeriodOpenBrace arugment_list T_CloseBrace
@@ -171,12 +171,14 @@ parameter      = expression {T_Comma expression} T_Colon expression
 parameter_list = [expression] {T_Comma expression}
                | parameter {T_Comma parameter}
 
-pointer_to = T_Hat type_prefix
-slice_of   = T_OpenBracket T_CloseBracket type_prefix
-array_of   = T_OpenBracket expression T_CloseBracket type_prefix
-type_prefix = pointer_to
-            | slice_of
-            | array_of
+return_value_list = (expression | T_OpenParen parameter_list T_CloseParen)
+
+pointer_type = T_Hat type_prefix
+slice_type   = T_OpenBracket T_CloseBracket type_prefix
+array_type   = T_OpenBracket expression T_CloseBracket type_prefix
+type_prefix = pointer_typr
+            | slice_type
+            | array_type
 
 dereference = postfix_expression T_Hat
 subscript   = postfix_expression T_OpenBracket expression T_CloseBracket
@@ -194,11 +196,13 @@ postfix_expression = dereference
                    | array_lit
                    | primary_expression
 
+pos       = T_Plus prefix_expression
 neg       = T_Minus prefix_expression
 not       = T_Bang prefix_expression
 bit_not   = T_Tilde prefix_expression
 reference = T_And prefix_expression
-prefix_expression = neg
+prefix_expression = pos
+                  | neg
                   | not
                   | bit_not
                   | reference
@@ -258,13 +262,14 @@ var          = expression {T_Comma expression} T_Colon expression
              | expression {T_Comma expression} T_Colon [expression] T_Equals (T_TpMinus | expression {T_Comma expression})
 const        = expression {T_Comma expression} T_Colon [expression] T_Colon expression {T_Comma expression})
 const_nosemi = expression {T_Comma expression} T_Colon [expression] T_Colon (proc_lit | struct)
+when         = T_When T_OpenParen expression T_CloseParen statement [T_Else statement]
 declaration = var
             | const
             | const_nosemi
+            | when
             
 block      = [T_Colon identifier] T_OpenBrace {statement} T_CloseBrace
 if         = [T_Colon identifier] T_If T_OpenParen [(declaration | assignment | expression) T_Semicolon] expression T_CloseParen statement [T_Else statement]
-when       = T_When T_OpenParen expression T_CloseParen statement [T_Else statement]
 while      = [T_Colon identifier] T_While T_OpenParen expression T_CloseParen statement
            | T_While T_OpenParen (declaration | assignment | expression) T_Semicolon expression [T_Semicolon (assignment | expression)] T_CloseParen statement
 break      = T_Break [identifier]
@@ -286,7 +291,6 @@ H_assignment_token = T_StarEQ
 assignment = expression {T_Comma expression} H_assignment_token expression {T_Comma expression}
 statement = block
           | if
-          | when
           | while
           | break T_Semicolon
           | continue T_Semicolon

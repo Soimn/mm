@@ -2,10 +2,6 @@
 #include <intrin.h>
 
 #include "mm.h"
-#include "mm_int.h"
-#include "mm_string.h"
-#include "mm_tokens.h"
-#include "mm_lexer.h"
 
 int wvnsprintfA(char* dest, int size, const char* format, va_list args);
 void OutputDebugStringA(const char* str);
@@ -50,7 +46,7 @@ TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm exp
     
     Print("TestLexer_TokenKinds -- ");
     
-    MM_Token token = MM_Lexer_NextToken(&lexer);
+    MM_Token token = MM_Lexer_GetToken(&lexer);
     MM_umm i       = 0;
     for (; i < expected_kind_count && token.kind != MM_Token_EOF; token = MM_Lexer_NextToken(&lexer), ++i)
     {
@@ -92,7 +88,7 @@ TestLexer_Reconstruction(MM_String string, MM_bool print)
     int buffer_space = MM_ARRAY_SIZE(buffer);
     
     MM_Text_Pos prev = { .offset = 0, .line = 1, .col = 1 };
-    for (MM_Token token = MM_Lexer_NextToken(&lexer); token.kind != MM_Token_EOF; token = MM_Lexer_NextToken(&lexer))
+    for (MM_Token token = MM_Lexer_GetToken(&lexer); token.kind != MM_Token_EOF; token = MM_Lexer_NextToken(&lexer))
     {
         MM_u8 token_string_buffer[42];
         MM_String token_string = MM_STRING("(null)");
@@ -154,7 +150,7 @@ TestLexer_NumericLiterals(MM_bool print)
     MM_bool succeeded = MM_true;
     { // bin
         MM_Lexer lexer = MM_Lexer_Init(large_integer_string_bin, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
-        MM_Token token = MM_Lexer_NextToken(&lexer);
+        MM_Token token = MM_Lexer_GetToken(&lexer);
         
         if (!(token.kind == MM_Token_Int && token.i128.hi == large_integer_expected.hi && token.i128.lo == large_integer_expected.lo))
         {
@@ -164,7 +160,7 @@ TestLexer_NumericLiterals(MM_bool print)
     }
     { // dec
         MM_Lexer lexer = MM_Lexer_Init(large_integer_string_dec, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
-        MM_Token token = MM_Lexer_NextToken(&lexer);
+        MM_Token token = MM_Lexer_GetToken(&lexer);
         
         if (!(token.kind == MM_Token_Int && token.i128.hi == large_integer_expected.hi && token.i128.lo == large_integer_expected.lo))
         {
@@ -174,7 +170,7 @@ TestLexer_NumericLiterals(MM_bool print)
     }
     { // hex
         MM_Lexer lexer = MM_Lexer_Init(large_integer_string_hex, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
-        MM_Token token = MM_Lexer_NextToken(&lexer);
+        MM_Token token = MM_Lexer_GetToken(&lexer);
         
         if (!(token.kind == MM_Token_Int && token.i128.hi == large_integer_expected.hi && token.i128.lo == large_integer_expected.lo))
         {
@@ -213,7 +209,7 @@ TestLexer(MM_bool print)
 int
 mainCRTStartup()
 {
-    TestLexer(MM_true);
+    TestLexer(MM_false);
     
     return 0;
 }

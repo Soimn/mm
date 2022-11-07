@@ -7,8 +7,7 @@
 #define MM_TOKEN_BINARY_TO_ASSIGNMENT(kind) ((kind) - MM_TOKEN_BLOCK(MM_TOKEN_FIRST_BINARY_BLOCK - MM_TOKEN_FIRST_ASSIGNMENT_BLOCK))
 #define MM_TOKEN_ASSIGNMENT_TO_BINARY(kind) ((kind) + MM_TOKEN_BLOCK(MM_TOKEN_FIRST_BINARY_BLOCK - MM_TOKEN_FIRST_ASSIGNMENT_BLOCK))
 
-typedef MM_u32 MM_Token_Kind;
-enum MM_TOKEN_KIND
+typedef enum MM_Token_Kind
 {
     MM_Token_Invalid = 0,
     MM_Token_EOF,
@@ -36,7 +35,6 @@ enum MM_TOKEN_KIND
     MM_Token_PeriodBrace,                          // .{
     MM_Token_Bang,                                 // !
     MM_Token_Arrow,                                // ->
-    MM_Token_Blank,                                // _
     
     MM_Token__FirstAssignment,
     MM_Token_Equals = MM_Token__FirstAssignment,   // =
@@ -108,7 +106,7 @@ enum MM_TOKEN_KIND
     MM_Token__LastBuiltin = MM_Token_Offsetof,
     MM_Token__LastKeyword = MM_Token__LastBuiltin,
     
-};
+} MM_Token_Kind;
 
 MM_STATIC_ASSERT(MM_Token__LastAssignment < MM_Token__FirstBinary);
 MM_STATIC_ASSERT(MM_Token__FirstBinary == MM_TOKEN_BLOCK(MM_TOKEN_FIRST_BINARY_BLOCK));
@@ -170,7 +168,6 @@ MM_X(MM_Token_PeriodBracket, "MM_Token_PeriodBracket")     \
 MM_X(MM_Token_PeriodBrace,   "MM_Token_PeriodBrace")       \
 MM_X(MM_Token_Bang,          "MM_Token_Bang")              \
 MM_X(MM_Token_Arrow,         "MM_Token_Arrow")             \
-MM_X(MM_Token_Blank,         "MM_Token_Blank")             \
 MM_X(MM_Token_Equals,        "MM_Token_Equals")            \
 MM_X(MM_Token_StarEQ,        "MM_Token_StarEQ")            \
 MM_X(MM_Token_SlashEQ,       "MM_Token_SlashEQ")           \
@@ -246,7 +243,6 @@ MM_X(MM_Token_PeriodBracket, ".[")   \
 MM_X(MM_Token_PeriodBrace,   ".{")   \
 MM_X(MM_Token_Bang,          "!")    \
 MM_X(MM_Token_Arrow,         "->")   \
-MM_X(MM_Token_Blank,         "_")    \
 MM_X(MM_Token_Equals,        "=")    \
 MM_X(MM_Token_StarEQ,        "*=")   \
 MM_X(MM_Token_SlashEQ,       "/=")   \

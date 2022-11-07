@@ -78,3 +78,10 @@ int static_assert_fails_on_negative_bit_width : (EX) ? 1 : -1;                  
 #define MM_ROUND_UP(N, align) (((MM_umm)(N) + ((MM_umm)(align) - 1)) & ~((MM_umm)(align) - 1))
 #define MM_ROUND_DOWN(N, align) ((MM_umm)(N) & ~((MM_umm)(align) - 1))
 #define MM_IS_POW_2(N) ((((MM_umm)(N) - 1) & (MM_umm)(N)) == 0 && (N) > 0)
+
+#include "mm_int.h"
+#include "mm_string.h"
+#include "mm_tokens.h"
+#include "mm_lexer.h"
+#include "mm_ast.h"
+#include "mm_parser.h"
