@@ -759,75 +759,122 @@ MM_Parser__ParseBlock(MM_Parser* parser, MM_Block_Statement** block)
 MM_bool
 MM_Parser__ParseDeclarationAssignmentOrExpression(MM_Parser* parser, MM_Statement** statement)
 {
-    MM_Expression* expressions;
-    if (!MM_Parser__ParseExpressionList(parser, &expressions)) return MM_false;
-    else
+    if (MM_EatToken(MM_Token_When))
     {
-        if (MM_EatToken(MM_Token_Colon))
+        if (!MM_EatToken(MM_Token_OpenParen))
         {
-            MM_Expression* names = expressions;
-            MM_Expression* type  = 0;
-            
-            if (!MM_IsToken(MM_Token_Colon) && !MM_IsToken(MM_Token_Equals))
-            {
-                if (!MM_Parser__ParseExpression(parser, &type)) return MM_false;
-            }
-            
-            if (MM_EatToken(MM_Token_Colon))
-            {
-                MM_Expression* values;
-                if (!MM_Parser__ParseExpressionList(parser, &values)) return MM_false;
-                else
-                {
-                    *statement = MM_PushNode(MM_AST_Const);
-                    (*statement)->declaration.const_decl.names  = names;
-                    (*statement)->declaration.const_decl.type   = type;
-                    (*statement)->declaration.const_decl.values = values;
-                }
-            }
-            else
-            {
-                MM_Expression* values    = 0;
-                MM_bool is_uninitialized = MM_false;
-                if (MM_EatToken(MM_Token_Equals))
-                {
-                    if (MM_EatToken(MM_Token_TpMinus)) is_uninitialized = MM_true;
-                    else
-                    {
-                        if (!MM_Parser__ParseExpressionList(parser, &values)) return MM_false;
-                    }
-                }
-                
-                *statement = MM_PushNode(MM_AST_Var);
-                (*statement)->declaration.var_decl.names            = names;
-                (*statement)->declaration.var_decl.type             = type;
-                (*statement)->declaration.var_decl.values           = values;
-                (*statement)->declaration.var_decl.is_uninitialized = is_uninitialized;
-            }
-        }
-        else if (MM_GetToken().kind >= MM_Token__FirstAssignment && MM_GetToken().kind <= MM_Token__LastAssignment)
-        {
-            MM_AST_Kind assign_op = (MM_IsToken(MM_Token_Equals) ? MM_AST_Invalid : MM_TOKEN_ASSIGNMENT_TO_BINARY(MM_GetToken().kind));
-            MM_NextToken();
-            
-            MM_Expression* lhs = expressions;
-            MM_Expression* rhs;
-            if (!MM_Parser__ParseExpressionList(parser, &rhs)) return MM_false;
-            else
-            {
-                *statement = MM_PushNode(MM_AST_Assignment);
-                (*statement)->assignment_stmnt.assign_op = assign_op;
-                (*statement)->assignment_stmnt.lhs       = lhs;
-                (*statement)->assignment_stmnt.rhs       = rhs;
-            }
+            //// ERROR: Missing open paren before when statement header
+            return MM_false;
         }
         else
         {
-            if (expressions->next == 0) *statement = (MM_Statement*)expressions;
+            MM_Statement* first;
+            if (!MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &first)) return MM_false;
             else
             {
-                //// ERROR: Expression lists cannot be used in isolation
-                return MM_false;
+                MM_Expression* condition;
+                if (first->kind >= MM_AST__FirstExpression && first->kind <= MM_AST__LastExpression) condition = (MM_Expression*)first;
+                else
+                {
+                    //// ERROR: When condition must be an expression
+                    return MM_false;
+                }
+                
+                if (!MM_EatToken(MM_Token_CloseParen))
+                {
+                    //// ERROR: Missing closing paren after when statement header
+                    return MM_false;
+                }
+                else
+                {
+                    MM_Statement* true_body;
+                    MM_Statement* false_body = 0;
+                    
+                    if      (!MM_Parser__ParseStatement(parser, &true_body))                                return MM_false;
+                    else if (MM_EatToken(MM_Token_Else) && !MM_Parser__ParseStatement(parser, &false_body)) return MM_false;
+                    else
+                    {
+                        *statement = MM_PushNode(MM_AST_When);
+                        (*statement)->declaration.when_decl.condition  = condition;
+                        (*statement)->declaration.when_decl.true_body  = true_body;
+                        (*statement)->declaration.when_decl.false_body = false_body;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        MM_Expression* expressions;
+        if (!MM_Parser__ParseExpressionList(parser, &expressions)) return MM_false;
+        else
+        {
+            if (MM_EatToken(MM_Token_Colon))
+            {
+                MM_Expression* names = expressions;
+                MM_Expression* type  = 0;
+                
+                if (!MM_IsToken(MM_Token_Colon) && !MM_IsToken(MM_Token_Equals))
+                {
+                    if (!MM_Parser__ParseExpression(parser, &type)) return MM_false;
+                }
+                
+                if (MM_EatToken(MM_Token_Colon))
+                {
+                    MM_Expression* values;
+                    if (!MM_Parser__ParseExpressionList(parser, &values)) return MM_false;
+                    else
+                    {
+                        *statement = MM_PushNode(MM_AST_Const);
+                        (*statement)->declaration.const_decl.names  = names;
+                        (*statement)->declaration.const_decl.type   = type;
+                        (*statement)->declaration.const_decl.values = values;
+                    }
+                }
+                else
+                {
+                    MM_Expression* values    = 0;
+                    MM_bool is_uninitialized = MM_false;
+                    if (MM_EatToken(MM_Token_Equals))
+                    {
+                        if (MM_EatToken(MM_Token_TpMinus)) is_uninitialized = MM_true;
+                        else
+                        {
+                            if (!MM_Parser__ParseExpressionList(parser, &values)) return MM_false;
+                        }
+                    }
+                    
+                    *statement = MM_PushNode(MM_AST_Var);
+                    (*statement)->declaration.var_decl.names            = names;
+                    (*statement)->declaration.var_decl.type             = type;
+                    (*statement)->declaration.var_decl.values           = values;
+                    (*statement)->declaration.var_decl.is_uninitialized = is_uninitialized;
+                }
+            }
+            else if (MM_GetToken().kind >= MM_Token__FirstAssignment && MM_GetToken().kind <= MM_Token__LastAssignment)
+            {
+                MM_AST_Kind assign_op = (MM_IsToken(MM_Token_Equals) ? MM_AST_Invalid : MM_TOKEN_ASSIGNMENT_TO_BINARY(MM_GetToken().kind));
+                MM_NextToken();
+                
+                MM_Expression* lhs = expressions;
+                MM_Expression* rhs;
+                if (!MM_Parser__ParseExpressionList(parser, &rhs)) return MM_false;
+                else
+                {
+                    *statement = MM_PushNode(MM_AST_Assignment);
+                    (*statement)->assignment_stmnt.assign_op = assign_op;
+                    (*statement)->assignment_stmnt.lhs       = lhs;
+                    (*statement)->assignment_stmnt.rhs       = rhs;
+                }
+            }
+            else
+            {
+                if (expressions->next == 0) *statement = (MM_Statement*)expressions;
+                else
+                {
+                    //// ERROR: Expression lists cannot be used in isolation
+                    return MM_false;
+                }
             }
         }
     }
@@ -1064,6 +1111,34 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
             {
                 //// ERROR: Stray semicolon. Single procedure literal or struct type bound to constant declarations should not be followed by a semicolon
                 return MM_false;
+            }
+        }
+    }
+    
+    return MM_true;
+}
+
+
+
+MM_bool
+MM_Parser__ParseTopLevelDeclarations(MM_Parser* parser, MM_Declaration** declaration)
+{
+    MM_Declaration** next_decl = declaration;
+    while (!MM_IsToken(MM_Token_EOF))
+    {
+        MM_Statement* statement;
+        if (!MM_Parser__ParseStatement(parser, &statement)) return MM_false;
+        else
+        {
+            if (!(statement->kind >= MM_AST__FirstDeclaration && statement->kind <= MM_AST__LastDeclaration))
+            {
+                //// ERROR: Only declarations are allowed at the top level
+                return MM_false;
+            }
+            else
+            {
+                *next_decl = (MM_Declaration*)statement;
+                next_decl  = &(*next_decl)->next;
             }
         }
     }

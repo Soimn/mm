@@ -353,6 +353,8 @@ MatchAST(void* vn0, void* vn1)
 MM_bool
 TestParser_BasicPrecedence(MM_Arena* arena)
 {
+    MM_Arena_Reset(arena);
+    
     MM_String string = MM_STRING("1 + 2 * add(5, name: 6) / 5 == 3 << (4 + -2)");
     
     MM_AST nodes[] = {
@@ -404,6 +406,76 @@ TestParser_BasicPrecedence(MM_Arena* arena)
     }
 }
 
+MM_bool
+TestParser_Fib(MM_Arena* arena)
+{
+    MM_Arena_Reset(arena);
+    
+    MM_String string = MM_STRING("factorial :: proc(n: int) -> int\n{\n    if (n <= 2) return n;\n    else return n*factorial(n-1);\n}\n\nmain :: proc\n{\n    x: int = factorial(5);\n}");
+    
+    MM_AST nodes[] = {
+        [0]  = { .declaration.const_decl     = { .kind = MM_AST_Const, .next = (MM_Declaration*)&nodes[24], .names = (MM_Expression*)&nodes[1], .values = (MM_Expression*)&nodes[2]             } },
+        [1]  = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("factorial")                                                                                     } },
+        [2]  = { .expression.proc_lit_expr   = { .kind = MM_AST_ProcLit, .params = (MM_Parameter*)&nodes[3], .return_vals = (MM_Return_Value*)&nodes[6], .body = (MM_Block_Statement*)&nodes[8] } },
+        [3]  = { .parameter                  = { .kind = MM_AST_Parameter, .names = (MM_Expression*)&nodes[4], .type = (MM_Expression*)&nodes[5],                                               } },
+        [4]  = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("n")                                                                                             } },
+        [5]  = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("int")                                                                                           } },
+        [6]  = { .return_value               = { .kind = MM_AST_ReturnValue, .type = (MM_Expression*)&nodes[7],                                                                                 } },
+        [7]  = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("int")                                                                                           } },
+        [8]  = { .statement.block_stmnt      = { .kind = MM_AST_Block, .body = (MM_Statement*)&nodes[9]                                                                                         } },
+        [9]  = { .statement.if_stmnt         = { .kind = MM_AST_If, .condition = (MM_Expression*)&nodes[10], .true_body = (MM_Statement*)&nodes[13], .false_body = (MM_Statement*)&nodes[16]    } },
+        [10] = { .expression.binary_expr     = { .kind = MM_AST_CmpLessEQ, .left = (MM_Expression*)&nodes[11], .right = (MM_Expression*)&nodes[12]                                              } },
+        [11] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("n")                                                                                             } },
+        [12] = { .expression.int_expr        = { .kind = MM_AST_Int, .value = MM_i128_FromU64(2)                                                                                                } },
+        [13] = { .statement.return_stmnt     = { .kind = MM_AST_Return, .args = (MM_Argument*)&nodes[14]                                                                                        } },
+        [14] = { .argument                   = { .kind = MM_AST_Argument, .value = (MM_Expression*)&nodes[15]                                                                                   } },
+        [15] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("n")                                                                                             } },
+        [16] = { .statement.return_stmnt     = { .kind = MM_AST_Return, .args = (MM_Argument*)&nodes[17]                                                                                        } },
+        [17] = { .expression.binary_expr     = { .kind = MM_AST_Mul, .left = (MM_Expression*)&nodes[18], .right = (MM_Expression*)&nodes[19]                                                    } },
+        [18] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("n")                                                                                             } },
+        [19] = { .expression.call_expr       = { .kind = MM_AST_Call, .proc = (MM_Expression*)&nodes[20], .args = (MM_Argument*)&nodes[20]                                                      } },
+        [20] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("factorial")                                                                                     } },
+        [21] = { .expression.binary_expr     = { .kind = MM_AST_Mul, .left = (MM_Expression*)&nodes[22], .right = (MM_Expression*)&nodes[23]                                                    } },
+        [22] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("n")                                                                                             } },
+        [23] = { .expression.int_expr        = { .kind = MM_AST_Int, .value = MM_i128_FromU64(1)                                                                                                } },
+        [24] = { .declaration.const_decl     = { .kind = MM_AST_Const, .names = (MM_Expression*)&nodes[25], .values = (MM_Expression*)&nodes[26]                                                } },
+        [25] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("main")                                                                                          } },
+        [26] = { .expression.proc_lit_expr   = { .kind = MM_AST_ProcLit, .body = (MM_Block_Statement*)&nodes[27]                                                                                } },
+        [27] = { .statement.block_stmnt      = { .kind = MM_AST_Block, .body = (MM_Statement*)&nodes[28]                                                                                        } },
+        [28] = { .declaration.var_decl       = { .kind = MM_AST_Var, .names = (MM_Expression*)&nodes[29], .type = (MM_Expression*)&nodes[30], .values = (MM_Expression*)&nodes[31]              } },
+        [29] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("x")                                                                                             } },
+        [30] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("int")                                                                                           } },
+        [31] = { .expression.call_expr       = { .kind = MM_AST_Call, .proc = (MM_Expression*)&nodes[32], .args = (MM_Argument*)&nodes[33]                                                      } },
+        [32] = { .expression.identifier_expr = { .kind = MM_AST_Identifier, .value = MM_STRING("factorial")                                                                                     } },
+        [33] = { .argument                   = { .kind = MM_AST_Argument, .value = (MM_Expression*)&nodes[34]                                                                                   } },
+        [34] = { .expression.int_expr        = { .kind = MM_AST_Int, .value = MM_i128_FromU64(5)                                                                                                } },
+    };
+    
+    MM_Declaration* expected = (MM_Declaration*)&nodes[0];
+    
+    MM_Parser parser = {
+        .lexer     = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }),
+        .ast_arena = arena,
+    };
+    
+    MM_Declaration* got;
+    if (!MM_Parser__ParseTopLevelDeclarations(&parser, &got))
+    {
+        Print("TestParser_Fib -- FAILED. Failed to parse\n");
+        return MM_false;
+    }
+    else if (!MatchAST(got, expected))
+    {
+        Print("TestParser_Fib -- FAILED. Parse trees don't match\n");
+        return MM_false;
+    }
+    else
+    {
+        Print("TestParser_Fib -- SUCCEEDED.\n");
+        return MM_true;
+    }
+}
+
 void
 TestParser()
 {
@@ -414,6 +486,7 @@ TestParser()
     MM_umm ran       = 0;
     MM_umm succeeded = 0;
     ++ran, succeeded += (MM_umm)TestParser_BasicPrecedence(arena);
+    ++ran, succeeded += (MM_umm)TestParser_Fib(arena);
     
     Print("%u out of %u succeeded\n\n", succeeded, ran);
 }

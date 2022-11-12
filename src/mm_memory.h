@@ -129,3 +129,9 @@ MM_Arena_Pop(MM_Arena* arena, MM_umm size)
 {
     arena->cursor -= MM_MIN(size, MM_Arena_CurrentSize(arena));
 }
+
+void
+MM_Arena_Reset(MM_Arena* arena)
+{
+    arena->cursor = MM_ARENA__INITIAL_CURSOR(arena);
+}
