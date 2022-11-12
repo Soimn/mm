@@ -1,2 +1,1 @@
 - would be handy if there was a way of descibing an array literal that *must contain exactly* N elements. This would allow catching bugs similar to incomplete switch statements.
-

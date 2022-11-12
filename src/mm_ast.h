@@ -1,15 +1,3 @@
-// TODO
-typedef struct MM_Identifier
-{
-    MM_String string;
-} MM_Identifier;
-
-typedef struct MM_String_Literal
-{
-    MM_String string;
-} MM_String_Literal;
-///////////////////////////////
-
 // NOTE: This is mainly to simplify parsing (it matches up with MM_TOKEN_BLOCK in mm_tokens.h)
 #define MM_AST_BLOCK(I) ((I) << 4)
 #define MM_AST_BLOCK_INDEX(K) ((K) >> 4)
@@ -106,6 +94,15 @@ typedef enum MM_AST_Kind
     MM_AST__LastStatement = MM_AST_Assignment,
 } MM_AST_Kind;
 
+typedef enum MM_BuiltinCall_Kind
+{
+    MM_BuiltinCall_Cast = 0,
+    MM_BuiltinCall_Transmute,
+    MM_BuiltinCall_Sizeof,
+    MM_BuiltinCall_Alignof,
+    MM_BuiltinCall_Offsetof,
+} MM_BuiltinCall_Kind;
+
 MM_STATIC_ASSERT(MM_AST_BLOCK(MM_AST_CMP_BLOCK_INDEX) == MM_AST_CmpEqual);
 
 typedef struct MM_Expression MM_Expression;
@@ -141,6 +138,35 @@ typedef struct MM_Return_Value
 } MM_Return_Value;
 
 
+typedef struct MM_Identifier_Expression
+{
+    MM_EXPRESSION_HEADER;
+    MM_String value;
+} MM_Identifier_Expression;
+
+typedef struct MM_Int_Expression
+{
+    MM_EXPRESSION_HEADER;
+    MM_i128 value;
+} MM_Int_Expression;
+
+typedef struct MM_Float_Expression
+{
+    MM_EXPRESSION_HEADER;
+    MM_f64 value;
+} MM_Float_Expression;
+
+typedef struct MM_String_Expression
+{
+    MM_EXPRESSION_HEADER;
+    MM_String value;
+} MM_String_Expression;
+
+typedef struct MM_Bool_Expression
+{
+    MM_EXPRESSION_HEADER;
+    MM_bool value;
+} MM_Bool_Expression;
 
 typedef struct MM_Proc_Type_Expression
 {
@@ -169,6 +195,13 @@ typedef struct MM_Compound_Expression
     MM_Expression* expr;
 } MM_Compound_Expression;
 
+typedef struct MM_Builtin_Call_Expression
+{
+    MM_EXPRESSION_HEADER;
+    MM_BuiltinCall_Kind builtin_kind;
+    MM_Argument* args;
+} MM_Builtin_Call_Expression;
+
 typedef struct MM_Binary_Expression
 {
     MM_EXPRESSION_HEADER;
@@ -186,7 +219,7 @@ typedef struct MM_Array_Type_Expression
 {
     MM_EXPRESSION_HEADER;
     MM_Expression* size;
-    MM_Expression* array;
+    MM_Expression* type;
 } MM_Array_Type_Expression;
 
 typedef struct MM_Subscript_Expression
@@ -215,22 +248,22 @@ typedef struct MM_Member_Expression
 {
     MM_EXPRESSION_HEADER;
     MM_Expression* symbol;
-    MM_Identifier member;
+    MM_String member;
 } MM_Member_Expression;
 
-typedef struct MM_Struct_Literal_Expression
+typedef struct MM_Struct_Lit_Expression
 {
     MM_EXPRESSION_HEADER;
     MM_Expression* type;
     MM_Argument* args;
-} MM_Struct_Literal_Expression;
+} MM_Struct_Lit_Expression;
 
-typedef struct MM_Array_Literal_Expression
+typedef struct MM_Array_Lit_Expression
 {
     MM_EXPRESSION_HEADER;
     MM_Expression* type;
     MM_Argument* args;
-} MM_Array_Literal_Expression;
+} MM_Array_Lit_Expression;
 
 typedef struct MM_Expression
 {
@@ -238,15 +271,16 @@ typedef struct MM_Expression
     {
         MM_EXPRESSION_HEADER;
         
-        MM_Identifier identifier;
-        MM_i128 integer;
-        MM_f64 floating;
-        MM_String_Literal string_literal;
-        MM_bool boolean;
+        MM_Identifier_Expression identifier_expr;
+        MM_Int_Expression int_expr;
+        MM_Float_Expression float_expr;
+        MM_String_Expression string_expr;
+        MM_Bool_Expression bool_expr;
         MM_Proc_Type_Expression proc_type_expr;
         MM_Proc_Lit_Expression proc_lit_expr;
         MM_Struct_Type_Expression struct_type_expr;
         MM_Compound_Expression compound_expr;
+        MM_Builtin_Call_Expression builtin_call_expr;
         MM_Binary_Expression binary_expr;
         MM_Unary_Expression unary_expr;
         MM_Array_Type_Expression array_type_expr;
@@ -254,8 +288,8 @@ typedef struct MM_Expression
         MM_Slice_Expression slice_expr;
         MM_Call_Expression call_expr;
         MM_Member_Expression member_expr;
-        MM_Struct_Literal_Expression struct_lit_expr;
-        MM_Array_Literal_Expression array_lit_expr;
+        MM_Struct_Lit_Expression struct_lit_expr;
+        MM_Array_Lit_Expression array_lit_expr;
     };
 } MM_Expression;
 
@@ -303,14 +337,14 @@ typedef struct MM_Declaration
 typedef struct MM_Block_Statement
 {
     MM_STATEMENT_HEADER;
-    MM_Identifier label;
+    MM_String label;
     MM_Statement* body;
 } MM_Block_Statement;
 
 typedef struct MM_If_Statement
 {
     MM_STATEMENT_HEADER;
-    MM_Identifier label;
+    MM_String label;
     MM_Statement* init; // var, const, assignment, expression
     MM_Expression* condition;
     MM_Statement* true_body;
@@ -320,7 +354,7 @@ typedef struct MM_If_Statement
 typedef struct MM_While_Statement
 {
     MM_STATEMENT_HEADER;
-    MM_Identifier label;
+    MM_String label;
     MM_Statement* init; // var, const, assignment, expression
     MM_Expression* condition;
     MM_Statement* step; // assignment, expression
@@ -330,7 +364,7 @@ typedef struct MM_While_Statement
 typedef struct MM_Jump_Statement
 {
     MM_STATEMENT_HEADER;
-    MM_Identifier label;
+    MM_String label;
 } MM_Jump_Statement;
 
 typedef struct MM_Return_Statement
@@ -372,6 +406,9 @@ typedef struct MM_AST
     {
         MM_AST_HEADER(MM_AST);
         
+        MM_Argument argument;
+        MM_Parameter parameter;
+        MM_Return_Value return_value;
         MM_Expression expression;
         MM_Declaration declaration;
         MM_Statement statement;

@@ -184,7 +184,7 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
             {
                 MM_Advance(1);
                 
-                base_kind = MM_Token_Shr;
+                base_kind = MM_Token_Shl;
                 
                 if (lexer->size && lexer->data[0] == '=') token.kind = MM_TOKEN_BINARY_TO_ASSIGNMENT(base_kind), MM_Advance(1);
                 else                                      token.kind = base_kind;

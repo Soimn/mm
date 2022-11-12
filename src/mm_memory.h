@@ -104,9 +104,9 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
 {
     MM_u8 align_offset = MM_AlignOffset(arena->cursor, alignment);
     
-    if (MM_Arena_CurrentSize(arena) + align_offset + size > arena->commit_size)
+    if (MM_ARENA__INITIAL_CURSOR_OFFSET + MM_Arena_CurrentSize(arena) + align_offset + size > arena->commit_size)
     {
-        MM_umm current_page_usage = (MM_umm)arena->cursor & (MM_ARENA__PAGE_SIZE - 1);
+        MM_umm current_page_usage = ((MM_umm)arena->cursor - (MM_umm)arena) & (MM_ARENA__PAGE_SIZE - 1);
         MM_umm spill              = (current_page_usage + align_offset + size) - MM_ARENA__PAGE_SIZE;
         MM_umm to_commit  = MM_ROUND_UP(spill + MM_ARENA__PAGE_SIZE/2, MM_ARENA__PAGE_SIZE);
         // NOTE: ^ adding spill + half page size, so that an extra page is committed when the last is more than half full
