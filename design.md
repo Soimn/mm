@@ -144,7 +144,7 @@ float        = T_float
 bool         = T_True | T_False
 proc_type    = T_proc [T_OpenParen paramter_list T_CloseParen] [T_Arrow return_value_list]
 proc_lit     = proc_type (block_statement | T_TpMinus)
-struct_type  = T_Struct (block_statement)
+struct_type  = T_Struct T_OpenBrace [declaration_wsemi {declaration_wsemi}] T_CloseBrace
 compound     = T_OpenParen expression T_CloseParen
 builtin_call = H_Builtin T_OpenParen argument_list T_CloseParen
 struct_lit_inferred = T_PeriodOpenBrace arugment_list T_CloseBrace
@@ -267,6 +267,10 @@ declaration = var
             | const
             | const_nosemi
             | when
+declaration_wsemi = when          
+			     | var T_Semicolon
+                 | const T_Semicolon
+                 | const_nosemi
             
 block      = [T_Colon identifier] T_OpenBrace {statement} T_CloseBrace
 if         = [T_Colon identifier] T_If T_OpenParen [(declaration | assignment | expression) T_Semicolon] expression T_CloseParen statement [T_Else statement]
@@ -296,10 +300,8 @@ statement = block
           | continue T_Semicolon
           | return T_Semicolon
           | assignment T_Semicolon
-          | var T_Semicolon
-          | const T_Semicolon
-          | const_nosemi
           | expression T_Semicolon
+	      | declaration_wsemi
 
 program = var T_Semicolon
         | const T_Semicolon

@@ -389,6 +389,7 @@ typedef struct MM_Statement
         MM_Expression expression;
         MM_Declaration declaration;
         
+        MM_Block_Statement block_stmnt;
         MM_If_Statement if_stmnt;
         MM_While_Statement while_stmnt;
         MM_Jump_Statement jump_stmnt;
