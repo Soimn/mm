@@ -58,7 +58,7 @@ H_escape_sequence = "\\" "\\"
                   | "\\" "v"
                   | "\\" "x" 2*hex_digit
                   | "\\" "u" 4*hex_digit
-                  | "\\" "U" 8*hex_digit
+                  | "\\" "U" 6*hex_digit
 T_string = '"' (H_escape_sequence | ? any UTF-8 unicode codepoint except '"' ?) '"'
 
 T_Struct    = "struct"

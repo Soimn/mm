@@ -2,6 +2,7 @@ typedef struct MM_Parser
 {
     MM_Lexer lexer;
     MM_Arena* ast_arena;
+    MM_Arena* str_arena;
 } MM_Parser;
 
 void*
@@ -214,7 +215,7 @@ MM_Parser__ParsePrimary(MM_Parser* parser, MM_Expression** expression)
     if (MM_IsToken(MM_Token_Identifier))
     {
         *expression = MM_PushNode(MM_AST_Identifier);
-        (*expression)->identifier_expr.value = MM_GetToken().identifier;
+        (*expression)->identifier_expr.value = MM_GetToken().identifier; // TODO: memory lifetime
         MM_NextToken();
     }
     else if (MM_IsToken(MM_Token_Int))
@@ -225,13 +226,15 @@ MM_Parser__ParsePrimary(MM_Parser* parser, MM_Expression** expression)
     }
     else if (MM_IsToken(MM_Token_Float))
     {
-        *expression = MM_PushNode(MM_AST_Int);
+        *expression = MM_PushNode(MM_AST_Float);
         (*expression)->float_expr.value = MM_GetToken().f64;
         MM_NextToken();
     }
     else if (MM_IsToken(MM_Token_String))
     {
-        MM_NOT_IMPLEMENTED;
+        *expression = MM_PushNode(MM_AST_String);
+        (*expression)->string_expr.value = MM_GetToken().string;
+        MM_NextToken();
     }
     else if (MM_IsToken(MM_Token_True) || MM_IsToken(MM_Token_False))
     {

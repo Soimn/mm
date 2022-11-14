@@ -3,18 +3,20 @@ typedef struct MM_Lexer
     union { struct MM_String; MM_String string; };
     union { struct MM_Text_Pos; MM_Text_Pos pos; };
     MM_Token token;
+    MM_Arena* str_arena;
 } MM_Lexer;
 
 MM_Token MM_Lexer_NextToken(MM_Lexer* lexer);
 
 MM_Lexer
-MM_Lexer_Init(MM_String string, MM_Text_Pos start_pos)
+MM_Lexer_Init(MM_String string, MM_Text_Pos start_pos, MM_Arena* str_arena)
 {
     MM_ASSERT(start_pos.line > 0 && start_pos.col > 0);
     
     MM_Lexer lexer = {
         .string    = string,
         .pos       = start_pos,
+        .str_arena = str_arena,
     };
     
     MM_Lexer_NextToken(&lexer);
@@ -372,7 +374,122 @@ MM_Lexer_NextToken(MM_Lexer* lexer)
             }
             else if (c == '"')
             {
-                MM_NOT_IMPLEMENTED;
+                MM_String raw_string = {
+                    .data = lexer->data,
+                    .size = 0,
+                };
+                
+                while (lexer->size && lexer->data[0] != '"')
+                {
+                    if (lexer->data[0] == '\\') MM_Advance(2);
+                    else                        MM_Advance(1);
+                }
+                
+                raw_string.size = (MM_u32)(lexer->data - raw_string.data);
+                
+                if (lexer->size == 0)
+                {
+                    //// ERROR: Unterminated string literal
+                    token.kind = MM_Token_Invalid;
+                }
+                else
+                {
+                    MM_Advance(1); // NOTE: Skip terminating "
+                    
+                    token.kind   = MM_Token_String;
+                    token.string = (MM_String){
+                        .data = MM_Arena_Push(lexer->str_arena, raw_string.size, MM_ALIGNOF(MM_u8)),
+                        .size = 0,
+                    };
+                    
+                    for (MM_umm i = 0; i < raw_string.size; ++i)
+                    {
+                        if (raw_string.data[i] != '\\') token.string.data[token.string.size++] = raw_string.data[i];
+                        else
+                        {
+                            i += 1;
+                            MM_ASSERT(raw_string.size > i); // NOTE: This is guaranteed by skipping \ in the while loop that built raw_string
+                            
+                            switch (raw_string.data[i])
+                            {
+                                case 'a':  token.string.data[token.string.size++] = 0x07, i += 1; break;
+                                case 'b':  token.string.data[token.string.size++] = 0x08, i += 1; break;
+                                case 'f':  token.string.data[token.string.size++] = 0x0C, i += 1; break;
+                                case 'n':  token.string.data[token.string.size++] = 0x0A, i += 1; break;
+                                case 'r':  token.string.data[token.string.size++] = 0x0D, i += 1; break;
+                                case 't':  token.string.data[token.string.size++] = 0x09, i += 1; break;
+                                case 'v':  token.string.data[token.string.size++] = 0x0B, i += 1; break;
+                                case '"':  token.string.data[token.string.size++] = '"',  i += 1; break;
+                                case '\'': token.string.data[token.string.size++] = '\'', i += 1; break;
+                                case '\\': token.string.data[token.string.size++] = '\\', i += 1; break;
+                                default:
+                                {
+                                    if (raw_string.data[i] != 'x' && raw_string.data[i] != 'u' && raw_string.data[i] != 'U')
+                                    {
+                                        //// ERROR: Unknown escape sequence
+                                        token.kind = MM_Token_Invalid;
+                                    }
+                                    else
+                                    {
+                                        MM_umm expected_digit_count = (raw_string.data[i] == 'x' ? 2 : (raw_string.data[i] == 'u' ? 4 : 6));
+                                        i += 1;
+                                        
+                                        MM_u32 value       = 0;
+                                        MM_umm digit_count = 0;
+                                        for (; digit_count < expected_digit_count && i < raw_string.size; ++digit_count, ++i)
+                                        {
+                                            MM_u8 d = raw_string.data[i];
+                                            MM_u8 digit;
+                                            if      (MM_Lexer__IsDigit(d)) digit = d - '0';
+                                            else if (d >= 'A' && d <= 'F') digit = (d - 'A') + 10;
+                                            else if (d >= 'a' && d <= 'f') digit = (d - 'a') + 10;
+                                            else break;
+                                            
+                                            value <<= 4;
+                                            value  |= digit;
+                                        }
+                                        
+                                        if (digit_count != expected_digit_count)
+                                        {
+                                            //// ERROR: Missing digits in escape sequence
+                                            token.kind = MM_Token_Invalid;
+                                        }
+                                        else
+                                        {
+                                            if (value <= 0x7F)
+                                            {
+                                                token.string.data[token.string.size++] = (MM_u8)value;
+                                            }
+                                            else if (value <= 0x7FF)
+                                            {
+                                                token.string.data[token.string.size++] = (MM_u8)(value >> 6) | 0xC0;
+                                                token.string.data[token.string.size++] = (MM_u8)(value >> 0) | 0x80;
+                                            }
+                                            else if (value <= 0xFFFF)
+                                            {
+                                                token.string.data[token.string.size++] = (MM_u8)(value >> 12) | 0xE0;
+                                                token.string.data[token.string.size++] = (MM_u8)(value >>  6) | 0x80;
+                                                token.string.data[token.string.size++] = (MM_u8)(value >>  0) | 0x80;
+                                            }
+                                            else if (value <= 0x10FFFF)
+                                            {
+                                                token.string.data[token.string.size++] = (MM_u8)(value >> 18) | 0xF0;
+                                                token.string.data[token.string.size++] = (MM_u8)(value >> 12) | 0x80;
+                                                token.string.data[token.string.size++] = (MM_u8)(value >>  6) | 0x80;
+                                                token.string.data[token.string.size++] = (MM_u8)(value >>  0) | 0x80;
+                                            }
+                                            else
+                                            {
+                                                //// ERROR: Codepoint is outside of UTF8 range
+                                                token.kind = MM_Token_Invalid;
+                                            }
+                                        }
+                                    }
+                                } break;
+                            }
+                        }
+                    }
+                }
             }
             else
             {

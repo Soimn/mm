@@ -60,9 +60,9 @@ MM_System_ReleaseMemory(void* ptr)
 //                 more proper when there is actually something interesting to test
 
 MM_bool
-TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm expected_kind_count)
+TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm expected_kind_count, MM_Arena* str_arena)
 {
-    MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+    MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
     
     Print("TestLexer_TokenKinds -- ");
     
@@ -100,9 +100,9 @@ TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm exp
 }
 
 MM_bool
-TestLexer_Reconstruction(MM_String string, MM_bool print)
+TestLexer_Reconstruction(MM_String string, MM_bool print, MM_Arena* str_arena)
 {
-    MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+    MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
     
     char buffer[4096];
     int buffer_space = MM_ARRAY_SIZE(buffer);
@@ -160,7 +160,7 @@ TestLexer_Reconstruction(MM_String string, MM_bool print)
 }
 
 MM_bool
-TestLexer_NumericLiterals(MM_bool print)
+TestLexer_NumericLiterals(MM_bool print, MM_Arena* str_arena)
 {
     MM_String large_integer_string_bin = MM_STRING("0b_10001011100011010000001100001101001111100000100011000111__101_001011111000100111_011100111110100_0011001101111001100011111100____");
     MM_String large_integer_string_dec = MM_STRING("0000__00000000_07245893248_______7324345897__34589013___00123900_______");
@@ -169,7 +169,7 @@ TestLexer_NumericLiterals(MM_bool print)
     
     MM_bool succeeded = MM_true;
     { // bin
-        MM_Lexer lexer = MM_Lexer_Init(large_integer_string_bin, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+        MM_Lexer lexer = MM_Lexer_Init(large_integer_string_bin, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
         MM_Token token = MM_Lexer_GetToken(&lexer);
         
         if (!(token.kind == MM_Token_Int && token.i128.hi == large_integer_expected.hi && token.i128.lo == large_integer_expected.lo))
@@ -179,7 +179,7 @@ TestLexer_NumericLiterals(MM_bool print)
         }
     }
     { // dec
-        MM_Lexer lexer = MM_Lexer_Init(large_integer_string_dec, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+        MM_Lexer lexer = MM_Lexer_Init(large_integer_string_dec, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
         MM_Token token = MM_Lexer_GetToken(&lexer);
         
         if (!(token.kind == MM_Token_Int && token.i128.hi == large_integer_expected.hi && token.i128.lo == large_integer_expected.lo))
@@ -189,7 +189,7 @@ TestLexer_NumericLiterals(MM_bool print)
         }
     }
     { // hex
-        MM_Lexer lexer = MM_Lexer_Init(large_integer_string_hex, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 });
+        MM_Lexer lexer = MM_Lexer_Init(large_integer_string_hex, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
         MM_Token token = MM_Lexer_GetToken(&lexer);
         
         if (!(token.kind == MM_Token_Int && token.i128.hi == large_integer_expected.hi && token.i128.lo == large_integer_expected.lo))
@@ -200,6 +200,32 @@ TestLexer_NumericLiterals(MM_bool print)
     }
     
     if (succeeded) Print("TestLexer_NumericLiterals -- SUCCEEDED.\n");
+    
+    return succeeded;
+}
+
+MM_bool
+TestLexer_StringLiterals(MM_Arena* str_arena)
+{
+    MM_String raw_string = MM_STRING("\"\\\\U10F0F0 is '\\u0035'\\n\\\\x20 is '\\x20'\\n\\\" is '\\\"'\\n\"");
+    MM_String res_string = MM_STRING("\\U10F0F0 is '\u0035'\n\\x20 is '\x20'\n\\\" is '\"'\n");
+    
+    MM_Lexer lexer = MM_Lexer_Init(raw_string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
+    MM_Token token = MM_Lexer_GetToken(&lexer);
+    
+    MM_bool succeeded = MM_true;
+    
+    if (token.kind != MM_Token_String)
+    {
+        Print("TestLexer_StringLiterals -- Failed. Wrong token kind\n");
+        succeeded = MM_false;
+    }
+    else if (MM_String_Match(raw_string, res_string))
+    {
+        Print("TestLexer_StringLiterals -- Failed. Strings don't match\n");
+        succeeded = MM_false;
+    }
+    else Print("TestLexer_StringLiterals -- SUCCEEDED.\n");
     
     return succeeded;
 }
@@ -218,11 +244,14 @@ TestLexer(MM_bool print)
         MM_Token_Identifier, MM_Token_OpenParen, MM_Token_Int, MM_Token_CloseParen, MM_Token_Semicolon, MM_Token_CloseBrace
     };
     
+    MM_Arena* str_arena = MM_Arena_Create(4*1024);
+    
     MM_umm ran       = 0;
     MM_umm succeeded = 0;
-    ++ran, succeeded += (MM_umm)TestLexer_TokenKinds(string, expected_kinds, MM_ARRAY_SIZE(expected_kinds));
-    ++ran, succeeded += (MM_umm)TestLexer_Reconstruction(string, print);
-    ++ran, succeeded += (MM_umm)TestLexer_NumericLiterals(print);
+    ++ran, succeeded += (MM_umm)TestLexer_TokenKinds(string, expected_kinds, MM_ARRAY_SIZE(expected_kinds), str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_Reconstruction(string, print, str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_NumericLiterals(print, str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_StringLiterals(str_arena);
     
     Print("%u out of %u succeeded\n\n", succeeded, ran);
 }
@@ -384,7 +413,7 @@ TestParser_BasicPrecedence(MM_Arena* arena)
     MM_Expression* expected = (MM_Expression*)&nodes[0];
     
     MM_Parser parser = {
-        .lexer     = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }),
+        .lexer     = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, arena),
         .ast_arena = arena,
     };
     
@@ -454,7 +483,7 @@ TestParser_Fib(MM_Arena* arena)
     MM_Declaration* expected = (MM_Declaration*)&nodes[0];
     
     MM_Parser parser = {
-        .lexer     = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }),
+        .lexer     = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, arena),
         .ast_arena = arena,
     };
     
@@ -494,7 +523,7 @@ TestParser()
 int
 mainCRTStartup()
 {
-    TestLexer(MM_false);
+    TestLexer(MM_true);
     TestParser();
     
     return 0;
