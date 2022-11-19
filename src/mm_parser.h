@@ -930,6 +930,10 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
             }
         }
     }
+    else if (MM_IsToken(MM_Token_OpenBrace))
+    {
+        return MM_Parser__ParseBlock(parser, (MM_Block_Statement**)statement);
+    }
     else if (MM_EatToken(MM_Token_If))
     {
         if (!MM_EatToken(MM_Token_OpenParen))
@@ -939,8 +943,8 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
         }
         else
         {
-            MM_Statement* first;
-            if (!MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &first)) return MM_false;
+            MM_Statement* first = 0;
+            if (!MM_IsToken(MM_Token_Semicolon) && !MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &first)) return MM_false;
             else
             {
                 MM_Statement* second = 0;
@@ -997,15 +1001,15 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
         }
         else
         {
-            MM_Statement* init;
-            if (!MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &init)) return MM_false;
+            MM_Statement* init = 0;
+            if (!MM_IsToken(MM_Token_Semicolon) && !MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &init)) return MM_false;
             else
             {
                 MM_Statement* condition_slot = 0;
                 MM_Statement* step           = 0;
                 if (MM_EatToken(MM_Token_Semicolon))
                 {
-                    if (!MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &condition_slot)) return MM_false;
+                    if (!MM_IsToken(MM_Token_Semicolon) && !MM_Parser__ParseDeclarationAssignmentOrExpression(parser, &condition_slot)) return MM_false;
                     
                     if (MM_EatToken(MM_Token_Semicolon))
                     {
@@ -1124,9 +1128,9 @@ MM_Parser__ParseStatement(MM_Parser* parser, MM_Statement** statement)
 
 
 MM_bool
-MM_Parser__ParseTopLevelDeclarations(MM_Parser* parser, MM_Declaration** declaration)
+MM_Parser__ParseTopLevelDeclarations(MM_Parser* parser, MM_Declaration** declarations)
 {
-    MM_Declaration** next_decl = declaration;
+    MM_Declaration** next_decl = declarations;
     while (!MM_IsToken(MM_Token_EOF))
     {
         MM_Statement* statement;
@@ -1147,6 +1151,18 @@ MM_Parser__ParseTopLevelDeclarations(MM_Parser* parser, MM_Declaration** declara
     }
     
     return MM_true;
+}
+
+MM_bool
+MM_Parser_ParseTopLevelDeclarationsFromString(MM_String string, MM_Text_Pos pos, MM_Arena* ast_arena, MM_Arena* str_arena, MM_Declaration** declarations)
+{
+    MM_Parser parser = {
+        .lexer     = MM_Lexer_Init(string, pos, str_arena),
+        .ast_arena = ast_arena,
+        .str_arena = str_arena,
+    };
+    
+    return MM_Parser__ParseTopLevelDeclarations(&parser, declarations);
 }
 
 #undef MM_NextToken

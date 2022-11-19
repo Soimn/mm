@@ -109,7 +109,7 @@ MM_Arena_Push(MM_Arena* arena, MM_umm size, MM_u8 alignment)
         MM_umm current_page_usage = ((MM_umm)arena->cursor - (MM_umm)arena) & (MM_ARENA__PAGE_SIZE - 1);
         MM_umm spill              = (current_page_usage + align_offset + size) - MM_ARENA__PAGE_SIZE;
         MM_umm to_commit  = MM_ROUND_UP(spill + MM_ARENA__PAGE_SIZE/2, MM_ARENA__PAGE_SIZE);
-        // NOTE: ^ adding spill + half page size, so that an extra page is committed when the last is more than half full
+        // NOTE: ^ adding spill + half page size before rounding, such that an extra page is committed when the last will be more than half full
         
         arena->commit_size += to_commit;
         MM_ASSERT(arena->commit_size <= arena->reserve_size); // TODO: Handle out of memory

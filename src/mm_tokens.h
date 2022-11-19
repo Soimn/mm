@@ -103,7 +103,8 @@ typedef enum MM_Token_Kind
     MM_Token_Sizeof,                               // sizeof
     MM_Token_Alignof,                              // alignof
     MM_Token_Offsetof,                             // offsetof
-    MM_Token__LastBuiltin = MM_Token_Offsetof,
+    MM_Token_Len,                                  // len
+    MM_Token__LastBuiltin = MM_Token_Len,
     MM_Token__LastKeyword = MM_Token__LastBuiltin,
     
 } MM_Token_Kind;
@@ -137,6 +138,7 @@ MM_X(MM_Token_Transmute, "transmute") \
 MM_X(MM_Token_Sizeof,    "sizeof")    \
 MM_X(MM_Token_Alignof,   "alignof")   \
 MM_X(MM_Token_Offsetof,  "offsetof")  \
+MM_X(MM_Token_Len,       "len")       \
 
 MM_String MM_Token_BuiltinList[] = {
 #define MM_X(e, s) [(e) - MM_Token__FirstBuiltin].data = (MM_u8*)(s), [(e) - MM_Token__FirstBuiltin].size = sizeof(s) - 1,
@@ -217,7 +219,8 @@ MM_X(MM_Token_Cast,          "MM_Token_Cast")              \
 MM_X(MM_Token_Transmute,     "MM_Token_Transmute")         \
 MM_X(MM_Token_Sizeof,        "MM_Token_Sizeof")            \
 MM_X(MM_Token_Alignof,       "MM_Token_Alignof")           \
-MM_X(MM_Token_Offsetof,      "MM_Token_Offsetof")
+MM_X(MM_Token_Offsetof,      "MM_Token_Offsetof")          \
+MM_X(MM_Token_Len,           "MM_Token_Len")
 
 MM_String MM_Token_NameList[] = {
 #define MM_X(e, s) [e].data = (MM_u8*)(s), [e].size = sizeof(s) - 1,

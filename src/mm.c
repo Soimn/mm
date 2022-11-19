@@ -60,11 +60,9 @@ MM_System_ReleaseMemory(void* ptr)
 //                 more proper when there is actually something interesting to test
 
 MM_bool
-TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm expected_kind_count, MM_Arena* str_arena)
+TestLexer_TokenKinds(MM_bool only_print_on_fail, MM_String string, MM_Token_Kind* expected_kinds, MM_umm expected_kind_count, MM_Arena* str_arena)
 {
     MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
-    
-    Print("TestLexer_TokenKinds -- ");
     
     MM_Token token = MM_Lexer_GetToken(&lexer);
     MM_umm i       = 0;
@@ -75,7 +73,7 @@ TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm exp
             MM_String expected = MM_Token_NameList[expected_kinds[i]];
             MM_String got      = MM_Token_NameList[token.kind];
             
-            Print("FAILED. (%u,%u): expected %.*s got %.*s\n", token.line, token.col, expected.size, expected.data, got.size, got.data);
+            Print("TestLexer_TokenKinds -- FAILED. (%u,%u): expected %.*s got %.*s\n", token.line, token.col, expected.size, expected.data, got.size, got.data);
             return MM_false;
         }
     }
@@ -83,24 +81,24 @@ TestLexer_TokenKinds(MM_String string, MM_Token_Kind* expected_kinds, MM_umm exp
     if (i < expected_kind_count)
     {
         MM_String expected = MM_Token_NameList[expected_kinds[i]];
-        Print("FAILED. (%u,%u): expected %.*s got MM_Token_EOF\n", token.line, token.col, expected.size, expected.data);
+        Print("TestLexer_TokenKinds -- FAILED. (%u,%u): expected %.*s got MM_Token_EOF\n", token.line, token.col, expected.size, expected.data);
         return MM_false;
     }
     else if (token.kind != MM_Token_EOF)
     {
         MM_String got = MM_Token_NameList[token.kind];
-        Print("FAILED. (%u,%u): expected MM_Token_EOF got %.*s\n", token.line, token.col, got.size, got.data);
+        Print("TestLexer_TokenKinds -- FAILED. (%u,%u): expected MM_Token_EOF got %.*s\n", token.line, token.col, got.size, got.data);
         return MM_false;
     }
     else
     {
-        Print("SUCCEEDED.\n");
+        if (!only_print_on_fail) Print("TestLexer_TokenKinds -- SUCCEEDED.\n");
         return MM_true;
     }
 }
 
 MM_bool
-TestLexer_Reconstruction(MM_String string, MM_bool print, MM_Arena* str_arena)
+TestLexer_Reconstruction(MM_bool only_print_on_fail, MM_String string, MM_bool print, MM_Arena* str_arena)
 {
     MM_Lexer lexer = MM_Lexer_Init(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, str_arena);
     
@@ -154,13 +152,14 @@ TestLexer_Reconstruction(MM_String string, MM_bool print, MM_Arena* str_arena)
     
     MM_bool succeeded = MM_String_Cstring_Match(string, buffer);
     
-    Print("TestLexer_Reconstruction -- %s.\n", (succeeded ? "SUCCEEDED" : "FAILED"));
+    if (!succeeded) Print("TestLexer_Reconstruction -- FAILED.\n");
+    else if (!only_print_on_fail) Print("TestLexer_Reconstruction -- SUCCEEDED.\n");
     
     return succeeded;
 }
 
 MM_bool
-TestLexer_NumericLiterals(MM_bool print, MM_Arena* str_arena)
+TestLexer_NumericLiterals(MM_bool only_print_on_fail, MM_bool print, MM_Arena* str_arena)
 {
     MM_String large_integer_string_bin = MM_STRING("0b_10001011100011010000001100001101001111100000100011000111__101_001011111000100111_011100111110100_0011001101111001100011111100____");
     MM_String large_integer_string_dec = MM_STRING("0000__00000000_07245893248_______7324345897__34589013___00123900_______");
@@ -199,13 +198,13 @@ TestLexer_NumericLiterals(MM_bool print, MM_Arena* str_arena)
         }
     }
     
-    if (succeeded) Print("TestLexer_NumericLiterals -- SUCCEEDED.\n");
+    if (succeeded && !only_print_on_fail) Print("TestLexer_NumericLiterals -- SUCCEEDED.\n");
     
     return succeeded;
 }
 
 MM_bool
-TestLexer_StringLiterals(MM_Arena* str_arena)
+TestLexer_StringLiterals(MM_bool only_print_on_fail, MM_Arena* str_arena)
 {
     MM_String raw_string = MM_STRING("\"\\\\U10F0F0 is '\\u0035'\\n\\\\x20 is '\\x20'\\n\\\" is '\\\"'\\n\"");
     MM_String res_string = MM_STRING("\\U10F0F0 is '\u0035'\n\\x20 is '\x20'\n\\\" is '\"'\n");
@@ -225,15 +224,14 @@ TestLexer_StringLiterals(MM_Arena* str_arena)
         Print("TestLexer_StringLiterals -- Failed. Strings don't match\n");
         succeeded = MM_false;
     }
-    else Print("TestLexer_StringLiterals -- SUCCEEDED.\n");
+    else if (!only_print_on_fail) Print("TestLexer_StringLiterals -- SUCCEEDED.\n");
     
     return succeeded;
 }
 
 void
-TestLexer(MM_bool print)
+TestLexer(MM_bool only_print_on_fail, MM_bool print)
 {
-    Print("TESTING LEXER\n--------------------------------------------\n");
     MM_String string = MM_STRING("factorial :: proc(n: int) -> int\n{\n    if (n <= 2) return n;\n    else return n*factorial(n-1);\n}\n\nmain :: proc\n{\n    x: int = factorial(5);\n}");
     MM_Token_Kind expected_kinds[] = {
         MM_Token_Identifier, MM_Token_Colon, MM_Token_Colon, MM_Token_Proc, MM_Token_OpenParen, MM_Token_Identifier, MM_Token_Colon, MM_Token_Identifier,
@@ -248,12 +246,12 @@ TestLexer(MM_bool print)
     
     MM_umm ran       = 0;
     MM_umm succeeded = 0;
-    ++ran, succeeded += (MM_umm)TestLexer_TokenKinds(string, expected_kinds, MM_ARRAY_SIZE(expected_kinds), str_arena);
-    ++ran, succeeded += (MM_umm)TestLexer_Reconstruction(string, print, str_arena);
-    ++ran, succeeded += (MM_umm)TestLexer_NumericLiterals(print, str_arena);
-    ++ran, succeeded += (MM_umm)TestLexer_StringLiterals(str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_TokenKinds(only_print_on_fail, string, expected_kinds, MM_ARRAY_SIZE(expected_kinds), str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_Reconstruction(only_print_on_fail, string, print, str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_NumericLiterals(only_print_on_fail, print, str_arena);
+    ++ran, succeeded += (MM_umm)TestLexer_StringLiterals(only_print_on_fail, str_arena);
     
-    Print("%u out of %u succeeded\n\n", succeeded, ran);
+    if (!only_print_on_fail || succeeded != ran) Print("%u out of %u succeeded\n\n", succeeded, ran);
 }
 
 MM_bool
@@ -380,7 +378,7 @@ MatchAST(void* vn0, void* vn1)
 }
 
 MM_bool
-TestParser_BasicPrecedence(MM_Arena* arena)
+TestParser_BasicPrecedence(MM_bool only_print_on_fail, MM_Arena* arena)
 {
     MM_Arena_Reset(arena);
     
@@ -430,13 +428,13 @@ TestParser_BasicPrecedence(MM_Arena* arena)
     }
     else
     {
-        Print("TestParser_BasicPrecedence -- SUCCEEDED.\n");
+        if (!only_print_on_fail) Print("TestParser_BasicPrecedence -- SUCCEEDED.\n");
         return MM_true;
     }
 }
 
 MM_bool
-TestParser_Fib(MM_Arena* arena)
+TestParser_Fib(MM_bool only_print_on_fail, MM_Arena* arena)
 {
     MM_Arena_Reset(arena);
     
@@ -500,31 +498,54 @@ TestParser_Fib(MM_Arena* arena)
     }
     else
     {
-        Print("TestParser_Fib -- SUCCEEDED.\n");
+        if (!only_print_on_fail) Print("TestParser_Fib -- SUCCEEDED.\n");
         return MM_true;
     }
 }
 
 void
-TestParser()
+TestParser(MM_bool only_print_on_fail)
 {
-    Print("TESTING PARSER\n--------------------------------------------\n");
-    
     MM_Arena* arena = MM_Arena_Create(4ULL*1024*1024*1024);
     
     MM_umm ran       = 0;
     MM_umm succeeded = 0;
-    ++ran, succeeded += (MM_umm)TestParser_BasicPrecedence(arena);
-    ++ran, succeeded += (MM_umm)TestParser_Fib(arena);
+    ++ran, succeeded += (MM_umm)TestParser_BasicPrecedence(only_print_on_fail, arena);
+    ++ran, succeeded += (MM_umm)TestParser_Fib(only_print_on_fail, arena);
     
-    Print("%u out of %u succeeded\n\n", succeeded, ran);
+    if (!only_print_on_fail || succeeded != ran) Print("%u out of %u succeeded\n\n", succeeded, ran);
 }
+
+void* CreateFileA(const char*, unsigned long, unsigned long, void*, unsigned long, unsigned long, void*);
+int ReadFile(void*, void*, unsigned long, unsigned long*, void*);
 
 int
 mainCRTStartup()
 {
-    TestLexer(MM_true);
-    TestParser();
+    TestLexer(MM_true, MM_false);
+    TestParser(MM_true);
+    
+    void* file = CreateFileA(".\\..\\examples\\mandel.m", 0x80000000L, 0x00000001, 0, 3, 32, 0);
+    
+    char buffer[4096];
+    unsigned long bytes_read;
+    ReadFile(file, buffer, sizeof(buffer), &bytes_read, 0);
+    
+    buffer[bytes_read] = 0;
+    
+    MM_String string = {
+        .data = (MM_u8*)buffer,
+        .size = (MM_u32)MM_Cstring_Length(buffer),
+    };
+    
+    MM_Arena* arena = MM_Arena_Create(4UL*1024*1024);
+    
+    MM_Declaration* decls = 0;
+    if (!MM_Parser_ParseTopLevelDeclarationsFromString(string, (MM_Text_Pos){ .offset = 0, .line = 1, .col = 1 }, arena, arena, &decls)) Print("Failed to parse mandel.m\n");
+    else
+    {
+        Print("Succeeded");
+    }
     
     return 0;
 }

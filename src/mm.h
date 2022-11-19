@@ -92,3 +92,5 @@ void MM_System_ReleaseMemory(void* ptr);
 #include "mm_lexer.h"
 #include "mm_ast.h"
 #include "mm_parser.h"
+#include "mm_types.h"
+#include "mm_checker.h"
