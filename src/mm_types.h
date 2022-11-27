@@ -50,6 +50,8 @@ typedef enum MM_Typeid
     MM_Typeid_SoftString = MM_Typeid__FirstString,
     MM_Typeid_String,
     MM_Typeid__LastString = MM_Typeid_String,
+    
+    MM_Typeid_Typeid,
 } MM_Typeid;
 
 MM_STATIC_ASSERT(sizeof(MM_Typeid) == sizeof(MM_u32));
@@ -146,4 +148,51 @@ MM_Typeid_CommonType(MM_Typeid t0, MM_Typeid t1)
     }
     
     return common_type;
+}
+
+
+MM_umm
+MM_Typeid_Sizeof(MM_Typeid type)
+{
+    MM_umm size;
+    
+    switch (type)
+    {
+        case MM_Typeid_None:       size = 0;     break;
+        case MM_Typeid_SoftInt:    size = 16;    break;
+        case MM_Typeid_Int:        size = 8;     break;
+        case MM_Typeid_I8:         size = 1;     break;
+        case MM_Typeid_I16:        size = 2;     break;
+        case MM_Typeid_I32:        size = 4;     break;
+        case MM_Typeid_I64:        size = 8;     break;
+        case MM_Typeid_I128:       size = 16;    break;
+        case MM_Typeid_Uint:       size = 8;     break;
+        case MM_Typeid_U8:         size = 1;     break;
+        case MM_Typeid_U16:        size = 2;     break;
+        case MM_Typeid_U32:        size = 4;     break;
+        case MM_Typeid_U64:        size = 8;     break;
+        case MM_Typeid_U128:       size = 16;    break;
+        case MM_Typeid_SoftFloat:  size = 8;     break;
+        case MM_Typeid_Float:      size = 4;     break;
+        case MM_Typeid_F16:        size = 2;     break;
+        case MM_Typeid_F32:        size = 4;     break;
+        case MM_Typeid_F64:        size = 8;     break;
+        case MM_Typeid_SoftBool:   size = 1;     break;
+        case MM_Typeid_Bool:       size = 1;     break;
+        case MM_Typeid_SoftString: size = 8 + 8; break;
+        case MM_Typeid_String:     size = 8 + 8; break;
+        case MM_Typeid_Typeid:     size = 4;     break;
+        default:
+        {
+            MM_NOT_IMPLEMENTED;
+        } break;
+    }
+    
+    return size;
+}
+
+MM_Typeid
+MM_Typeid_ArrayOf(MM_Typeid element_type)
+{
+    MM_NOT_IMPLEMENTED;
 }

@@ -87,6 +87,7 @@ void MM_System_ReleaseMemory(void* ptr);
 
 #include "mm_memory.h"
 #include "mm_int.h"
+#include "mm_float.h"
 #include "mm_string.h"
 #include "mm_tokens.h"
 #include "mm_lexer.h"
